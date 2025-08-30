@@ -11,6 +11,7 @@ enum MathError: Error, CustomStringConvertible {
     case unsupportedOperation(op: String, typeA: String, typeB: String?)
     case dimensionMismatch(reason: String)
     case incorrectArgumentCount(function: String, expected: Int, found: Int)
+    case requiresAtLeastOneArgument(function: String)
 
     var description: String {
         switch self {
@@ -35,6 +36,8 @@ enum MathError: Error, CustomStringConvertible {
             return "Error: Dimension mismatch. \(reason)."
         case .incorrectArgumentCount(let function, let expected, let found):
             return "Error: Function '\(function)' expects \(expected) argument(s), but received \(found)."
+        case .requiresAtLeastOneArgument(let function):
+            return "Error: Function '\(function)' requires at least one argument."
         }
     }
 }
@@ -44,9 +47,46 @@ struct Evaluator {
 
     private let constants: [String: Double] = [ "pi": Double.pi, "e": M_E ]
     private let scalarFunctions: [String: (Double) -> Double] = [
-        "sqrt": sqrt, "sin": sin, "cos": cos, "tan": tan,
+        "sin": sin, "cos": cos, "tan": tan,
         "asin": asin, "acos": acos, "atan": atan,
-        "log": log10, "ln": log
+        "ln": log, "lg": log10, "log": log10
+    ]
+    
+    private let variadicFunctions: [String: ([MathValue]) throws -> MathValue] = [
+        "sum": { args in try performStatisticalOperation(args: args, on: { $0.sum() }) },
+        "avg": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
+        "average": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
+        "min": { args in try performStatisticalOperation(args: args, on: { $0.min() }) },
+        "max": { args in try performStatisticalOperation(args: args, on: { $0.max() }) },
+        "median": { args in try performStatisticalOperation(args: args, on: { $0.median() }) },
+        "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) }
+    ]
+    
+    private let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
+        "abs": { arg in
+            switch arg {
+            case .scalar(let s): return .scalar(abs(s))
+            case .complex(let c): return .scalar(c.abs())
+            case .vector(let v): return .scalar(v.magnitude())
+            default: throw MathError.typeMismatch(expected: "Scalar, Complex, or Vector", found: arg.typeName)
+            }
+        },
+        "polar": { arg in
+            guard case .complex(let c) = arg else {
+                throw MathError.typeMismatch(expected: "Complex", found: arg.typeName)
+            }
+            return .polar(c.toPolarString())
+        },
+        "sqrt": { arg in
+            if case .scalar(let s) = arg {
+                if s < 0 { return .complex(Complex(real: s, imaginary: 0).sqrt()) }
+                return .scalar(sqrt(s))
+            } else if case .complex(let c) = arg {
+                return .complex(c.sqrt())
+            } else {
+                throw MathError.typeMismatch(expected: "Scalar or Complex", found: arg.typeName)
+            }
+        }
     ]
     
     func evaluate(node: ExpressionNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
@@ -109,7 +149,6 @@ struct Evaluator {
             }
             return .matrix(Matrix(values: values, rows: rows, columns: columns))
 
-        // NEW: Handle evaluation for complex vectors
         case let cVectorNode as ComplexVectorNode:
             var elements: [Complex] = []
             for elementNode in cVectorNode.elements {
@@ -125,7 +164,6 @@ struct Evaluator {
             }
             return .complexVector(ComplexVector(values: elements))
 
-        // NEW: Handle evaluation for complex matrices
         case let cMatrixNode as ComplexMatrixNode:
             var values: [Complex] = []
             let rows = cMatrixNode.rows.count
@@ -150,6 +188,17 @@ struct Evaluator {
             return try evaluateUnaryOperation(op: unaryNode.op, value: childValue)
 
         case let binaryNode as BinaryOpNode:
+            // NEW: Handle polar operator before evaluating children
+            if binaryNode.op.rawValue == "∠" {
+                let rValue = try evaluate(node: binaryNode.left, variables: &variables, functions: &functions)
+                let thetaValue = try evaluate(node: binaryNode.right, variables: &variables, functions: &functions)
+                guard case .scalar(let r) = rValue, case .scalar(let theta) = thetaValue else {
+                    throw MathError.typeMismatch(expected: "Scalar ∠ Scalar", found: "\(rValue.typeName) ∠ \(thetaValue.typeName)")
+                }
+                let thetaRad = theta * .pi / 180.0
+                return .complex(Complex(real: r * cos(thetaRad), imaginary: r * sin(thetaRad)))
+            }
+            
             let leftValue = try evaluate(node: binaryNode.left, variables: &variables, functions: &functions)
             let rightValue = try evaluate(node: binaryNode.right, variables: &variables, functions: &functions)
             return try evaluateBinaryOperation(op: binaryNode.op, left: leftValue, right: rightValue)
@@ -162,22 +211,28 @@ struct Evaluator {
     // --- EVALUATION HELPERS ---
 
     private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
-        if let function = scalarFunctions[node.name] {
+        if let variadicFunc = variadicFunctions[node.name] {
+            let args = try node.arguments.map { try evaluate(node: $0, variables: &variables, functions: &functions) }
+            return try variadicFunc(args)
+        }
+        
+        if let singleArgFunc = singleArgumentFunctions[node.name] {
             guard node.arguments.count == 1 else {
                 throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
             }
-            let argumentValue = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
-            
-            if case .scalar(let scalarArg) = argumentValue {
-                 if node.name == "sqrt" && scalarArg < 0 {
-                     return .complex(Complex(real: scalarArg, imaginary: 0).sqrt())
-                 }
-                 return .scalar(function(scalarArg))
-            } else if case .complex(let complexArg) = argumentValue, node.name == "sqrt" {
-                 return .complex(complexArg.sqrt())
-            } else {
-                 throw MathError.typeMismatch(expected: "Scalar", found: argumentValue.typeName)
+            let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
+            return try singleArgFunc(arg)
+        }
+
+        if let scalarFunc = scalarFunctions[node.name] {
+            guard node.arguments.count == 1 else {
+                throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
             }
+            let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
+            guard case .scalar(let s) = arg else {
+                throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName)
+            }
+            return .scalar(scalarFunc(s))
         }
         
         switch node.name {
@@ -225,7 +280,6 @@ struct Evaluator {
         case .matrix(let m):
             let newValues = m.values.map { $0 * opSign }
             return .matrix(Matrix(values: newValues, rows: m.rows, columns: m.columns))
-        // NEW: Handle unary operations for complex vectors/matrices
         case .complexVector(let cv):
             let newValues = cv.values.map { $0 * opSign }
             return .complexVector(ComplexVector(values: newValues))
@@ -239,11 +293,9 @@ struct Evaluator {
 
     private func evaluateBinaryOperation(op: Token, left: MathValue, right: MathValue) throws -> MathValue {
         switch (left, right) {
-        // --- Scalar, Scalar ---
         case (.scalar(let l), .scalar(let r)):
             return .scalar(try performScalarScalarOp(op.rawValue, l, r))
             
-        // --- Complex & Scalar/Complex Operations ---
         case (.complex(let l), .complex(let r)):
             return .complex(try performComplexComplexOp(op.rawValue, l, r))
         case (.complex(let l), .scalar(let r)):
@@ -251,7 +303,6 @@ struct Evaluator {
         case (.scalar(let l), .complex(let r)):
             return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
 
-        // --- Matrix & Scalar/Matrix Operations ---
         case (.matrix(let m), .scalar(let s)):
             return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
         case (.scalar(let s), .matrix(let m)):
@@ -259,7 +310,6 @@ struct Evaluator {
         case (.matrix(let l), .matrix(let r)):
             return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
             
-        // --- Promote Real Matrix/Vector to Complex for operations ---
         case (.matrix(let l), .complex(let r)):
             let promotedMatrix = ComplexMatrix(from: l)
             return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, promotedMatrix, r))
@@ -273,7 +323,6 @@ struct Evaluator {
             let promotedVector = ComplexVector(from: r)
             return .complexVector(try performComplexVectorComplexOp(op.rawValue, promotedVector, l, reversed: true))
             
-        // NEW: Handle Complex Matrix/Vector with Scalar
         case (.complexMatrix(let l), .scalar(let r)):
             let complexScalar = Complex(real: r, imaginary: 0)
             return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, l, complexScalar))
@@ -418,6 +467,37 @@ struct Evaluator {
             }
         }
         return Matrix(values: newValues, rows: m.columns, columns: m.rows)
+    }
+}
+
+private func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
+    if args.count == 1, case .vector(let v) = args[0] {
+        guard let result = operation(v) else {
+            throw MathError.unsupportedOperation(op: "Statistical", typeA: "Vector with zero or one elements", typeB: nil)
+        }
+        return .scalar(result)
+    } else if args.count == 1, case .matrix(let m) = args[0] {
+        let v = Vector(values: m.values)
+        guard let result = operation(v) else {
+            throw MathError.unsupportedOperation(op: "Statistical", typeA: "Matrix with zero or one elements", typeB: nil)
+        }
+        return .scalar(result)
+    } else {
+        var scalars: [Double] = []
+        for arg in args {
+            guard case .scalar(let s) = arg else {
+                throw MathError.typeMismatch(expected: "Scalar arguments or a single Vector/Matrix", found: arg.typeName)
+            }
+            scalars.append(s)
+        }
+        guard !scalars.isEmpty else {
+             throw MathError.requiresAtLeastOneArgument(function: "Statistical function")
+        }
+        let v = Vector(values: scalars)
+        guard let result = operation(v) else {
+            throw MathError.unsupportedOperation(op: "Statistical", typeA: "Scalar list", typeB: nil)
+        }
+        return .scalar(result)
     }
 }
 

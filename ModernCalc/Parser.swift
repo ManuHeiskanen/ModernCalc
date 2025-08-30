@@ -87,7 +87,6 @@ enum ParserError: Error, CustomStringConvertible {
 class Parser {
     private let tokens: [Token]
     private var currentIndex = 0
-    // Keep track of the last token type to help with implicit multiplication logic
     private var lastTokenType: TokenType?
 
     init(tokens: [Token]) {
@@ -127,23 +126,19 @@ class Parser {
         while !isAtEnd() {
             var operatorPrecedence: Int?
             var opToken: Token?
-            var isImplicit = false // FIX: Flag to track if the operator is implicit
+            var isImplicit = false
 
-            // First, check for an explicit infix operator
             if let currentToken = peek(), let precedence = infixOperatorPrecedence(for: currentToken) {
                 operatorPrecedence = precedence
                 opToken = currentToken
             }
-            // If no explicit operator, check for an implicit multiplication
             else if let nextToken = peek(), shouldImplicitlyMultiply(after: lastTokenType, next: nextToken.type) {
                 operatorPrecedence = implicitMultiplicationPrecedence()
-                opToken = Token(type: .op("*"), rawValue: "*") // Create a "fake" multiplication token
-                isImplicit = true // FIX: Set the flag for implicit operators
+                opToken = Token(type: .op("*"), rawValue: "*")
+                isImplicit = true
             }
 
-            // If we found an operator (explicit or implicit) with high enough precedence, parse the right-hand side.
             if let precedence = operatorPrecedence, let op = opToken, precedence > currentPrecedence {
-                // FIX: Only advance if the operator was explicit (not implicit)
                 if !isImplicit {
                     try advance()
                 }
@@ -159,7 +154,6 @@ class Parser {
                 let right = try parseExpression(currentPrecedence: nextPrecedence)
                 left = BinaryOpNode(op: op, left: left, right: right)
             } else {
-                // No more operators that can be processed at this precedence level
                 break
             }
         }
@@ -320,7 +314,7 @@ class Parser {
             switch opString {
             case "±": return 1
             case "+", "-": return 2
-            case "*", "/": return 3
+            case "*", "/", "∠": return 3 // NEW: Add precedence for polar operator
             case "%": return 4
             case "^": return 5
             default: return nil
@@ -329,11 +323,9 @@ class Parser {
         return nil
     }
     
-    // NEW: Helper to decide when to insert a multiplication operator
     private func shouldImplicitlyMultiply(after lastType: TokenType?, next nextType: TokenType) -> Bool {
         guard let lastType = lastType else { return false }
 
-        // When the last token was a value...
         let wasValue = {
             switch lastType {
             case .number, .complexLiteral, .identifier, .unitVector, .paren(")"): return true
@@ -341,7 +333,6 @@ class Parser {
             }
         }()
 
-        // And the next token is a value...
         let isValue = {
             switch nextType {
             case .number, .complexLiteral, .identifier, .unitVector, .paren("("): return true
@@ -361,7 +352,7 @@ class Parser {
     @discardableResult private func advance() throws -> Token {
         guard !isAtEnd() else { throw ParserError.unexpectedEndOfInput(expected: "more tokens") }
         let currentToken = tokens[currentIndex]
-        self.lastTokenType = currentToken.type // Track the last token type
+        self.lastTokenType = currentToken.type
         currentIndex += 1
         return currentToken
     }

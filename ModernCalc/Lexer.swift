@@ -85,6 +85,14 @@ class Lexer {
             case "±":
                 advance()
                 tokens.append(Token(type: .op("±"), rawValue: "±"))
+            // NEW: Recognize the polar operator
+            case "∠":
+                advance()
+                tokens.append(Token(type: .op("∠"), rawValue: "∠"))
+            // NEW: Ignore the degree symbol
+            case "°":
+                advance()
+                continue
             case "(": tokens.append(Token(type: .paren("("), rawValue: String(advance()!)))
             case ")": tokens.append(Token(type: .paren(")"), rawValue: String(advance()!)))
             case "[": tokens.append(Token(type: .bracket("["), rawValue: String(advance()!)))
@@ -173,3 +181,4 @@ class Lexer {
         return char
     }
 }
+

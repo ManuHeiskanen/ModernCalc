@@ -180,6 +180,7 @@ class CalculatorViewModel: ObservableObject {
         case .complexVector(let cVector): return "Result: Complex Vector [\(cVector.dimension)]"
         case .complexMatrix(let cMatrix): return "Result: Complex Matrix [\(cMatrix.rows)x\(cMatrix.columns)]"
         case .functionDefinition(let name): return "Function '\(name)' defined."
+        case .polar(let polarString): return "Result: \(polarString)"
         }
     }
     
@@ -193,13 +194,13 @@ class CalculatorViewModel: ObservableObject {
         case .complexVector(let cVector): return formatComplexVector(cVector)
         case .complexMatrix(let cMatrix): return formatComplexMatrix(cMatrix)
         case .functionDefinition: return ""
+        case .polar(let polarString): return polarString
         }
     }
     
     private func formatForParsing(_ value: MathValue) -> String {
         switch value {
         case .scalar(let doubleValue): return formatScalar(doubleValue)
-        // FIX: Removed spaces from complex number formatting
         case .complex(let complexValue):
             let sign = complexValue.imaginary < 0 ? "" : "+"
             return "(\(formatScalar(complexValue.real))\(sign)\(formatScalar(complexValue.imaginary))i)"
@@ -209,6 +210,11 @@ class CalculatorViewModel: ObservableObject {
         case .complexVector(let cVector): return "cvector(\(cVector.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cMatrix): return formatComplexMatrixForParsing(cMatrix)
         case .functionDefinition: return ""
+        // NEW: Format polar results for parsing
+        case .polar(let polarString):
+            return polarString
+                .replacingOccurrences(of: " ", with: "")
+                .replacingOccurrences(of: "°", with: "")
         }
     }
 

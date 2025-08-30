@@ -62,6 +62,13 @@ struct Complex: Equatable {
         let imag = scale * sin(product.imaginary)
         return Complex(real: real, imaginary: imag)
     }
+    
+    // NEW: Helper to get polar representation
+    func toPolarString() -> String {
+        let magnitude = self.abs()
+        let angleDegrees = atan2(self.imaginary, self.real) * (180.0 / .pi)
+        return String(format: "%.4f ∠ %.2f°", magnitude, angleDegrees)
+    }
 }
 
 struct Vector: Equatable {
@@ -74,6 +81,47 @@ struct Vector: Equatable {
     
     subscript(index: Int) -> Double {
         return values[index]
+    }
+    
+    // NEW: Statistical and mathematical helpers
+    func sum() -> Double {
+        return values.reduce(0, +)
+    }
+    
+    func average() -> Double {
+        guard !values.isEmpty else { return 0 }
+        return sum() / Double(dimension)
+    }
+    
+    func min() -> Double? {
+        return values.min()
+    }
+    
+    func max() -> Double? {
+        return values.max()
+    }
+    
+    func median() -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        if dimension % 2 == 0 {
+            // Even number of elements: average of the two middle ones
+            return (sorted[dimension / 2 - 1] + sorted[dimension / 2]) / 2
+        } else {
+            // Odd number of elements: the middle one
+            return sorted[dimension / 2]
+        }
+    }
+    
+    func stddev() -> Double? {
+        guard dimension > 1 else { return nil } // Std dev of 1 or 0 elements is undefined
+        let mean = average()
+        let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
+        return Foundation.sqrt(sumOfSquaredDiffs / Double(dimension - 1)) // Sample std dev
+    }
+    
+    func magnitude() -> Double {
+        return Foundation.sqrt(values.map { $0 * $0 }.reduce(0, +))
     }
 }
 
@@ -109,7 +157,6 @@ struct ComplexVector: Equatable {
         return values[index]
     }
     
-    // NEW: Operators for element-wise operations with a Complex number
     static func + (lhs: ComplexVector, rhs: Complex) -> ComplexVector {
         return ComplexVector(values: lhs.values.map { $0 + rhs })
     }
@@ -145,7 +192,6 @@ struct ComplexMatrix: Equatable {
         return values[row * columns + col]
     }
     
-    // NEW: Operators for element-wise operations with a Complex number
     static func + (lhs: ComplexMatrix, rhs: Complex) -> ComplexMatrix {
         return ComplexMatrix(values: lhs.values.map { $0 + rhs }, rows: lhs.rows, columns: lhs.columns)
     }
@@ -169,6 +215,8 @@ enum MathValue: Equatable {
     case functionDefinition(String)
     case complexVector(ComplexVector)
     case complexMatrix(ComplexMatrix)
+    // NEW: A case to hold the final polar string representation
+    case polar(String)
 
     var typeName: String {
         switch self {
@@ -180,6 +228,7 @@ enum MathValue: Equatable {
         case .functionDefinition: return "FunctionDefinition"
         case .complexVector: return "ComplexVector"
         case .complexMatrix: return "ComplexMatrix"
+        case .polar: return "Polar"
         }
     }
 }
