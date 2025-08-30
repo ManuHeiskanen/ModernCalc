@@ -33,7 +33,7 @@ struct Calculation: Identifiable, Hashable {
 
 class CalculatorViewModel: ObservableObject {
 
-    @Published var rawExpression: String = "sqrt(-4) * (1+2i)"
+    @Published var rawExpression: String = ""
     @Published var history: [Calculation] = []
     @Published var liveResult: String = ""
     @Published var previewText: String = ""
