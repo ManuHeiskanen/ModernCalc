@@ -1,7 +1,6 @@
 import Foundation
 
 // --- ABSTRACT SYNTAX TREE NODES ---
-// (No changes needed in this section)
 protocol ExpressionNode {
     var description: String { get }
 }
@@ -40,6 +39,15 @@ struct VectorNode: ExpressionNode {
 struct MatrixNode: ExpressionNode {
     let rows: [[ExpressionNode]]
     var description: String { "matrix(\(rows.map { "[" + $0.map({ $0.description }).joined(separator: ", ") + "]" }.joined(separator: "; ")))" }
+}
+// NEW: Nodes for complex vectors and matrices
+struct ComplexVectorNode: ExpressionNode {
+    let elements: [ExpressionNode]
+    var description: String { "cvector(\(elements.map { $0.description }.joined(separator: "; ")))" }
+}
+struct ComplexMatrixNode: ExpressionNode {
+    let rows: [[ExpressionNode]]
+    var description: String { "cmatrix(\(rows.map { "[" + $0.map({ $0.description }).joined(separator: ", ") + "]" }.joined(separator: "; ")))" }
 }
 struct BinaryOpNode: ExpressionNode {
     let op: Token, left: ExpressionNode, right: ExpressionNode
@@ -139,9 +147,12 @@ class Parser {
         case .unitVector(let char): return ConstantNode(name: "\(char)'")
         case .identifier(let name):
             if let nextToken = peek(), case .paren("(") = nextToken.type {
+                // MODIFIED: Handle cvector and cmatrix
                 switch name {
                 case "matrix": return try parseMatrix()
                 case "vector": return try parseVector()
+                case "cmatrix": return try parseComplexMatrix()
+                case "cvector": return try parseComplexVector()
                 default: return try parseFunctionCall(name: name)
                 }
             } else { return ConstantNode(name: name) }
@@ -164,7 +175,6 @@ class Parser {
             return FunctionCallNode(name: name, arguments: arguments)
         }
         
-        // --- FIX: Check for separator(",") instead of .comma
         repeat {
             arguments.append(try parseExpression())
             if let nextToken = peek(), case .separator(",") = nextToken.type {
@@ -184,7 +194,6 @@ class Parser {
             return VectorNode(elements: [])
         }
         
-        // --- FIX: Check for separator(";") instead of .semicolon
         repeat {
             elements.append(try parseExpression())
             if let nextToken = peek(), case .separator(";") = nextToken.type {
@@ -204,10 +213,8 @@ class Parser {
             return MatrixNode(rows: [])
         }
         
-        // --- FIX: Check for separator(";") for rows
         repeat {
             var row: [ExpressionNode] = []
-            // --- FIX: Check for separator(",") for columns
             repeat {
                 row.append(try parseExpression())
                 if let nextToken = peek(), case .separator(",") = nextToken.type {
@@ -227,6 +234,58 @@ class Parser {
             throw ParserError.matrixRowMismatch(expected: firstRowColumnCount, found: rows.first(where: { $0.count != firstRowColumnCount })!.count)
         }
         return MatrixNode(rows: rows)
+    }
+
+    // NEW: Function to parse a complex vector
+    private func parseComplexVector() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for cvector"))
+        var elements: [ExpressionNode] = []
+        if let nextToken = peek(), case .paren(")") = nextToken.type {
+            try advance()
+            return ComplexVectorNode(elements: [])
+        }
+        
+        repeat {
+            elements.append(try parseExpression())
+            if let nextToken = peek(), case .separator(";") = nextToken.type {
+                try advance()
+            } else { break }
+        } while true
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "';' or ')' for cvector"))
+        return ComplexVectorNode(elements: elements)
+    }
+    
+    // NEW: Function to parse a complex matrix
+    private func parseComplexMatrix() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for cmatrix"))
+        var rows: [[ExpressionNode]] = []
+        if let nextToken = peek(), case .paren(")") = nextToken.type {
+            try advance()
+            return ComplexMatrixNode(rows: [])
+        }
+        
+        repeat {
+            var row: [ExpressionNode] = []
+            repeat {
+                row.append(try parseExpression())
+                if let nextToken = peek(), case .separator(",") = nextToken.type {
+                    try advance()
+                } else { break }
+            } while true
+            rows.append(row)
+            if let nextToken = peek(), case .separator(";") = nextToken.type {
+                try advance()
+            } else { break }
+        } while true
+
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "';' or ')' for cmatrix"))
+        
+        let firstRowColumnCount = rows.first?.count ?? 0
+        guard rows.allSatisfy({ $0.count == firstRowColumnCount }) else {
+            throw ParserError.matrixRowMismatch(expected: firstRowColumnCount, found: rows.first(where: { $0.count != firstRowColumnCount })!.count)
+        }
+        return ComplexMatrixNode(rows: rows)
     }
 
     private func unaryOperatorPrecedence() -> Int { return 6 }

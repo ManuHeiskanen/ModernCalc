@@ -49,7 +49,6 @@ struct Evaluator {
         "log": log10, "ln": log
     ]
     
-    // The main function now accepts variables and functions to modify.
     func evaluate(node: ExpressionNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
         switch node {
         case let numberNode as NumberNode:
@@ -64,7 +63,6 @@ struct Evaluator {
             return .complex(Complex(real: r, imaginary: i))
 
         case let constantNode as ConstantNode:
-            // First check user-defined variables, then built-in constants.
             if let value = variables[constantNode.name] {
                 return value
             } else if let value = constants[constantNode.name] {
@@ -80,7 +78,6 @@ struct Evaluator {
 
         case let funcDefNode as FunctionDefinitionNode:
             functions[funcDefNode.name] = funcDefNode
-            // FIX: Removed extraneous argument label 'name:'
             return .functionDefinition(funcDefNode.name)
             
         case let functionNode as FunctionCallNode:
@@ -95,7 +92,6 @@ struct Evaluator {
                 }
                 elements.append(scalarElement)
             }
-            // FIX: Removed extra argument 'dimension'
             return .vector(Vector(values: elements))
             
         case let matrixNode as MatrixNode:
@@ -112,6 +108,42 @@ struct Evaluator {
                 }
             }
             return .matrix(Matrix(values: values, rows: rows, columns: columns))
+
+        // NEW: Handle evaluation for complex vectors
+        case let cVectorNode as ComplexVectorNode:
+            var elements: [Complex] = []
+            for elementNode in cVectorNode.elements {
+                let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions)
+                switch evaluatedElement {
+                case .complex(let c):
+                    elements.append(c)
+                case .scalar(let s):
+                    elements.append(Complex(real: s, imaginary: 0))
+                default:
+                    throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
+                }
+            }
+            return .complexVector(ComplexVector(values: elements))
+
+        // NEW: Handle evaluation for complex matrices
+        case let cMatrixNode as ComplexMatrixNode:
+            var values: [Complex] = []
+            let rows = cMatrixNode.rows.count
+            let columns = cMatrixNode.rows.first?.count ?? 0
+            for row in cMatrixNode.rows {
+                for elementNode in row {
+                    let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions)
+                    switch evaluatedElement {
+                    case .complex(let c):
+                        values.append(c)
+                    case .scalar(let s):
+                        values.append(Complex(real: s, imaginary: 0))
+                    default:
+                        throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
+                    }
+                }
+            }
+            return .complexMatrix(ComplexMatrix(values: values, rows: rows, columns: columns))
 
         case let unaryNode as UnaryOpNode:
             let childValue = try evaluate(node: unaryNode.child, variables: &variables, functions: &functions)
@@ -130,7 +162,6 @@ struct Evaluator {
     // --- EVALUATION HELPERS ---
 
     private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
-        // Handle built-in scalar functions
         if let function = scalarFunctions[node.name] {
             guard node.arguments.count == 1 else {
                 throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
@@ -138,22 +169,17 @@ struct Evaluator {
             let argumentValue = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
             
             if case .scalar(let scalarArg) = argumentValue {
-                 // If the function is sqrt and the argument is negative, promote to complex.
                  if node.name == "sqrt" && scalarArg < 0 {
-                     let complexArg = Complex(real: scalarArg, imaginary: 0)
-                     return .complex(complexArg.sqrt())
+                     return .complex(Complex(real: scalarArg, imaginary: 0).sqrt())
                  }
-                 // Otherwise, use the standard scalar function.
                  return .scalar(function(scalarArg))
             } else if case .complex(let complexArg) = argumentValue, node.name == "sqrt" {
                  return .complex(complexArg.sqrt())
             } else {
-                 // FIX: Use the new .typeName property for error messages
                  throw MathError.typeMismatch(expected: "Scalar", found: argumentValue.typeName)
             }
         }
         
-        // Handle built-in matrix/vector functions
         switch node.name {
         case "transpose":
             guard node.arguments.count == 1 else {
@@ -161,23 +187,20 @@ struct Evaluator {
             }
             let argumentValue = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
             guard case .matrix(let matrix) = argumentValue else {
-                throw MathError.typeMismatch(expected: "Matrix", found: "Scalar or Vector")
+                throw MathError.typeMismatch(expected: "Matrix", found: argumentValue.typeName)
             }
             return .matrix(transpose(matrix))
         default:
-            // Handle user-defined functions
             if let userFunction = functions[node.name] {
                 guard node.arguments.count == userFunction.parameterNames.count else {
                     throw MathError.incorrectArgumentCount(function: node.name, expected: userFunction.parameterNames.count, found: node.arguments.count)
                 }
                 
-                // Create a local scope for the function call
                 var localVariables = variables
                 for (paramName, argNode) in zip(userFunction.parameterNames, node.arguments) {
                     localVariables[paramName] = try evaluate(node: argNode, variables: &variables, functions: &functions)
                 }
                 
-                // A new evaluator instance for a clean evaluation context if needed, but passing state down works too.
                 return try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions)
             }
             throw MathError.unknownFunction(name: node.name)
@@ -195,59 +218,76 @@ struct Evaluator {
         case .scalar(let s):
             return .scalar(s * opSign)
         case .complex(let c):
-            // FIX: Multiply Complex by a Double using the new operator
             return .complex(c * opSign)
         case .vector(let v):
             let newValues = v.values.map { $0 * opSign }
-            // FIX: Removed extra argument 'dimension'
             return .vector(Vector(values: newValues))
         case .matrix(let m):
             let newValues = m.values.map { $0 * opSign }
             return .matrix(Matrix(values: newValues, rows: m.rows, columns: m.columns))
+        // NEW: Handle unary operations for complex vectors/matrices
+        case .complexVector(let cv):
+            let newValues = cv.values.map { $0 * opSign }
+            return .complexVector(ComplexVector(values: newValues))
+        case .complexMatrix(let cm):
+            let newValues = cm.values.map { $0 * opSign }
+            return .complexMatrix(ComplexMatrix(values: newValues, rows: cm.rows, columns: cm.columns))
         default:
-            // FIX: Use the new .typeName property for error messages
             throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
         }
     }
 
     private func evaluateBinaryOperation(op: Token, left: MathValue, right: MathValue) throws -> MathValue {
-        // This is a great place to handle promotions, e.g., Scalar -> Complex
         switch (left, right) {
         // --- Scalar, Scalar ---
         case (.scalar(let l), .scalar(let r)):
             return .scalar(try performScalarScalarOp(op.rawValue, l, r))
             
-        // --- Complex, Complex ---
+        // --- Complex & Scalar/Complex Operations ---
         case (.complex(let l), .complex(let r)):
             return .complex(try performComplexComplexOp(op.rawValue, l, r))
-
-        // --- Complex, Scalar ---
         case (.complex(let l), .scalar(let r)):
             return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
-
-        // --- Scalar, Complex ---
         case (.scalar(let l), .complex(let r)):
             return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
 
-        // --- Matrix, Scalar ---
+        // --- Matrix & Scalar/Matrix Operations ---
         case (.matrix(let m), .scalar(let s)):
             return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
-            
-        // --- Scalar, Matrix ---
         case (.scalar(let s), .matrix(let m)):
-            switch op.rawValue {
-            case "+", "*":
-                return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
-            default:
-                throw MathError.unsupportedOperation(op: op.rawValue, typeA: "Scalar", typeB: "Matrix")
-            }
-            
-        // --- Matrix, Matrix ---
+            return .matrix(try performMatrixScalarOp(op.rawValue, m, s, reversed: true))
         case (.matrix(let l), .matrix(let r)):
             return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
             
+        // --- Promote Real Matrix/Vector to Complex for operations ---
+        case (.matrix(let l), .complex(let r)):
+            let promotedMatrix = ComplexMatrix(from: l)
+            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, promotedMatrix, r))
+        case (.complex(let l), .matrix(let r)):
+            let promotedMatrix = ComplexMatrix(from: r)
+            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, promotedMatrix, l, reversed: true))
+        case (.vector(let l), .complex(let r)):
+            let promotedVector = ComplexVector(from: l)
+            return .complexVector(try performComplexVectorComplexOp(op.rawValue, promotedVector, r))
+        case (.complex(let l), .vector(let r)):
+            let promotedVector = ComplexVector(from: r)
+            return .complexVector(try performComplexVectorComplexOp(op.rawValue, promotedVector, l, reversed: true))
+            
+        // NEW: Handle Complex Matrix/Vector with Scalar
+        case (.complexMatrix(let l), .scalar(let r)):
+            let complexScalar = Complex(real: r, imaginary: 0)
+            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, l, complexScalar))
+        case (.scalar(let l), .complexMatrix(let r)):
+            let complexScalar = Complex(real: l, imaginary: 0)
+            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, r, complexScalar, reversed: true))
+        case (.complexVector(let l), .scalar(let r)):
+            let complexScalar = Complex(real: r, imaginary: 0)
+            return .complexVector(try performComplexVectorComplexOp(op.rawValue, l, complexScalar))
+        case (.scalar(let l), .complexVector(let r)):
+            let complexScalar = Complex(real: l, imaginary: 0)
+            return .complexVector(try performComplexVectorComplexOp(op.rawValue, r, complexScalar, reversed: true))
+
         default:
-            // FIX: Use the new .typeName property for error messages
             throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName)
         }
     }
@@ -271,7 +311,6 @@ struct Evaluator {
     }
 
     private func performComplexComplexOp(_ op: String, _ l: Complex, _ r: Complex) throws -> Complex {
-        // FIX: Use the new operators and methods on the Complex struct
         switch op {
         case "+": return l + r
         case "-": return l - r
@@ -282,13 +321,16 @@ struct Evaluator {
         }
     }
     
-    private func performMatrixScalarOp(_ op: String, _ m: Matrix, _ s: Double) throws -> Matrix {
+    private func performMatrixScalarOp(_ op: String, _ m: Matrix, _ s: Double, reversed: Bool = false) throws -> Matrix {
         let newValues: [Double]
         switch op {
         case "+": newValues = m.values.map { $0 + s }
-        case "-": newValues = m.values.map { $0 - s }
         case "*": newValues = m.values.map { $0 * s }
+        case "-": newValues = reversed ? m.values.map { s - $0 } : m.values.map { $0 - s }
         case "/":
+            if reversed {
+                throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix")
+            }
             guard s != 0 else { throw MathError.divisionByZero }
             newValues = m.values.map { $0 / s }
         default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Scalar")
@@ -328,7 +370,45 @@ struct Evaluator {
         }
     }
     
-    // --- FUNCTION IMPLEMENTATIONS ---
+    private func performComplexVectorComplexOp(_ op: String, _ v: ComplexVector, _ c: Complex, reversed: Bool = false) throws -> ComplexVector {
+        if reversed {
+            switch op {
+            case "+": return ComplexVector(values: v.values.map { c + $0 })
+            case "*": return ComplexVector(values: v.values.map { c * $0 })
+            case "-": return ComplexVector(values: v.values.map { c - $0 })
+            case "/": throw MathError.unsupportedOperation(op: op, typeA: "Complex", typeB: "ComplexVector")
+            default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex")
+            }
+        } else {
+            switch op {
+            case "+": return v + c
+            case "*": return v * c
+            case "-": return v - c
+            case "/": return try v / c
+            default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex")
+            }
+        }
+    }
+    
+    private func performComplexMatrixComplexOp(_ op: String, _ m: ComplexMatrix, _ c: Complex, reversed: Bool = false) throws -> ComplexMatrix {
+         if reversed {
+            switch op {
+            case "+": return ComplexMatrix(values: m.values.map { c + $0 }, rows: m.rows, columns: m.columns)
+            case "*": return ComplexMatrix(values: m.values.map { c * $0 }, rows: m.rows, columns: m.columns)
+            case "-": return ComplexMatrix(values: m.values.map { c - $0 }, rows: m.rows, columns: m.columns)
+            case "/": throw MathError.unsupportedOperation(op: op, typeA: "Complex", typeB: "ComplexMatrix")
+            default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "Complex")
+            }
+        } else {
+            switch op {
+            case "+": return m + c
+            case "*": return m * c
+            case "-": return m - c
+            case "/": return try m / c
+            default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "Complex")
+            }
+        }
+    }
     
     private func transpose(_ m: Matrix) -> Matrix {
         var newValues = [Double](repeating: 0, count: m.values.count)
