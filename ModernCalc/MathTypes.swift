@@ -62,13 +62,6 @@ struct Complex: Equatable {
         let imag = scale * sin(product.imaginary)
         return Complex(real: real, imaginary: imag)
     }
-    
-    // NEW: Helper to get polar representation
-    func toPolarString() -> String {
-        let magnitude = self.abs()
-        let angleDegrees = atan2(self.imaginary, self.real) * (180.0 / .pi)
-        return String(format: "%.4f ∠ %.2f°", magnitude, angleDegrees)
-    }
 }
 
 struct Vector: Equatable {
@@ -83,7 +76,6 @@ struct Vector: Equatable {
         return values[index]
     }
     
-    // NEW: Statistical and mathematical helpers
     func sum() -> Double {
         return values.reduce(0, +)
     }
@@ -105,19 +97,17 @@ struct Vector: Equatable {
         guard !values.isEmpty else { return nil }
         let sorted = values.sorted()
         if dimension % 2 == 0 {
-            // Even number of elements: average of the two middle ones
             return (sorted[dimension / 2 - 1] + sorted[dimension / 2]) / 2
         } else {
-            // Odd number of elements: the middle one
             return sorted[dimension / 2]
         }
     }
     
     func stddev() -> Double? {
-        guard dimension > 1 else { return nil } // Std dev of 1 or 0 elements is undefined
+        guard dimension > 1 else { return nil }
         let mean = average()
         let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
-        return Foundation.sqrt(sumOfSquaredDiffs / Double(dimension - 1)) // Sample std dev
+        return Foundation.sqrt(sumOfSquaredDiffs / Double(dimension - 1))
     }
     
     func magnitude() -> Double {
@@ -215,8 +205,8 @@ enum MathValue: Equatable {
     case functionDefinition(String)
     case complexVector(ComplexVector)
     case complexMatrix(ComplexMatrix)
-    // NEW: A case to hold the final polar string representation
-    case polar(String)
+    // MODIFIED: Store the original complex number, not the formatted string.
+    case polar(Complex)
 
     var typeName: String {
         switch self {

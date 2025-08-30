@@ -172,56 +172,50 @@ class CalculatorViewModel: ObservableObject {
     
     func formatLivePreview(_ value: MathValue) -> String {
         switch value {
-        case .scalar(let doubleValue): return formatScalar(doubleValue)
-        case .complex(let complexValue): return "Result: \(formatComplex(complexValue))"
+        case .scalar(let doubleValue): return formatScalarForDisplay(doubleValue)
+        case .complex(let complexValue): return "Result: \(formatComplexForDisplay(complexValue))"
         case .vector(let vector): return "Result: Vector [\(vector.dimension)]"
         case .matrix(let matrix): return "Result: Matrix [\(matrix.rows)x\(matrix.columns)]"
         case .tuple(let values): return "Result: \(values.count) possible values"
         case .complexVector(let cVector): return "Result: Complex Vector [\(cVector.dimension)]"
         case .complexMatrix(let cMatrix): return "Result: Complex Matrix [\(cMatrix.rows)x\(cMatrix.columns)]"
         case .functionDefinition(let name): return "Function '\(name)' defined."
-        case .polar(let polarString): return "Result: \(polarString)"
+        case .polar(let complexValue): return "Result: \(formatPolarForDisplay(complexValue))"
         }
     }
     
     private func formatForHistory(_ value: MathValue) -> String {
         switch value {
-        case .scalar(let doubleValue): return formatScalar(doubleValue)
-        case .complex(let complexValue): return formatComplex(complexValue)
-        case .vector(let vector): return formatVector(vector)
-        case .matrix(let matrix): return formatMatrix(matrix)
+        case .scalar(let doubleValue): return formatScalarForDisplay(doubleValue)
+        case .complex(let complexValue): return formatComplexForDisplay(complexValue)
+        case .vector(let vector): return formatVectorForDisplay(vector)
+        case .matrix(let matrix): return formatMatrixForDisplay(matrix)
         case .tuple(let values): return values.map { formatForHistory($0) }.joined(separator: " or ")
-        case .complexVector(let cVector): return formatComplexVector(cVector)
-        case .complexMatrix(let cMatrix): return formatComplexMatrix(cMatrix)
+        case .complexVector(let cVector): return formatComplexVectorForDisplay(cVector)
+        case .complexMatrix(let cMatrix): return formatComplexMatrixForDisplay(cMatrix)
         case .functionDefinition: return ""
-        case .polar(let polarString): return polarString
+        case .polar(let complexValue): return formatPolarForDisplay(complexValue)
         }
     }
     
     private func formatForParsing(_ value: MathValue) -> String {
         switch value {
-        case .scalar(let doubleValue): return formatScalar(doubleValue)
-        case .complex(let complexValue):
-            let sign = complexValue.imaginary < 0 ? "" : "+"
-            return "(\(formatScalar(complexValue.real))\(sign)\(formatScalar(complexValue.imaginary))i)"
-        case .vector(let vector): return "vector(\(vector.values.map { formatScalar($0) }.joined(separator: ";")))"
+        case .scalar(let doubleValue): return formatScalarForParsing(doubleValue)
+        case .complex(let complexValue): return formatComplexForParsing(complexValue)
+        case .vector(let vector): return "vector(\(vector.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
         case .matrix(let matrix): return formatMatrixForParsing(matrix)
         case .tuple(let values): return values.map { formatForParsing($0) }.first ?? ""
         case .complexVector(let cVector): return "cvector(\(cVector.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cMatrix): return formatComplexMatrixForParsing(cMatrix)
         case .functionDefinition: return ""
-        // NEW: Format polar results for parsing
-        case .polar(let polarString):
-            return polarString
-                .replacingOccurrences(of: " ", with: "")
-                .replacingOccurrences(of: "°", with: "")
+        case .polar(let complexValue): return formatPolarForParsing(complexValue)
         }
     }
 
     private func formatMatrixForParsing(_ matrix: Matrix) -> String {
         let rows = (0..<matrix.rows).map { r in
             (0..<matrix.columns).map { c in
-                formatScalar(matrix[r, c])
+                formatScalarForParsing(matrix[r, c])
             }.joined(separator: ",")
         }.joined(separator: ";")
         return "matrix(\(rows))"
@@ -236,70 +230,89 @@ class CalculatorViewModel: ObservableObject {
         return "cmatrix(\(rows))"
     }
 
-    // --- Shared Formatting Helpers ---
-    private func formatScalar(_ value: Double) -> String {
+    // --- Display Formatting Helpers (Low Precision) ---
+    private func formatScalarForDisplay(_ value: Double) -> String {
         return value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(format: "%.4f", value)
     }
-    private func formatComplex(_ value: Complex) -> String {
+    
+    private func formatComplexForDisplay(_ value: Complex) -> String {
         if value.real != 0 && value.imaginary != 0 {
-            return "\(formatScalar(value.real)) \(value.imaginary < 0 ? "-" : "+") \(formatScalar(abs(value.imaginary)))i"
-        } else if value.real != 0 { return formatScalar(value.real) }
-        else if value.imaginary != 0 { return "\(formatScalar(value.imaginary))i" }
+            return "\(formatScalarForDisplay(value.real)) \(value.imaginary < 0 ? "-" : "+") \(formatScalarForDisplay(abs(value.imaginary)))i"
+        } else if value.real != 0 { return formatScalarForDisplay(value.real) }
+        else if value.imaginary != 0 { return "\(formatScalarForDisplay(value.imaginary))i" }
         else { return "0" }
     }
-    private func formatVector(_ vector: Vector) -> String {
-        return (0..<vector.dimension).map { "[ \(formatScalar(vector[$0])) ]" }.joined(separator: "\n")
+    
+    private func formatPolarForDisplay(_ value: Complex) -> String {
+        let magnitude = value.abs()
+        let angleDegrees = atan2(value.imaginary, value.real) * (180.0 / .pi)
+        return String(format: "%.4f ∠ %.2f°", magnitude, angleDegrees)
     }
-    private func formatMatrix(_ matrix: Matrix) -> String {
-        if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
 
+    private func formatVectorForDisplay(_ vector: Vector) -> String {
+        return (0..<vector.dimension).map { "[ \(formatScalarForDisplay(vector[$0])) ]" }.joined(separator: "\n")
+    }
+    
+    private func formatMatrixForDisplay(_ matrix: Matrix) -> String {
+        if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
         var columnWidths = [Int](repeating: 0, count: matrix.columns)
         for c in 0..<matrix.columns {
             var maxWidth = 0
             for r in 0..<matrix.rows {
-                let formattedNumber = formatScalar(matrix[r, c])
-                if formattedNumber.count > maxWidth {
-                    maxWidth = formattedNumber.count
-                }
+                let formattedNumber = formatScalarForDisplay(matrix[r, c])
+                if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count }
             }
             columnWidths[c] = maxWidth
         }
-
         return (0..<matrix.rows).map { r in
             let rowContent = (0..<matrix.columns).map { c in
-                let formattedNumber = formatScalar(matrix[r, c])
+                let formattedNumber = formatScalarForDisplay(matrix[r, c])
                 let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
                 return padding + formattedNumber
             }.joined(separator: "  ")
             return "[ \(rowContent) ]"
         }.joined(separator: "\n")
     }
-    private func formatComplexVector(_ vector: ComplexVector) -> String {
-        return (0..<vector.dimension).map { "[ \(formatComplex(vector[$0])) ]" }.joined(separator: "\n")
+    
+    private func formatComplexVectorForDisplay(_ vector: ComplexVector) -> String {
+        return (0..<vector.dimension).map { "[ \(formatComplexForDisplay(vector[$0])) ]" }.joined(separator: "\n")
     }
-    private func formatComplexMatrix(_ matrix: ComplexMatrix) -> String {
+    
+    private func formatComplexMatrixForDisplay(_ matrix: ComplexMatrix) -> String {
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
-
         var columnWidths = [Int](repeating: 0, count: matrix.columns)
         for c in 0..<matrix.columns {
             var maxWidth = 0
             for r in 0..<matrix.rows {
-                let formattedNumber = "(\(formatComplex(matrix[r, c])))"
-                if formattedNumber.count > maxWidth {
-                    maxWidth = formattedNumber.count
-                }
+                let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"
+                if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count }
             }
             columnWidths[c] = maxWidth
         }
-
         return (0..<matrix.rows).map { r in
             let rowContent = (0..<matrix.columns).map { c in
-                let formattedNumber = "(\(formatComplex(matrix[r, c])))"
+                let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"
                 let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
                 return padding + formattedNumber
             }.joined(separator: "  ")
             return "[ \(rowContent) ]"
         }.joined(separator: "\n")
+    }
+    
+    // --- Parsing Formatting Helpers (High Precision) ---
+    private func formatScalarForParsing(_ value: Double) -> String {
+        return String(value)
+    }
+    
+    private func formatComplexForParsing(_ value: Complex) -> String {
+        let sign = value.imaginary < 0 ? "" : "+"
+        return "(\(formatScalarForParsing(value.real))\(sign)\(formatScalarForParsing(value.imaginary))i)"
+    }
+    
+    private func formatPolarForParsing(_ value: Complex) -> String {
+        let magnitude = value.abs()
+        let angleDegrees = atan2(value.imaginary, value.real) * (180.0 / .pi)
+        return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
 

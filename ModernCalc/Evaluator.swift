@@ -71,11 +71,12 @@ struct Evaluator {
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, or Vector", found: arg.typeName)
             }
         },
+        // MODIFIED: Return the original complex number, not the string
         "polar": { arg in
             guard case .complex(let c) = arg else {
                 throw MathError.typeMismatch(expected: "Complex", found: arg.typeName)
             }
-            return .polar(c.toPolarString())
+            return .polar(c)
         },
         "sqrt": { arg in
             if case .scalar(let s) = arg {
@@ -188,7 +189,6 @@ struct Evaluator {
             return try evaluateUnaryOperation(op: unaryNode.op, value: childValue)
 
         case let binaryNode as BinaryOpNode:
-            // NEW: Handle polar operator before evaluating children
             if binaryNode.op.rawValue == "∠" {
                 let rValue = try evaluate(node: binaryNode.left, variables: &variables, functions: &functions)
                 let thetaValue = try evaluate(node: binaryNode.right, variables: &variables, functions: &functions)
