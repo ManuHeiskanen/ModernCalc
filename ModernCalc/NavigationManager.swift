@@ -18,10 +18,8 @@ class NavigationManager: ObservableObject {
     @Published var selectedHistoryId: UUID? = nil
     @Published var selectedPart: SelectionPart = .result
 
-    // MODIFIED: The function now takes a tuple to access all necessary data without the full Calculation struct
-    typealias HistoryItem = (id: UUID, expression: String, parsableResult: String, isDefinition: Bool)
-
-    func handleKeyPress(keys: Set<KeyEquivalent>, history: [HistoryItem]) -> String? {
+    // MODIFIED: Takes the new Calculation struct
+    func handleKeyPress(keys: Set<KeyEquivalent>, history: [Calculation]) -> String? {
         guard !history.isEmpty else { return nil }
         
         let currentIndex = selectedHistoryId.flatMap { id in history.firstIndex(where: { $0.id == id }) }
@@ -36,7 +34,8 @@ class NavigationManager: ObservableObject {
             if let index = currentIndex, index < history.count - 1 {
                 selectedHistoryId = history[index + 1].id
             } else {
-                resetSelection()
+                selectedHistoryId = nil
+                return nil // Return nil when deselecting
             }
         } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), !selectedItem.isDefinition {
             if keys.contains(.leftArrow) {
@@ -48,10 +47,11 @@ class NavigationManager: ObservableObject {
         
         if let selectedItem = history.first(where: { $0.id == selectedHistoryId }) {
             if selectedItem.isDefinition {
-                return selectedItem.expression
+                // FIX: Remove spaces when previewing
+                return selectedItem.expression.replacingOccurrences(of: " ", with: "")
             }
-            // MODIFIED: Use the parsableResult when the result part is selected
-            return selectedPart == .equation ? selectedItem.expression : selectedItem.parsableResult
+            // FIX: Remove spaces when previewing and use parsable result
+            return selectedPart == .equation ? selectedItem.expression.replacingOccurrences(of: " ", with: "") : selectedItem.parsableResult
         } else {
             return nil
         }
@@ -62,3 +62,4 @@ class NavigationManager: ObservableObject {
         selectedPart = .result
     }
 }
+

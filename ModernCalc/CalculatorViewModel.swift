@@ -106,10 +106,10 @@ class CalculatorViewModel: ObservableObject {
         if let selectedItem = history.first(where: { $0.id == navigationManager.selectedHistoryId }) {
             DispatchQueue.main.async {
                 if selectedItem.isDefinition {
-                    self.rawExpression += selectedItem.expression
+                    self.rawExpression += selectedItem.expression.replacingOccurrences(of: " ", with: "")
                 } else {
                     if self.navigationManager.selectedPart == .equation {
-                        self.rawExpression += selectedItem.expression
+                        self.rawExpression += selectedItem.expression.replacingOccurrences(of: " ", with: "")
                     } else {
                         self.rawExpression += selectedItem.parsableResult
                     }
@@ -143,7 +143,7 @@ class CalculatorViewModel: ObservableObject {
     }
 
     func handleKeyPress(keys: Set<KeyEquivalent>) -> Bool {
-        if let selectedText = navigationManager.handleKeyPress(keys: keys, history: history.map { ($0.id, $0.expression, $0.parsableResult, $0.isDefinition) }) {
+        if let selectedText = navigationManager.handleKeyPress(keys: keys, history: history) {
             DispatchQueue.main.async { self.previewText = selectedText }
             return true
         } else {
@@ -197,12 +197,13 @@ class CalculatorViewModel: ObservableObject {
     private func formatForParsing(_ value: MathValue) -> String {
         switch value {
         case .scalar(let doubleValue): return formatScalar(doubleValue)
-        case .complex(let complexValue): return "(\(formatScalar(complexValue.real)) + \(formatScalar(complexValue.imaginary))i)"
-        // FIX: Removed spaces from separators
+        // FIX: Removed spaces from complex number formatting
+        case .complex(let complexValue):
+            let sign = complexValue.imaginary < 0 ? "" : "+"
+            return "(\(formatScalar(complexValue.real))\(sign)\(formatScalar(complexValue.imaginary))i)"
         case .vector(let vector): return "vector(\(vector.values.map { formatScalar($0) }.joined(separator: ";")))"
         case .matrix(let matrix): return formatMatrixForParsing(matrix)
         case .tuple(let values): return values.map { formatForParsing($0) }.first ?? ""
-        // FIX: Removed spaces from separators
         case .complexVector(let cVector): return "cvector(\(cVector.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cMatrix): return formatComplexMatrixForParsing(cMatrix)
         case .functionDefinition: return ""
@@ -210,7 +211,6 @@ class CalculatorViewModel: ObservableObject {
     }
 
     private func formatMatrixForParsing(_ matrix: Matrix) -> String {
-        // FIX: Removed spaces from separators
         let rows = (0..<matrix.rows).map { r in
             (0..<matrix.columns).map { c in
                 formatScalar(matrix[r, c])
@@ -220,7 +220,6 @@ class CalculatorViewModel: ObservableObject {
     }
     
     private func formatComplexMatrixForParsing(_ matrix: ComplexMatrix) -> String {
-        // FIX: Removed spaces from separators
         let rows = (0..<matrix.rows).map { r in
             (0..<matrix.columns).map { c in
                 formatForParsing(.complex(matrix[r, c]))

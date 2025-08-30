@@ -80,7 +80,6 @@ struct HistoryView: View {
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
     @State private var lastAddedId: UUID?
-    // FIX: Changed state to track both the ID and the hovered part
     @State private var hoveredItem: (id: UUID, part: SelectionPart)?
 
     var body: some View {
@@ -96,18 +95,17 @@ struct HistoryView: View {
                                     .padding(.horizontal, 2)
                                     .padding(.vertical, 2)
                                     .background(
-                                        // FIX: Updated background logic
                                         (hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ?
                                         Color.accentColor.opacity(0.25) : Color.clear
                                     )
                                     .onHover { isHovering in
-                                        // FIX: Update hover state for definitions
                                         withAnimation(.easeOut(duration: 0.15)) {
                                             hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil
                                         }
                                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                     }
-                                    .onTapGesture { rawExpression += calculation.expression }
+                                    // FIX: Remove spaces when tapping
+                                    .onTapGesture { rawExpression += calculation.expression.replacingOccurrences(of: " ", with: "") }
                                     .padding(.vertical, 12)
                                     .padding(.horizontal)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -120,24 +118,22 @@ struct HistoryView: View {
                                         .padding(.horizontal, 2)
                                         .padding(.vertical, 2)
                                         .background(
-                                            // FIX: Updated background logic for expression
                                             (hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ?
                                             Color.accentColor.opacity(0.25) : Color.clear
                                         )
                                         .onHover { isHovering in
-                                            // FIX: Update hover state for expression part
                                             withAnimation(.easeOut(duration: 0.15)) {
                                                 hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil
                                             }
                                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                         }
-                                        .onTapGesture { rawExpression += calculation.expression }
+                                        // FIX: Remove spaces when tapping
+                                        .onTapGesture { rawExpression += calculation.expression.replacingOccurrences(of: " ", with: "") }
 
                                     Text("=")
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .foregroundColor(.secondary)
 
-                                    // FIX: Use the 'displayResult' for showing and 'parsableResult' for tapping
                                     Text(calculation.displayResult)
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .multilineTextAlignment(.trailing)
@@ -145,12 +141,10 @@ struct HistoryView: View {
                                         .padding(.horizontal, 2)
                                         .padding(.vertical, 2)
                                         .background(
-                                            // FIX: Updated background logic for result
                                             (hoveredItem?.id == calculation.id && hoveredItem?.part == .result) || (selectedHistoryId == calculation.id && selectedHistoryPart == .result) ?
                                             Color.accentColor.opacity(0.25) : Color.clear
                                         )
                                         .onHover { isHovering in
-                                            // FIX: Update hover state for result part
                                             withAnimation(.easeOut(duration: 0.15)) {
                                                 hoveredItem = isHovering ? (id: calculation.id, part: .result) : nil
                                             }
