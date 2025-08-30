@@ -9,19 +9,19 @@ import Foundation
 import Combine
 import SwiftUI
 
-// NEW: An enum to represent the calculator's angle mode.
 enum AngleMode {
     case degrees, radians
 }
 
-// MODIFIED: The Calculation struct now stores the raw MathValue result.
+// MODIFIED: Calculation now stores angle mode info.
 struct Calculation: Identifiable, Hashable {
     let id = UUID()
     let expression: String
     let result: MathValue
     let isDefinition: Bool
+    let usedAngleSensitiveFunction: Bool
+    let angleMode: AngleMode
 
-    // Hashable conformance needs to be implemented manually now.
     static func == (lhs: Calculation, rhs: Calculation) -> Bool {
         return lhs.id == rhs.id
     }
@@ -40,11 +40,11 @@ class CalculatorViewModel: ObservableObject {
     @Published var previewText: String = ""
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
-    // NEW: The current angle mode for the calculator.
     @Published var angleMode: AngleMode = .degrees
 
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
+    private var lastUsedAngleFlag: Bool = false // Temp storage for the flag
     private var cancellable: AnyCancellable?
     
     private let navigationManager = NavigationManager()
@@ -78,13 +78,14 @@ class CalculatorViewModel: ObservableObject {
             var tempVars = self.variables
             var tempFuncs = self.functions
             
-            // MODIFIED: Pass the current angle mode to the evaluator.
-            let value = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
+            // MODIFIED: Capture the tuple result from the evaluator.
+            let (value, usedAngle) = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             
             DispatchQueue.main.async {
                 self.variables = tempVars
                 self.functions = tempFuncs
                 self.lastSuccessfulValue = value
+                self.lastUsedAngleFlag = usedAngle // Store the flag
                 
                 if case .functionDefinition(let name) = value {
                     self.liveResult = "Function '\(name)' defined."
@@ -129,11 +130,13 @@ class CalculatorViewModel: ObservableObject {
                 }
             }
             
-            // MODIFIED: Store the raw MathValue in the new calculation.
+            // MODIFIED: Create the Calculation with the new info.
             let newCalculation = Calculation(
                 expression: rawExpression,
                 result: valueToCommit,
-                isDefinition: isDefinition
+                isDefinition: isDefinition,
+                usedAngleSensitiveFunction: self.lastUsedAngleFlag,
+                angleMode: self.angleMode
             )
             
             DispatchQueue.main.async {
@@ -144,7 +147,6 @@ class CalculatorViewModel: ObservableObject {
     }
 
     func handleKeyPress(keys: Set<KeyEquivalent>) -> Bool {
-        // MODIFIED: Pass self to the navigation manager so it can format results.
         if let selectedText = navigationManager.handleKeyPress(keys: keys, history: history, viewModel: self) {
             DispatchQueue.main.async { self.previewText = selectedText }
             return true
@@ -243,10 +245,9 @@ class CalculatorViewModel: ObservableObject {
         else { return "0" }
     }
     
-    // MODIFIED: Polar formatting now respects the angle mode.
     private func formatPolarForDisplay(_ value: Complex) -> String {
         let magnitude = value.abs()
-        let angle = value.argument() // This is always in radians
+        let angle = value.argument()
         
         if self.angleMode == .degrees {
             let angleDegrees = angle * (180.0 / .pi)
@@ -316,7 +317,6 @@ class CalculatorViewModel: ObservableObject {
         return "(\(formatScalarForParsing(value.real))\(sign)\(formatScalarForParsing(value.imaginary))i)"
     }
     
-    // MODIFIED: Polar parsing always uses degrees.
     private func formatPolarForParsing(_ value: Complex) -> String {
         let magnitude = value.abs()
         let angleDegrees = value.argument() * (180.0 / .pi)

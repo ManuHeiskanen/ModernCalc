@@ -16,7 +16,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HistoryView(
-                viewModel: viewModel, // Pass the whole viewModel
+                viewModel: viewModel,
                 history: viewModel.history,
                 rawExpression: $viewModel.rawExpression,
                 selectedHistoryId: viewModel.selectedHistoryId,
@@ -70,14 +70,31 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 500)
-        // NEW: Add the toolbar for the angle mode toggle.
         .toolbar {
             ToolbarItemGroup {
-                Picker("Angle Mode", selection: $viewModel.angleMode) {
-                    Text("DEG").tag(AngleMode.degrees)
-                    Text("RAD").tag(AngleMode.radians)
+                // MODIFIED: Replaced the standard Picker with a custom Hstack of buttons for better styling.
+                HStack(spacing: 0) {
+                    Button("DEG") {
+                        viewModel.angleMode = .degrees
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(viewModel.angleMode == .degrees ? Color.orange : Color.clear)
+                    .foregroundColor(viewModel.angleMode == .degrees ? .white : .primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                    Button("RAD") {
+                        viewModel.angleMode = .radians
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(viewModel.angleMode == .radians ? Color.purple : Color.clear)
+                    .foregroundColor(viewModel.angleMode == .radians ? .white : .primary)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
-                .pickerStyle(.segmented)
+                .buttonStyle(.plain)
+                .background(Color.secondary.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
     }
@@ -86,7 +103,6 @@ struct ContentView: View {
 // --- Subviews ---
 
 struct HistoryView: View {
-    // MODIFIED: Takes the whole view model to access formatters and angle mode.
     @ObservedObject var viewModel: CalculatorViewModel
     var history: [Calculation]
     @Binding var rawExpression: String
@@ -124,28 +140,35 @@ struct HistoryView: View {
 
                             } else {
                                 HStack(alignment: .bottom, spacing: 8) {
-                                    Text(calculation.expression)
-                                        .font(.system(size: 24, weight: .light, design: .monospaced))
-                                        .foregroundColor(.primary)
-                                        .padding(.horizontal, 2)
-                                        .padding(.vertical, 2)
-                                        .background(
-                                            (hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ?
-                                            Color.accentColor.opacity(0.25) : Color.clear
-                                        )
-                                        .onHover { isHovering in
-                                            withAnimation(.easeOut(duration: 0.15)) {
-                                                hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil
-                                            }
-                                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                    HStack(spacing: 8) {
+                                        if calculation.usedAngleSensitiveFunction {
+                                            Circle()
+                                                .fill(calculation.angleMode == .degrees ? .orange : .purple)
+                                                .frame(width: 8, height: 8)
+                                                .offset(y: -4)
                                         }
-                                        .onTapGesture { rawExpression += calculation.expression.replacingOccurrences(of: " ", with: "") }
+                                        Text(calculation.expression)
+                                    }
+                                    .font(.system(size: 24, weight: .light, design: .monospaced))
+                                    .foregroundColor(.primary)
+                                    .padding(.horizontal, 2)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        (hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ?
+                                        Color.accentColor.opacity(0.25) : Color.clear
+                                    )
+                                    .onHover { isHovering in
+                                        withAnimation(.easeOut(duration: 0.15)) {
+                                            hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil
+                                        }
+                                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                    }
+                                    .onTapGesture { rawExpression += calculation.expression.replacingOccurrences(of: " ", with: "") }
 
                                     Text("=")
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .foregroundColor(.secondary)
-
-                                    // MODIFIED: Format the result on the fly using the view model.
+                                        
                                     Text(viewModel.formatForHistory(calculation.result))
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .multilineTextAlignment(.trailing)
@@ -162,7 +185,6 @@ struct HistoryView: View {
                                             }
                                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                         }
-                                        // MODIFIED: Format for parsing on tap.
                                         .onTapGesture { rawExpression += viewModel.formatForParsing(calculation.result) }
                                 }
                                 .padding(.vertical, 12)
