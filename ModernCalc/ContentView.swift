@@ -80,8 +80,8 @@ struct HistoryView: View {
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
     @State private var lastAddedId: UUID?
-    // CORRECTED: Combined hover states for simplicity and correctness
-    @State private var hoveredId: UUID?
+    // FIX: Changed state to track both the ID and the hovered part
+    @State private var hoveredItem: (id: UUID, part: SelectionPart)?
 
     var body: some View {
         ScrollViewReader { scrollViewProxy in
@@ -89,20 +89,22 @@ struct HistoryView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(history) { calculation in
                         VStack(alignment: .trailing, spacing: 4) {
-                            // CORRECTED: Conditional rendering for definitions vs. calculations
                             if calculation.isDefinition {
-                                // Renders definitions as a single, tappable line
                                 Text(calculation.expression)
                                     .font(.system(size: 24, weight: .light, design: .monospaced))
                                     .foregroundColor(.primary)
                                     .padding(.horizontal, 2)
                                     .padding(.vertical, 2)
                                     .background(
-                                        (hoveredId == calculation.id || (selectedHistoryId == calculation.id)) ?
+                                        // FIX: Updated background logic
+                                        (hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ?
                                         Color.accentColor.opacity(0.25) : Color.clear
                                     )
                                     .onHover { isHovering in
-                                        withAnimation(.easeOut(duration: 0.15)) { hoveredId = isHovering ? calculation.id : nil }
+                                        // FIX: Update hover state for definitions
+                                        withAnimation(.easeOut(duration: 0.15)) {
+                                            hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil
+                                        }
                                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                     }
                                     .onTapGesture { rawExpression += calculation.expression }
@@ -111,7 +113,6 @@ struct HistoryView: View {
                                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                             } else {
-                                // Renders normal calculations with two parts
                                 HStack(alignment: .bottom, spacing: 8) {
                                     Text(calculation.expression)
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
@@ -119,11 +120,15 @@ struct HistoryView: View {
                                         .padding(.horizontal, 2)
                                         .padding(.vertical, 2)
                                         .background(
-                                            (hoveredId == calculation.id && selectedHistoryPart == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ?
+                                            // FIX: Updated background logic for expression
+                                            (hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ?
                                             Color.accentColor.opacity(0.25) : Color.clear
                                         )
                                         .onHover { isHovering in
-                                            withAnimation(.easeOut(duration: 0.15)) { hoveredId = isHovering ? calculation.id : nil }
+                                            // FIX: Update hover state for expression part
+                                            withAnimation(.easeOut(duration: 0.15)) {
+                                                hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil
+                                            }
                                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                         }
                                         .onTapGesture { rawExpression += calculation.expression }
@@ -132,21 +137,26 @@ struct HistoryView: View {
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .foregroundColor(.secondary)
 
-                                    Text(calculation.result)
+                                    // FIX: Use the 'displayResult' for showing and 'parsableResult' for tapping
+                                    Text(calculation.displayResult)
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .multilineTextAlignment(.trailing)
                                         .foregroundColor(.primary)
                                         .padding(.horizontal, 2)
                                         .padding(.vertical, 2)
                                         .background(
-                                            (hoveredId == calculation.id && selectedHistoryPart == .result) || (selectedHistoryId == calculation.id && selectedHistoryPart == .result) ?
+                                            // FIX: Updated background logic for result
+                                            (hoveredItem?.id == calculation.id && hoveredItem?.part == .result) || (selectedHistoryId == calculation.id && selectedHistoryPart == .result) ?
                                             Color.accentColor.opacity(0.25) : Color.clear
                                         )
                                         .onHover { isHovering in
-                                            withAnimation(.easeOut(duration: 0.15)) { hoveredId = isHovering ? calculation.id : nil }
+                                            // FIX: Update hover state for result part
+                                            withAnimation(.easeOut(duration: 0.15)) {
+                                                hoveredItem = isHovering ? (id: calculation.id, part: .result) : nil
+                                            }
                                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                         }
-                                        .onTapGesture { rawExpression += calculation.result }
+                                        .onTapGesture { rawExpression += calculation.parsableResult }
                                 }
                                 .padding(.vertical, 12)
                                 .padding(.horizontal)
@@ -233,5 +243,4 @@ struct CalculatorInputView: View {
         .frame(height: 70)
     }
 }
-
 

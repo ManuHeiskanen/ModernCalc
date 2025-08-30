@@ -18,7 +18,10 @@ class NavigationManager: ObservableObject {
     @Published var selectedHistoryId: UUID? = nil
     @Published var selectedPart: SelectionPart = .result
 
-    func handleKeyPress(keys: Set<KeyEquivalent>, history: [Calculation]) -> String? {
+    // MODIFIED: The function now takes a tuple to access all necessary data without the full Calculation struct
+    typealias HistoryItem = (id: UUID, expression: String, parsableResult: String, isDefinition: Bool)
+
+    func handleKeyPress(keys: Set<KeyEquivalent>, history: [HistoryItem]) -> String? {
         guard !history.isEmpty else { return nil }
         
         let currentIndex = selectedHistoryId.flatMap { id in history.firstIndex(where: { $0.id == id }) }
@@ -33,9 +36,8 @@ class NavigationManager: ObservableObject {
             if let index = currentIndex, index < history.count - 1 {
                 selectedHistoryId = history[index + 1].id
             } else {
-                selectedHistoryId = nil
+                resetSelection()
             }
-        // --- NEW: Logic to prevent left/right on definitions ---
         } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), !selectedItem.isDefinition {
             if keys.contains(.leftArrow) {
                 selectedPart = .equation
@@ -45,11 +47,11 @@ class NavigationManager: ObservableObject {
         }
         
         if let selectedItem = history.first(where: { $0.id == selectedHistoryId }) {
-            // For definitions, always return the full expression
             if selectedItem.isDefinition {
                 return selectedItem.expression
             }
-            return selectedPart == .equation ? selectedItem.expression : selectedItem.result
+            // MODIFIED: Use the parsableResult when the result part is selected
+            return selectedPart == .equation ? selectedItem.expression : selectedItem.parsableResult
         } else {
             return nil
         }
@@ -60,4 +62,3 @@ class NavigationManager: ObservableObject {
         selectedPart = .result
     }
 }
-
