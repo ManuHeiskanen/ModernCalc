@@ -37,7 +37,8 @@ class NavigationManager: ObservableObject {
                 selectedHistoryId = nil
                 return nil // Return nil when deselecting
             }
-        } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), !selectedItem.isDefinition {
+        // MODIFIED: Check the calculation type instead of the old isDefinition flag.
+        } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), selectedItem.type != .functionDefinition {
             if keys.contains(.leftArrow) {
                 selectedPart = .equation
             } else if keys.contains(.rightArrow) {
@@ -46,10 +47,10 @@ class NavigationManager: ObservableObject {
         }
         
         if let selectedItem = history.first(where: { $0.id == selectedHistoryId }) {
-            if selectedItem.isDefinition {
+            // MODIFIED: Check the calculation type.
+            if selectedItem.type == .functionDefinition {
                 return selectedItem.expression.replacingOccurrences(of: " ", with: "")
             }
-            // MODIFIED: Use the viewModel to format the result for parsing.
             let resultString = viewModel.formatForParsing(selectedItem.result)
             return selectedPart == .equation ? selectedItem.expression.replacingOccurrences(of: " ", with: "") : resultString
         } else {

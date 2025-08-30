@@ -13,12 +13,19 @@ enum AngleMode {
     case degrees, radians
 }
 
-// MODIFIED: Calculation now stores angle mode info.
+// NEW: An enum to clearly distinguish between types of history entries.
+enum CalculationType {
+    case evaluation
+    case variableAssignment
+    case functionDefinition
+}
+
+// MODIFIED: The Calculation struct now uses the new CalculationType enum.
 struct Calculation: Identifiable, Hashable {
     let id = UUID()
     let expression: String
     let result: MathValue
-    let isDefinition: Bool
+    let type: CalculationType
     let usedAngleSensitiveFunction: Bool
     let angleMode: AngleMode
 
@@ -44,7 +51,7 @@ class CalculatorViewModel: ObservableObject {
 
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
-    private var lastUsedAngleFlag: Bool = false // Temp storage for the flag
+    private var lastUsedAngleFlag: Bool = false
     private var cancellable: AnyCancellable?
     
     private let navigationManager = NavigationManager()
@@ -78,14 +85,13 @@ class CalculatorViewModel: ObservableObject {
             var tempVars = self.variables
             var tempFuncs = self.functions
             
-            // MODIFIED: Capture the tuple result from the evaluator.
             let (value, usedAngle) = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             
             DispatchQueue.main.async {
                 self.variables = tempVars
                 self.functions = tempFuncs
                 self.lastSuccessfulValue = value
-                self.lastUsedAngleFlag = usedAngle // Store the flag
+                self.lastUsedAngleFlag = usedAngle
                 
                 if case .functionDefinition(let name) = value {
                     self.liveResult = "Function '\(name)' defined."
@@ -108,7 +114,7 @@ class CalculatorViewModel: ObservableObject {
     func commitCalculation() {
         if let selectedItem = history.first(where: { $0.id == navigationManager.selectedHistoryId }) {
             DispatchQueue.main.async {
-                if selectedItem.isDefinition {
+                if selectedItem.type == .functionDefinition {
                     self.rawExpression += selectedItem.expression.replacingOccurrences(of: " ", with: "")
                 } else {
                     if self.navigationManager.selectedPart == .equation {
@@ -122,19 +128,26 @@ class CalculatorViewModel: ObservableObject {
         } else {
             guard !rawExpression.isEmpty, let valueToCommit = lastSuccessfulValue else { return }
             
-            let isDefinition = rawExpression.contains(":=") || (valueToCommit.typeName == "FunctionDefinition")
+            // MODIFIED: Determine the specific calculation type.
+            let calcType: CalculationType
+            if valueToCommit.typeName == "FunctionDefinition" {
+                calcType = .functionDefinition
+            } else if rawExpression.contains(":=") {
+                calcType = .variableAssignment
+            } else {
+                calcType = .evaluation
+            }
 
-            if !isDefinition {
+            if calcType != .functionDefinition {
                 DispatchQueue.main.async {
                     self.variables[self.ansVariable] = valueToCommit
                 }
             }
             
-            // MODIFIED: Create the Calculation with the new info.
             let newCalculation = Calculation(
                 expression: rawExpression,
                 result: valueToCommit,
-                isDefinition: isDefinition,
+                type: calcType,
                 usedAngleSensitiveFunction: self.lastUsedAngleFlag,
                 angleMode: self.angleMode
             )

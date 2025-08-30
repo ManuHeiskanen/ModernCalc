@@ -72,7 +72,6 @@ struct ContentView: View {
         .frame(minWidth: 400, minHeight: 500)
         .toolbar {
             ToolbarItemGroup {
-                // MODIFIED: Replaced the standard Picker with a custom Hstack of buttons for better styling.
                 HStack(spacing: 0) {
                     Button("DEG") {
                         viewModel.angleMode = .degrees
@@ -117,7 +116,10 @@ struct HistoryView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(history) { calculation in
                         VStack(alignment: .trailing, spacing: 4) {
-                            if calculation.isDefinition {
+                            // MODIFIED: Use a switch to handle different calculation types.
+                            switch calculation.type {
+                            case .functionDefinition:
+                                // Function definitions are simple: just the expression.
                                 Text(calculation.expression)
                                     .font(.system(size: 24, weight: .light, design: .monospaced))
                                     .foregroundColor(.primary)
@@ -137,8 +139,9 @@ struct HistoryView: View {
                                     .padding(.vertical, 12)
                                     .padding(.horizontal)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
-
-                            } else {
+                            
+                            case .evaluation, .variableAssignment:
+                                // Evaluations and variable assignments share the same layout.
                                 HStack(alignment: .bottom, spacing: 8) {
                                     HStack(spacing: 8) {
                                         if calculation.usedAngleSensitiveFunction {
