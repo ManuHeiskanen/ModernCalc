@@ -51,6 +51,9 @@ class CalculatorViewModel: ObservableObject {
     
     // NEW: Navigation Manager instance
     private let navigationManager = NavigationManager()
+    
+    // NEW: Constant for the "ans" variable name
+    private let ansVariable = "ans"
 
     init() {
         cancellable = $rawExpression
@@ -136,6 +139,11 @@ class CalculatorViewModel: ObservableObject {
                 isDefinition = true
             } else {
                 isDefinition = rawExpression.contains(":=")
+            }
+            
+            // NEW: Update the 'ans' variable if it's not a definition
+            if !isDefinition {
+                self.variables[ansVariable] = valueToCommit
             }
             
             let resultString = isDefinition ? "" : formatForHistory(valueToCommit)
@@ -311,4 +319,3 @@ class CalculatorViewModel: ObservableObject {
         return String(result.dropLast())
     }
 }
-
