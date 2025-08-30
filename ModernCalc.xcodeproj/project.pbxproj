@@ -1,0 +1,548 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		34B53D1E2E60BD720060FBF2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 34B53D072E60BD720060FBF2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 34B53D0E2E60BD720060FBF2;
+			remoteInfo = ModernCalc;
+		};
+		34B53D282E60BD720060FBF2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 34B53D072E60BD720060FBF2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 34B53D0E2E60BD720060FBF2;
+			remoteInfo = ModernCalc;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		34B53D0F2E60BD720060FBF2 /* ModernCalc.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ModernCalc.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		34B53D1D2E60BD720060FBF2 /* ModernCalcTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ModernCalcTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		34B53D272E60BD720060FBF2 /* ModernCalcUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ModernCalcUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		34B53D112E60BD720060FBF2 /* ModernCalc */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ModernCalc;
+			sourceTree = "<group>";
+		};
+		34B53D202E60BD720060FBF2 /* ModernCalcTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ModernCalcTests;
+			sourceTree = "<group>";
+		};
+		34B53D2A2E60BD720060FBF2 /* ModernCalcUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ModernCalcUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		34B53D0C2E60BD720060FBF2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		34B53D1A2E60BD720060FBF2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		34B53D242E60BD720060FBF2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		34B53D062E60BD720060FBF2 = {
+			isa = PBXGroup;
+			children = (
+				34B53D112E60BD720060FBF2 /* ModernCalc */,
+				34B53D202E60BD720060FBF2 /* ModernCalcTests */,
+				34B53D2A2E60BD720060FBF2 /* ModernCalcUITests */,
+				34B53D102E60BD720060FBF2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		34B53D102E60BD720060FBF2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				34B53D0F2E60BD720060FBF2 /* ModernCalc.app */,
+				34B53D1D2E60BD720060FBF2 /* ModernCalcTests.xctest */,
+				34B53D272E60BD720060FBF2 /* ModernCalcUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		34B53D0E2E60BD720060FBF2 /* ModernCalc */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 34B53D312E60BD720060FBF2 /* Build configuration list for PBXNativeTarget "ModernCalc" */;
+			buildPhases = (
+				34B53D0B2E60BD720060FBF2 /* Sources */,
+				34B53D0C2E60BD720060FBF2 /* Frameworks */,
+				34B53D0D2E60BD720060FBF2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				34B53D112E60BD720060FBF2 /* ModernCalc */,
+			);
+			name = ModernCalc;
+			packageProductDependencies = (
+			);
+			productName = ModernCalc;
+			productReference = 34B53D0F2E60BD720060FBF2 /* ModernCalc.app */;
+			productType = "com.apple.product-type.application";
+		};
+		34B53D1C2E60BD720060FBF2 /* ModernCalcTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 34B53D342E60BD720060FBF2 /* Build configuration list for PBXNativeTarget "ModernCalcTests" */;
+			buildPhases = (
+				34B53D192E60BD720060FBF2 /* Sources */,
+				34B53D1A2E60BD720060FBF2 /* Frameworks */,
+				34B53D1B2E60BD720060FBF2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				34B53D1F2E60BD720060FBF2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				34B53D202E60BD720060FBF2 /* ModernCalcTests */,
+			);
+			name = ModernCalcTests;
+			packageProductDependencies = (
+			);
+			productName = ModernCalcTests;
+			productReference = 34B53D1D2E60BD720060FBF2 /* ModernCalcTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		34B53D262E60BD720060FBF2 /* ModernCalcUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 34B53D372E60BD720060FBF2 /* Build configuration list for PBXNativeTarget "ModernCalcUITests" */;
+			buildPhases = (
+				34B53D232E60BD720060FBF2 /* Sources */,
+				34B53D242E60BD720060FBF2 /* Frameworks */,
+				34B53D252E60BD720060FBF2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				34B53D292E60BD720060FBF2 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				34B53D2A2E60BD720060FBF2 /* ModernCalcUITests */,
+			);
+			name = ModernCalcUITests;
+			packageProductDependencies = (
+			);
+			productName = ModernCalcUITests;
+			productReference = 34B53D272E60BD720060FBF2 /* ModernCalcUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		34B53D072E60BD720060FBF2 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					34B53D0E2E60BD720060FBF2 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+					34B53D1C2E60BD720060FBF2 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 34B53D0E2E60BD720060FBF2;
+					};
+					34B53D262E60BD720060FBF2 = {
+						CreatedOnToolsVersion = 16.4;
+						TestTargetID = 34B53D0E2E60BD720060FBF2;
+					};
+				};
+			};
+			buildConfigurationList = 34B53D0A2E60BD720060FBF2 /* Build configuration list for PBXProject "ModernCalc" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 34B53D062E60BD720060FBF2;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 34B53D102E60BD720060FBF2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				34B53D0E2E60BD720060FBF2 /* ModernCalc */,
+				34B53D1C2E60BD720060FBF2 /* ModernCalcTests */,
+				34B53D262E60BD720060FBF2 /* ModernCalcUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		34B53D0D2E60BD720060FBF2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		34B53D1B2E60BD720060FBF2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		34B53D252E60BD720060FBF2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		34B53D0B2E60BD720060FBF2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		34B53D192E60BD720060FBF2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		34B53D232E60BD720060FBF2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		34B53D1F2E60BD720060FBF2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 34B53D0E2E60BD720060FBF2 /* ModernCalc */;
+			targetProxy = 34B53D1E2E60BD720060FBF2 /* PBXContainerItemProxy */;
+		};
+		34B53D292E60BD720060FBF2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 34B53D0E2E60BD720060FBF2 /* ModernCalc */;
+			targetProxy = 34B53D282E60BD720060FBF2 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		34B53D2F2E60BD720060FBF2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		34B53D302E60BD720060FBF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		34B53D322E60BD720060FBF2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ModernCalc/ModernCalc.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = MCALC.ModernCalc;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		34B53D332E60BD720060FBF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ModernCalc/ModernCalc.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = MCALC.ModernCalc;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		34B53D352E60BD720060FBF2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = MCALC.ModernCalcTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ModernCalc.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ModernCalc";
+			};
+			name = Debug;
+		};
+		34B53D362E60BD720060FBF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = MCALC.ModernCalcTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ModernCalc.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ModernCalc";
+			};
+			name = Release;
+		};
+		34B53D382E60BD720060FBF2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = MCALC.ModernCalcUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = ModernCalc;
+			};
+			name = Debug;
+		};
+		34B53D392E60BD720060FBF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = MCALC.ModernCalcUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = ModernCalc;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		34B53D0A2E60BD720060FBF2 /* Build configuration list for PBXProject "ModernCalc" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				34B53D2F2E60BD720060FBF2 /* Debug */,
+				34B53D302E60BD720060FBF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		34B53D312E60BD720060FBF2 /* Build configuration list for PBXNativeTarget "ModernCalc" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				34B53D322E60BD720060FBF2 /* Debug */,
+				34B53D332E60BD720060FBF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		34B53D342E60BD720060FBF2 /* Build configuration list for PBXNativeTarget "ModernCalcTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				34B53D352E60BD720060FBF2 /* Debug */,
+				34B53D362E60BD720060FBF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		34B53D372E60BD720060FBF2 /* Build configuration list for PBXNativeTarget "ModernCalcUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				34B53D382E60BD720060FBF2 /* Debug */,
+				34B53D392E60BD720060FBF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 34B53D072E60BD720060FBF2 /* Project object */;
+}
