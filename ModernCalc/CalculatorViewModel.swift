@@ -13,14 +13,12 @@ enum AngleMode {
     case degrees, radians
 }
 
-// NEW: An enum to clearly distinguish between types of history entries.
 enum CalculationType {
     case evaluation
     case variableAssignment
     case functionDefinition
 }
 
-// MODIFIED: The Calculation struct now uses the new CalculationType enum.
 struct Calculation: Identifiable, Hashable {
     let id = UUID()
     let expression: String
@@ -36,6 +34,14 @@ struct Calculation: Identifiable, Hashable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
+}
+
+// NEW: A struct to hold information about built-in functions for the help view.
+struct BuiltinFunction: Identifiable, Hashable {
+    let id = UUID()
+    let name: String
+    let signature: String
+    let description: String
 }
 
 
@@ -56,6 +62,42 @@ class CalculatorViewModel: ObservableObject {
     
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
+    
+    // NEW: The complete list of built-in functions for the help view.
+    let builtinFunctions: [BuiltinFunction] = [
+        .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
+        .init(name: "cos", signature: "cos(angle)", description: "Calculates the cosine of an angle."),
+        .init(name: "tan", signature: "tan(angle)", description: "Calculates the tangent of an angle."),
+        .init(name: "asin", signature: "asin(value)", description: "Calculates the inverse sine (arcsin)."),
+        .init(name: "acos", signature: "acos(value)", description: "Calculates the inverse cosine (arccos)."),
+        .init(name: "atan", signature: "atan(value)", description: "Calculates the inverse tangent (arctan)."),
+        .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
+        .init(name: "abs", signature: "abs(value)", description: "Calculates the absolute value or magnitude."),
+        .init(name: "log", signature: "log(number)", description: "Calculates the common (base-10) logarithm."),
+        .init(name: "lg", signature: "lg(number)", description: "Alias for the common (base-10) logarithm."),
+        .init(name: "ln", signature: "ln(number)", description: "Calculates the natural (base-e) logarithm."),
+        .init(name: "round", signature: "round(number)", description: "Rounds a number to the nearest integer."),
+        .init(name: "floor", signature: "floor(number)", description: "Rounds a number down to the nearest integer."),
+        .init(name: "ceil", signature: "ceil(number)", description: "Rounds a number up to the nearest integer."),
+        .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),
+        .init(name: "sum", signature: "sum(a, b, ...)", description: "Calculates the sum of a list of numbers or a vector/matrix."),
+        .init(name: "avg", signature: "avg(a, b, ...)", description: "Calculates the average of a list of numbers or a vector/matrix."),
+        .init(name: "min", signature: "min(a, b, ...)", description: "Finds the minimum value in a list of numbers or a vector/matrix."),
+        .init(name: "max", signature: "max(a, b, ...)", description: "Finds the maximum value in a list of numbers or a vector/matrix."),
+        .init(name: "median", signature: "median(a, b, ...)", description: "Finds the median of a list of numbers or a vector/matrix."),
+        .init(name: "stddev", signature: "stddev(a, b, ...)", description: "Calculates the sample standard deviation of a list of numbers or a vector/matrix."),
+        .init(name: "dot", signature: "dot(vectorA, vectorB)", description: "Calculates the dot product of two vectors."),
+        .init(name: "cross", signature: "cross(vectorA, vectorB)", description: "Calculates the cross product of two 3D vectors."),
+        .init(name: "det", signature: "det(matrix)", description: "Calculates the determinant of a square matrix."),
+        .init(name: "inv", signature: "inv(matrix)", description: "Calculates the inverse of a square matrix."),
+        .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
+        .init(name: "real", signature: "real(complex)", description: "Extracts the real part of a complex number."),
+        .init(name: "imag", signature: "imag(complex)", description: "Extracts the imaginary part of a complex number."),
+        .init(name: "conj", signature: "conj(complex)", description: "Calculates the complex conjugate."),
+        .init(name: "arg", signature: "arg(complex)", description: "Calculates the argument (phase) of a complex number."),
+        .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
+        .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations.")
+    ]
 
     init() {
         cancellable = $rawExpression
@@ -128,7 +170,6 @@ class CalculatorViewModel: ObservableObject {
         } else {
             guard !rawExpression.isEmpty, let valueToCommit = lastSuccessfulValue else { return }
             
-            // MODIFIED: Determine the specific calculation type.
             let calcType: CalculationType
             if valueToCommit.typeName == "FunctionDefinition" {
                 calcType = .functionDefinition

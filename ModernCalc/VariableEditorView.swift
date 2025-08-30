@@ -8,15 +8,30 @@
 import SwiftUI
 
 struct VariableEditorView: View {
-    // Use @ObservedObject for views passed in an environment, especially in sheets.
     @ObservedObject var viewModel: CalculatorViewModel
     @Environment(\.dismiss) var dismiss
+    // NEW: State for the search text and the selected tab.
+    @State private var searchText = ""
+    @State private var selectedTab = 0
+
+    // NEW: A computed property to filter the built-in functions based on search text.
+    var filteredBuiltinFunctions: [BuiltinFunction] {
+        if searchText.isEmpty {
+            return viewModel.builtinFunctions
+        } else {
+            return viewModel.builtinFunctions.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.description.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // --- Header ---
             HStack {
-                Text("Variables & Functions")
+                // The title changes based on the selected tab.
+                Text(selectedTab == 0 ? "Variables & Functions" : "Built-in Functions")
                     .font(.title2).bold()
                 Spacer()
                 Button("Done") {
@@ -28,69 +43,98 @@ struct VariableEditorView: View {
             
             Divider()
 
-            // --- Main Content ---
-            List {
-                // --- Variables Section ---
-                Section {
-                    // Use a VStack to resolve ambiguity
-                    VStack {
-                        if viewModel.sortedVariables.isEmpty {
-                            Text("No variables defined.")
-                                .foregroundColor(.secondary)
-                        } else {
-                            ForEach(viewModel.sortedVariables, id: \.0) { name, value in
-                                HStack {
-                                    Text(name)
-                                        .font(.system(.body, design: .monospaced))
-                                    Spacer()
-                                    Text(viewModel.formatLivePreview(value))
-                                        .foregroundColor(.secondary)
-                                    Button(role: .destructive) {
-                                        viewModel.deleteVariable(name: name)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Variables").fontWeight(.bold)
-                }
+            // MODIFIED: Replaced the List with a TabView.
+            TabView(selection: $selectedTab) {
+                // --- Tab 1: User-Defined Items ---
+                userDefinedView
+                    .tabItem { Text("User Defined") }
+                    .tag(0)
 
-                // --- Functions Section ---
-                Section {
-                    // Use a VStack to resolve ambiguity
-                    VStack {
-                        if viewModel.sortedFunctions.isEmpty {
-                            Text("No functions defined.")
-                                .foregroundColor(.secondary)
-                        } else {
-                            ForEach(viewModel.sortedFunctions, id: \.0) { name, node in
-                                HStack {
-                                    Text(node.description)
-                                        .font(.system(.body, design: .monospaced))
-                                    Spacer()
-                                    Button(role: .destructive) {
-                                        viewModel.deleteFunction(name: name)
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
-                                    .buttonStyle(.plain)
+                // --- Tab 2: Built-in Functions ---
+                builtinFunctionsView
+                    .tabItem { Text("Built-in Functions") }
+                    .tag(1)
+            }
+        }
+        .frame(minWidth: 450, minHeight: 400, idealHeight: 600)
+    }
+    
+    // NEW: A view for the user-defined variables and functions.
+    private var userDefinedView: some View {
+        List {
+            Section {
+                VStack {
+                    if viewModel.sortedVariables.isEmpty {
+                        Text("No variables defined.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.sortedVariables, id: \.0) { name, value in
+                            HStack {
+                                Text(name)
+                                    .font(.system(.body, design: .monospaced))
+                                Spacer()
+                                Text(viewModel.formatLivePreview(value))
+                                    .foregroundColor(.secondary)
+                                Button(role: .destructive) {
+                                    viewModel.deleteVariable(name: name)
+                                } label: {
+                                    Image(systemName: "trash")
                                 }
-                                .padding(.vertical, 4)
+                                .buttonStyle(.plain)
                             }
+                            .padding(.vertical, 4)
                         }
                     }
-                } header: {
-                    Text("Functions").fontWeight(.bold)
+                }
+            } header: {
+                Text("Variables").fontWeight(.bold)
+            }
+
+            Section {
+                VStack {
+                    if viewModel.sortedFunctions.isEmpty {
+                        Text("No functions defined.")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.sortedFunctions, id: \.0) { name, node in
+                            HStack {
+                                Text(node.description)
+                                    .font(.system(.body, design: .monospaced))
+                                Spacer()
+                                Button(role: .destructive) {
+                                    viewModel.deleteFunction(name: name)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            } header: {
+                Text("Functions").fontWeight(.bold)
+            }
+        }
+        .listStyle(.sidebar)
+    }
+    
+    // NEW: A view for the searchable list of built-in functions.
+    private var builtinFunctionsView: some View {
+        VStack {
+            List {
+                ForEach(filteredBuiltinFunctions) { function in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(function.signature)
+                            .font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                        Text(function.description)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 6)
                 }
             }
-            .listStyle(.sidebar) // A clean style suitable for macOS
+            .listStyle(.sidebar)
+            .searchable(text: $searchText, prompt: "Search Functions")
         }
-        .frame(minWidth: 400, minHeight: 400, idealHeight: 600)
     }
 }
-

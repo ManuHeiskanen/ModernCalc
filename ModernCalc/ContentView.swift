@@ -15,6 +15,28 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // MODIFIED: The menu button has been moved to its own HStack at the top.
+            HStack {
+                Button(action: { isShowingSheet = true }) {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(10)
+                .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
+                .cornerRadius(8)
+                .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringOnMenuButton = hovering
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
             HistoryView(
                 viewModel: viewModel,
                 history: viewModel.history,
@@ -47,24 +69,7 @@ struct ContentView: View {
                 }
                 return .ignored
             }
-            .overlay(
-                Button(action: { isShowingSheet = true }) {
-                    Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(10)
-                .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
-                .cornerRadius(8)
-                .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHoveringOnMenuButton = hovering
-                    }
-                }
-                .padding(), alignment: .trailing
-            )
+            // MODIFIED: The overlay has been removed from here.
             .sheet(isPresented: $isShowingSheet) {
                 VariableEditorView(viewModel: viewModel)
             }
@@ -116,10 +121,8 @@ struct HistoryView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(history) { calculation in
                         VStack(alignment: .trailing, spacing: 4) {
-                            // MODIFIED: Use a switch to handle different calculation types.
                             switch calculation.type {
                             case .functionDefinition:
-                                // Function definitions are simple: just the expression.
                                 Text(calculation.expression)
                                     .font(.system(size: 24, weight: .light, design: .monospaced))
                                     .foregroundColor(.primary)
@@ -141,7 +144,6 @@ struct HistoryView: View {
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             
                             case .evaluation, .variableAssignment:
-                                // Evaluations and variable assignments share the same layout.
                                 HStack(alignment: .bottom, spacing: 8) {
                                     HStack(spacing: 8) {
                                         if calculation.usedAngleSensitiveFunction {
