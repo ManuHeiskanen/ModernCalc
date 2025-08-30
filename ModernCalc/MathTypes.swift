@@ -62,6 +62,16 @@ struct Complex: Equatable {
         let imag = scale * sin(product.imaginary)
         return Complex(real: real, imaginary: imag)
     }
+    
+    // NEW: Helper for complex conjugate
+    func conjugate() -> Complex {
+        return Complex(real: self.real, imaginary: -self.imaginary)
+    }
+
+    // NEW: Helper for the argument (phase) in radians
+    func argument() -> Double {
+        return atan2(self.imaginary, self.real)
+    }
 }
 
 struct Vector: Equatable {
@@ -195,13 +205,34 @@ struct Matrix: Equatable {
     }
 }
 
-// NEW: Standalone factorial function
+// --- Standalone Math Functions ---
+
 func factorial(_ n: Double) throws -> Double {
     guard n >= 0 && n.truncatingRemainder(dividingBy: 1) == 0 else {
         throw MathError.typeMismatch(expected: "non-negative integer", found: "number")
     }
     if n == 0 { return 1 }
+    // Avoid recursion for large numbers to prevent stack overflow
     return (1...Int(n)).map(Double.init).reduce(1, *)
+}
+
+// NEW: Standalone combinatorics functions
+func permutations(n: Double, k: Double) throws -> Double {
+    guard n >= k && k >= 0 else {
+        throw MathError.unsupportedOperation(op: "nPr", typeA: "n < k or k < 0", typeB: nil)
+    }
+    let nFact = try factorial(n)
+    let nMinusKFact = try factorial(n - k)
+    return nFact / nMinusKFact
+}
+
+func combinations(n: Double, k: Double) throws -> Double {
+    guard n >= k && k >= 0 else {
+        throw MathError.unsupportedOperation(op: "nCr", typeA: "n < k or k < 0", typeB: nil)
+    }
+    let nPr = try permutations(n: n, k: k)
+    let kFact = try factorial(k)
+    return nPr / kFact
 }
 
 

@@ -99,10 +99,26 @@ struct Evaluator {
         "inv": { arg in
             guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
             return .matrix(try m.inverse())
+        },
+        "real": { arg in
+            guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
+            return .scalar(c.real)
+        },
+        "imag": { arg in
+            guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
+            return .scalar(c.imaginary)
+        },
+        "conj": { arg in
+            guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
+            return .complex(c.conjugate())
+        },
+        "arg": { arg in
+            guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
+            return .scalar(c.argument())
         }
     ]
     
-    // NEW: Functions that take two arguments
+    // MODIFIED: Added new two-argument functions
     private let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
         "dot": { a, b in
             guard case .vector(let v1) = a, case .vector(let v2) = b else {
@@ -115,6 +131,18 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)")
             }
             return .vector(try v1.cross(with: v2))
+        },
+        "nPr": { a, b in
+            guard case .scalar(let n) = a, case .scalar(let k) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar(try permutations(n: n, k: k))
+        },
+        "nCr": { a, b in
+            guard case .scalar(let n) = a, case .scalar(let k) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar(try combinations(n: n, k: k))
         }
     ]
     
@@ -239,7 +267,6 @@ struct Evaluator {
     // --- EVALUATION HELPERS ---
 
     private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
-        // New function dispatch logic
         if let variadicFunc = variadicFunctions[node.name] {
             let args = try node.arguments.map { try evaluate(node: $0, variables: &variables, functions: &functions) }
             return try variadicFunc(args)
