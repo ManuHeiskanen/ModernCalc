@@ -1,6 +1,5 @@
 import Foundation
 
-// MODIFIED: Added new error cases for matrix operations and factorial
 enum MathError: Error, CustomStringConvertible {
     case divisionByZero
     case unknownOperator(op: String)
@@ -32,13 +31,12 @@ enum MathError: Error, CustomStringConvertible {
     }
 }
 
-// The Evaluator component.
 struct Evaluator {
 
     private let constants: [String: Double] = [ "pi": Double.pi, "e": M_E ]
+    
+    // MODIFIED: Trig functions moved to a new dictionary
     private let scalarFunctions: [String: (Double) -> Double] = [
-        "sin": sin, "cos": cos, "tan": tan,
-        "asin": asin, "acos": acos, "atan": atan,
         "ln": log, "lg": log10, "log": log10
     ]
     
@@ -52,7 +50,6 @@ struct Evaluator {
         "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) }
     ]
     
-    // MODIFIED: Added new single-argument functions
     private let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
         "abs": { arg in
             switch arg {
@@ -111,14 +108,48 @@ struct Evaluator {
         "conj": { arg in
             guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
             return .complex(c.conjugate())
-        },
-        "arg": { arg in
-            guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
-            return .scalar(c.argument())
         }
     ]
     
-    // MODIFIED: Added new two-argument functions
+    // NEW: Functions that are aware of the current angle mode
+    private let angleAwareFunctions: [String: (MathValue, AngleMode) throws -> MathValue] = [
+        "sin": { arg, mode in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            let angle = mode == .degrees ? s * .pi / 180 : s
+            return .scalar(sin(angle))
+        },
+        "cos": { arg, mode in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            let angle = mode == .degrees ? s * .pi / 180 : s
+            return .scalar(cos(angle))
+        },
+        "tan": { arg, mode in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            let angle = mode == .degrees ? s * .pi / 180 : s
+            return .scalar(tan(angle))
+        },
+        "asin": { arg, mode in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            let angle = asin(s)
+            return .scalar(mode == .degrees ? angle * 180 / .pi : angle)
+        },
+        "acos": { arg, mode in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            let angle = acos(s)
+            return .scalar(mode == .degrees ? angle * 180 / .pi : angle)
+        },
+        "atan": { arg, mode in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            let angle = atan(s)
+            return .scalar(mode == .degrees ? angle * 180 / .pi : angle)
+        },
+        "arg": { arg, mode in
+            guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
+            let angle = c.argument() // This is in radians
+            return .scalar(mode == .degrees ? angle * 180 / .pi : angle)
+        }
+    ]
+    
     private let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
         "dot": { a, b in
             guard case .vector(let v1) = a, case .vector(let v2) = b else {
@@ -146,14 +177,15 @@ struct Evaluator {
         }
     ]
     
-    func evaluate(node: ExpressionNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+    // MODIFIED: Accepts angleMode
+    func evaluate(node: ExpressionNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
         switch node {
         case let numberNode as NumberNode:
             return .scalar(numberNode.value)
         
         case let complexNode as ComplexNode:
-            let realPart = try evaluate(node: complexNode.real, variables: &variables, functions: &functions)
-            let imagPart = try evaluate(node: complexNode.imaginary, variables: &variables, functions: &functions)
+            let realPart = try evaluate(node: complexNode.real, variables: &variables, functions: &functions, angleMode: angleMode)
+            let imagPart = try evaluate(node: complexNode.imaginary, variables: &variables, functions: &functions, angleMode: angleMode)
             guard case .scalar(let r) = realPart, case .scalar(let i) = imagPart else {
                 throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in complex definition")
             }
@@ -169,7 +201,7 @@ struct Evaluator {
             }
             
         case let assignmentNode as AssignmentNode:
-            let value = try evaluate(node: assignmentNode.expression, variables: &variables, functions: &functions)
+            let value = try evaluate(node: assignmentNode.expression, variables: &variables, functions: &functions, angleMode: angleMode)
             variables[assignmentNode.name] = value
             return value
 
@@ -178,12 +210,12 @@ struct Evaluator {
             return .functionDefinition(funcDefNode.name)
             
         case let functionNode as FunctionCallNode:
-            return try evaluateFunctionCall(functionNode, variables: &variables, functions: &functions)
+            return try evaluateFunctionCall(functionNode, variables: &variables, functions: &functions, angleMode: angleMode)
             
         case let vectorNode as VectorNode:
             var elements: [Double] = []
             for elementNode in vectorNode.elements {
-                let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions)
+                let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 guard case .scalar(let scalarElement) = evaluatedElement else {
                     throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in vector definition")
                 }
@@ -197,7 +229,7 @@ struct Evaluator {
             let columns = matrixNode.rows.first?.count ?? 0
             for row in matrixNode.rows {
                 for elementNode in row {
-                    let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions)
+                    let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                     guard case .scalar(let scalarElement) = evaluatedElement else {
                         throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in matrix definition")
                     }
@@ -209,7 +241,7 @@ struct Evaluator {
         case let cVectorNode as ComplexVectorNode:
             var elements: [Complex] = []
             for elementNode in cVectorNode.elements {
-                let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions)
+                let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 switch evaluatedElement {
                 case .complex(let c):
                     elements.append(c)
@@ -227,7 +259,7 @@ struct Evaluator {
             let columns = cMatrixNode.rows.first?.count ?? 0
             for row in cMatrixNode.rows {
                 for elementNode in row {
-                    let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions)
+                    let evaluatedElement = try evaluate(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                     switch evaluatedElement {
                     case .complex(let c):
                         values.append(c)
@@ -241,13 +273,13 @@ struct Evaluator {
             return .complexMatrix(ComplexMatrix(values: values, rows: rows, columns: columns))
 
         case let unaryNode as UnaryOpNode:
-            let childValue = try evaluate(node: unaryNode.child, variables: &variables, functions: &functions)
+            let childValue = try evaluate(node: unaryNode.child, variables: &variables, functions: &functions, angleMode: angleMode)
             return try evaluateUnaryOperation(op: unaryNode.op, value: childValue)
 
         case let binaryNode as BinaryOpNode:
             if binaryNode.op.rawValue == "∠" {
-                let rValue = try evaluate(node: binaryNode.left, variables: &variables, functions: &functions)
-                let thetaValue = try evaluate(node: binaryNode.right, variables: &variables, functions: &functions)
+                let rValue = try evaluate(node: binaryNode.left, variables: &variables, functions: &functions, angleMode: angleMode)
+                let thetaValue = try evaluate(node: binaryNode.right, variables: &variables, functions: &functions, angleMode: angleMode)
                 guard case .scalar(let r) = rValue, case .scalar(let theta) = thetaValue else {
                     throw MathError.typeMismatch(expected: "Scalar ∠ Scalar", found: "\(rValue.typeName) ∠ \(thetaValue.typeName)")
                 }
@@ -255,8 +287,8 @@ struct Evaluator {
                 return .complex(Complex(real: r * cos(thetaRad), imaginary: r * sin(thetaRad)))
             }
             
-            let leftValue = try evaluate(node: binaryNode.left, variables: &variables, functions: &functions)
-            let rightValue = try evaluate(node: binaryNode.right, variables: &variables, functions: &functions)
+            let leftValue = try evaluate(node: binaryNode.left, variables: &variables, functions: &functions, angleMode: angleMode)
+            let rightValue = try evaluate(node: binaryNode.right, variables: &variables, functions: &functions, angleMode: angleMode)
             return try evaluateBinaryOperation(op: binaryNode.op, left: leftValue, right: rightValue)
 
         default:
@@ -266,9 +298,9 @@ struct Evaluator {
 
     // --- EVALUATION HELPERS ---
 
-    private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+    private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
         if let variadicFunc = variadicFunctions[node.name] {
-            let args = try node.arguments.map { try evaluate(node: $0, variables: &variables, functions: &functions) }
+            let args = try node.arguments.map { try evaluate(node: $0, variables: &variables, functions: &functions, angleMode: angleMode) }
             return try variadicFunc(args)
         }
         
@@ -276,7 +308,7 @@ struct Evaluator {
             guard node.arguments.count == 1 else {
                 throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
             }
-            let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
+            let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             return try singleArgFunc(arg)
         }
         
@@ -284,16 +316,24 @@ struct Evaluator {
             guard node.arguments.count == 2 else {
                 throw MathError.incorrectArgumentCount(function: node.name, expected: 2, found: node.arguments.count)
             }
-            let arg1 = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
-            let arg2 = try evaluate(node: node.arguments[1], variables: &variables, functions: &functions)
+            let arg1 = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
+            let arg2 = try evaluate(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
             return try twoArgFunc(arg1, arg2)
+        }
+        
+        if let angleFunc = angleAwareFunctions[node.name] {
+            guard node.arguments.count == 1 else {
+                throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
+            }
+            let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
+            return try angleFunc(arg, angleMode)
         }
 
         if let scalarFunc = scalarFunctions[node.name] {
             guard node.arguments.count == 1 else {
                 throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
             }
-            let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
+            let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             guard case .scalar(let s) = arg else {
                 throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName)
             }
@@ -307,10 +347,10 @@ struct Evaluator {
             
             var localVariables = variables
             for (paramName, argNode) in zip(userFunction.parameterNames, node.arguments) {
-                localVariables[paramName] = try evaluate(node: argNode, variables: &variables, functions: &functions)
+                localVariables[paramName] = try evaluate(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
             }
             
-            return try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions)
+            return try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions, angleMode: angleMode)
         }
         
         throw MathError.unknownFunction(name: node.name)

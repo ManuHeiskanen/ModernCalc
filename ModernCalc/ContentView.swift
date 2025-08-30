@@ -16,6 +16,7 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             HistoryView(
+                viewModel: viewModel, // Pass the whole viewModel
                 history: viewModel.history,
                 rawExpression: $viewModel.rawExpression,
                 selectedHistoryId: viewModel.selectedHistoryId,
@@ -69,12 +70,24 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 500)
+        // NEW: Add the toolbar for the angle mode toggle.
+        .toolbar {
+            ToolbarItemGroup {
+                Picker("Angle Mode", selection: $viewModel.angleMode) {
+                    Text("DEG").tag(AngleMode.degrees)
+                    Text("RAD").tag(AngleMode.radians)
+                }
+                .pickerStyle(.segmented)
+            }
+        }
     }
 }
 
 // --- Subviews ---
 
 struct HistoryView: View {
+    // MODIFIED: Takes the whole view model to access formatters and angle mode.
+    @ObservedObject var viewModel: CalculatorViewModel
     var history: [Calculation]
     @Binding var rawExpression: String
     var selectedHistoryId: UUID?
@@ -104,7 +117,6 @@ struct HistoryView: View {
                                         }
                                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                     }
-                                    // FIX: Remove spaces when tapping
                                     .onTapGesture { rawExpression += calculation.expression.replacingOccurrences(of: " ", with: "") }
                                     .padding(.vertical, 12)
                                     .padding(.horizontal)
@@ -127,14 +139,14 @@ struct HistoryView: View {
                                             }
                                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                         }
-                                        // FIX: Remove spaces when tapping
                                         .onTapGesture { rawExpression += calculation.expression.replacingOccurrences(of: " ", with: "") }
 
                                     Text("=")
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .foregroundColor(.secondary)
 
-                                    Text(calculation.displayResult)
+                                    // MODIFIED: Format the result on the fly using the view model.
+                                    Text(viewModel.formatForHistory(calculation.result))
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .multilineTextAlignment(.trailing)
                                         .foregroundColor(.primary)
@@ -150,7 +162,8 @@ struct HistoryView: View {
                                             }
                                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                         }
-                                        .onTapGesture { rawExpression += calculation.parsableResult }
+                                        // MODIFIED: Format for parsing on tap.
+                                        .onTapGesture { rawExpression += viewModel.formatForParsing(calculation.result) }
                                 }
                                 .padding(.vertical, 12)
                                 .padding(.horizontal)

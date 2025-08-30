@@ -18,8 +18,8 @@ class NavigationManager: ObservableObject {
     @Published var selectedHistoryId: UUID? = nil
     @Published var selectedPart: SelectionPart = .result
 
-    // MODIFIED: Takes the new Calculation struct
-    func handleKeyPress(keys: Set<KeyEquivalent>, history: [Calculation]) -> String? {
+    // MODIFIED: Accepts the viewModel to format the result string for preview.
+    func handleKeyPress(keys: Set<KeyEquivalent>, history: [Calculation], viewModel: CalculatorViewModel) -> String? {
         guard !history.isEmpty else { return nil }
         
         let currentIndex = selectedHistoryId.flatMap { id in history.firstIndex(where: { $0.id == id }) }
@@ -47,11 +47,11 @@ class NavigationManager: ObservableObject {
         
         if let selectedItem = history.first(where: { $0.id == selectedHistoryId }) {
             if selectedItem.isDefinition {
-                // FIX: Remove spaces when previewing
                 return selectedItem.expression.replacingOccurrences(of: " ", with: "")
             }
-            // FIX: Remove spaces when previewing and use parsable result
-            return selectedPart == .equation ? selectedItem.expression.replacingOccurrences(of: " ", with: "") : selectedItem.parsableResult
+            // MODIFIED: Use the viewModel to format the result for parsing.
+            let resultString = viewModel.formatForParsing(selectedItem.result)
+            return selectedPart == .equation ? selectedItem.expression.replacingOccurrences(of: " ", with: "") : resultString
         } else {
             return nil
         }
