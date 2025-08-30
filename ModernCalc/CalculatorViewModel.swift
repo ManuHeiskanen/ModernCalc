@@ -122,7 +122,9 @@ class CalculatorViewModel: ObservableObject {
             let isDefinition = rawExpression.contains(":=") || (valueToCommit.typeName == "FunctionDefinition")
 
             if !isDefinition {
-                self.variables[ansVariable] = valueToCommit
+                DispatchQueue.main.async {
+                    self.variables[self.ansVariable] = valueToCommit
+                }
             }
             
             let displayResultString = isDefinition ? "" : formatForHistory(valueToCommit)
