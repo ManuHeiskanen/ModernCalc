@@ -1,6 +1,6 @@
 import Foundation
 
-// Define the possible mathematical errors.
+// MODIFIED: Added new error cases for matrix operations and factorial
 enum MathError: Error, CustomStringConvertible {
     case divisionByZero
     case unknownOperator(op: String)
@@ -15,29 +15,19 @@ enum MathError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .divisionByZero:
-            return "Error: Division by zero."
-        case .unknownOperator(let op):
-            return "Error: Unknown operator '\(op)'."
-        case .unknownConstant(let name):
-            return "Error: Unknown variable or constant '\(name)'."
-        case .unknownFunction(let name):
-            return "Error: Unknown function '\(name)'."
-        case .invalidNode:
-            return "Error: The expression tree contains an invalid node."
-        case .typeMismatch(let expected, let found):
-            return "Error: Type mismatch. Expected \(expected), but found \(found)."
+        case .divisionByZero: return "Error: Division by zero."
+        case .unknownOperator(let op): return "Error: Unknown operator '\(op)'."
+        case .unknownConstant(let name): return "Error: Unknown variable or constant '\(name)'."
+        case .unknownFunction(let name): return "Error: Unknown function '\(name)'."
+        case .invalidNode: return "Error: The expression tree contains an invalid node."
+        case .typeMismatch(let expected, let found): return "Error: Type mismatch. Expected \(expected), but found \(found)."
         case .unsupportedOperation(let op, let typeA, let typeB):
-            if let typeB = typeB {
-                return "Error: Operator '\(op)' is not supported between \(typeA) and \(typeB)."
-            }
+            if let typeB = typeB { return "Error: Operator '\(op)' is not supported between \(typeA) and \(typeB)." }
+            if typeA == "Singular Matrix" { return "Error: Matrix is singular and cannot be inverted."}
             return "Error: Operator '\(op)' is not supported for \(typeA)."
-        case .dimensionMismatch(let reason):
-            return "Error: Dimension mismatch. \(reason)."
-        case .incorrectArgumentCount(let function, let expected, let found):
-            return "Error: Function '\(function)' expects \(expected) argument(s), but received \(found)."
-        case .requiresAtLeastOneArgument(let function):
-            return "Error: Function '\(function)' requires at least one argument."
+        case .dimensionMismatch(let reason): return "Error: Dimension mismatch. \(reason)."
+        case .incorrectArgumentCount(let function, let expected, let found): return "Error: Function '\(function)' expects \(expected) argument(s), but received \(found)."
+        case .requiresAtLeastOneArgument(let function): return "Error: Function '\(function)' requires at least one argument."
         }
     }
 }
@@ -62,6 +52,7 @@ struct Evaluator {
         "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) }
     ]
     
+    // MODIFIED: Added new single-argument functions
     private let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
         "abs": { arg in
             switch arg {
@@ -71,11 +62,8 @@ struct Evaluator {
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, or Vector", found: arg.typeName)
             }
         },
-        // MODIFIED: Return the original complex number, not the string
         "polar": { arg in
-            guard case .complex(let c) = arg else {
-                throw MathError.typeMismatch(expected: "Complex", found: arg.typeName)
-            }
+            guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
             return .polar(c)
         },
         "sqrt": { arg in
@@ -87,6 +75,46 @@ struct Evaluator {
             } else {
                 throw MathError.typeMismatch(expected: "Scalar or Complex", found: arg.typeName)
             }
+        },
+        "round": { arg in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(round(s))
+        },
+        "floor": { arg in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(floor(s))
+        },
+        "ceil": { arg in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(ceil(s))
+        },
+        "fact": { arg in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(try factorial(s))
+        },
+        "det": { arg in
+            guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
+            return .scalar(try m.determinant())
+        },
+        "inv": { arg in
+            guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
+            return .matrix(try m.inverse())
+        }
+    ]
+    
+    // NEW: Functions that take two arguments
+    private let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
+        "dot": { a, b in
+            guard case .vector(let v1) = a, case .vector(let v2) = b else {
+                throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar(try v1.dot(with: v2))
+        },
+        "cross": { a, b in
+            guard case .vector(let v1) = a, case .vector(let v2) = b else {
+                throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .vector(try v1.cross(with: v2))
         }
     ]
     
@@ -211,6 +239,7 @@ struct Evaluator {
     // --- EVALUATION HELPERS ---
 
     private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        // New function dispatch logic
         if let variadicFunc = variadicFunctions[node.name] {
             let args = try node.arguments.map { try evaluate(node: $0, variables: &variables, functions: &functions) }
             return try variadicFunc(args)
@@ -222,6 +251,15 @@ struct Evaluator {
             }
             let arg = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
             return try singleArgFunc(arg)
+        }
+        
+        if let twoArgFunc = twoArgumentFunctions[node.name] {
+            guard node.arguments.count == 2 else {
+                throw MathError.incorrectArgumentCount(function: node.name, expected: 2, found: node.arguments.count)
+            }
+            let arg1 = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
+            let arg2 = try evaluate(node: node.arguments[1], variables: &variables, functions: &functions)
+            return try twoArgFunc(arg1, arg2)
         }
 
         if let scalarFunc = scalarFunctions[node.name] {
@@ -235,31 +273,20 @@ struct Evaluator {
             return .scalar(scalarFunc(s))
         }
         
-        switch node.name {
-        case "transpose":
-            guard node.arguments.count == 1 else {
-                throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
+        if let userFunction = functions[node.name] {
+            guard node.arguments.count == userFunction.parameterNames.count else {
+                throw MathError.incorrectArgumentCount(function: node.name, expected: userFunction.parameterNames.count, found: node.arguments.count)
             }
-            let argumentValue = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions)
-            guard case .matrix(let matrix) = argumentValue else {
-                throw MathError.typeMismatch(expected: "Matrix", found: argumentValue.typeName)
+            
+            var localVariables = variables
+            for (paramName, argNode) in zip(userFunction.parameterNames, node.arguments) {
+                localVariables[paramName] = try evaluate(node: argNode, variables: &variables, functions: &functions)
             }
-            return .matrix(transpose(matrix))
-        default:
-            if let userFunction = functions[node.name] {
-                guard node.arguments.count == userFunction.parameterNames.count else {
-                    throw MathError.incorrectArgumentCount(function: node.name, expected: userFunction.parameterNames.count, found: node.arguments.count)
-                }
-                
-                var localVariables = variables
-                for (paramName, argNode) in zip(userFunction.parameterNames, node.arguments) {
-                    localVariables[paramName] = try evaluate(node: argNode, variables: &variables, functions: &functions)
-                }
-                
-                return try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions)
-            }
-            throw MathError.unknownFunction(name: node.name)
+            
+            return try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions)
         }
+        
+        throw MathError.unknownFunction(name: node.name)
     }
 
     private func evaluateUnaryOperation(op: Token, value: MathValue) throws -> MathValue {

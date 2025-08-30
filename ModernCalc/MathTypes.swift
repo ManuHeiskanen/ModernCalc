@@ -76,23 +76,36 @@ struct Vector: Equatable {
         return values[index]
     }
     
-    func sum() -> Double {
-        return values.reduce(0, +)
+    // --- Vector Operations ---
+    func dot(with other: Vector) throws -> Double {
+        guard self.dimension == other.dimension else {
+            throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for dot product.")
+        }
+        return zip(self.values, other.values).map(*).reduce(0, +)
     }
     
+    func cross(with other: Vector) throws -> Vector {
+        guard self.dimension == 3 && other.dimension == 3 else {
+            throw MathError.dimensionMismatch(reason: "Cross product is only defined for 3D vectors.")
+        }
+        let u = self.values
+        let v = other.values
+        let newValues = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0]
+        ]
+        return Vector(values: newValues)
+    }
+    
+    // --- Statistical Helpers ---
+    func sum() -> Double { return values.reduce(0, +) }
     func average() -> Double {
         guard !values.isEmpty else { return 0 }
         return sum() / Double(dimension)
     }
-    
-    func min() -> Double? {
-        return values.min()
-    }
-    
-    func max() -> Double? {
-        return values.max()
-    }
-    
+    func min() -> Double? { return values.min() }
+    func max() -> Double? { return values.max() }
     func median() -> Double? {
         guard !values.isEmpty else { return nil }
         let sorted = values.sorted()
@@ -102,14 +115,12 @@ struct Vector: Equatable {
             return sorted[dimension / 2]
         }
     }
-    
     func stddev() -> Double? {
         guard dimension > 1 else { return nil }
         let mean = average()
         let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
         return Foundation.sqrt(sumOfSquaredDiffs / Double(dimension - 1))
     }
-    
     func magnitude() -> Double {
         return Foundation.sqrt(values.map { $0 * $0 }.reduce(0, +))
     }
@@ -129,7 +140,70 @@ struct Matrix: Equatable {
     subscript(row: Int, col: Int) -> Double {
         return values[row * columns + col]
     }
+    
+    // --- Matrix Operations ---
+    func submatrix(excludingRow: Int, excludingCol: Int) -> Matrix {
+        var newValues: [Double] = []
+        for r in 0..<rows {
+            guard r != excludingRow else { continue }
+            for c in 0..<columns {
+                guard c != excludingCol else { continue }
+                newValues.append(self[r, c])
+            }
+        }
+        return Matrix(values: newValues, rows: rows - 1, columns: columns - 1)
+    }
+
+    func determinant() throws -> Double {
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square to calculate determinant.") }
+        if rows == 1 { return self[0, 0] }
+        if rows == 2 { return self[0, 0] * self[1, 1] - self[0, 1] * self[1, 0] }
+        
+        var det = 0.0
+        for c in 0..<columns {
+            let sign = (c % 2 == 0) ? 1.0 : -1.0
+            det += sign * self[0, c] * (try submatrix(excludingRow: 0, excludingCol: c).determinant())
+        }
+        return det
+    }
+
+    func inverse() throws -> Matrix {
+        let det = try determinant()
+        guard det != 0 else { throw MathError.unsupportedOperation(op: "inverse", typeA: "Singular Matrix", typeB: nil) }
+        
+        if rows == 1 { return Matrix(values: [1.0 / det], rows: 1, columns: 1) }
+
+        var cofactors: [Double] = []
+        for r in 0..<rows {
+            for c in 0..<columns {
+                let sign = ((r + c) % 2 == 0) ? 1.0 : -1.0
+                let subDet = try submatrix(excludingRow: r, excludingCol: c).determinant()
+                cofactors.append(sign * subDet)
+            }
+        }
+        
+        let cofactorMatrix = Matrix(values: cofactors, rows: rows, columns: columns)
+        var adjugateValues = [Double](repeating: 0.0, count: values.count)
+        for r in 0..<rows {
+            for c in 0..<columns {
+                adjugateValues[c * rows + r] = cofactorMatrix[r, c]
+            }
+        }
+        
+        let inverseValues = adjugateValues.map { $0 / det }
+        return Matrix(values: inverseValues, rows: rows, columns: columns)
+    }
 }
+
+// NEW: Standalone factorial function
+func factorial(_ n: Double) throws -> Double {
+    guard n >= 0 && n.truncatingRemainder(dividingBy: 1) == 0 else {
+        throw MathError.typeMismatch(expected: "non-negative integer", found: "number")
+    }
+    if n == 0 { return 1 }
+    return (1...Int(n)).map(Double.init).reduce(1, *)
+}
+
 
 struct ComplexVector: Equatable {
     let values: [Complex]
@@ -205,7 +279,6 @@ enum MathValue: Equatable {
     case functionDefinition(String)
     case complexVector(ComplexVector)
     case complexMatrix(ComplexMatrix)
-    // MODIFIED: Store the original complex number, not the formatted string.
     case polar(Complex)
 
     var typeName: String {
