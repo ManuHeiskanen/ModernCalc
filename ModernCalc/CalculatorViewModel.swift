@@ -85,7 +85,6 @@ class CalculatorViewModel: ObservableObject {
         .init(symbol: "π", name: "Pi")
     ]
     
-    // MODIFIED: Added all uppercase and lowercase Greek letters.
     let greekSymbols: [MathSymbol] = [
         .init(symbol: "α", name: "Alpha (lowercase)"), .init(symbol: "Α", name: "Alpha (uppercase)"),
         .init(symbol: "β", name: "Beta (lowercase)"), .init(symbol: "Β", name: "Beta (uppercase)"),
@@ -334,9 +333,19 @@ class CalculatorViewModel: ObservableObject {
         return "cmatrix(\(rows))"
     }
 
-    // --- Display Formatting Helpers (Low Precision) ---
+    // MODIFIED: This function now uses adaptive precision and scientific notation.
     private func formatScalarForDisplay(_ value: Double) -> String {
-        return value.truncatingRemainder(dividingBy: 1) == 0 ? String(format: "%.0f", value) : String(format: "%.4f", value)
+        if value.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(format: "%.0f", value)
+        }
+        
+        let absValue = abs(value)
+        if absValue > 0 && (absValue < 1e-4 || absValue >= 1e15) {
+            return String(format: "%.4g", value)
+        } else {
+            let formatted = String(format: "%.4f", value)
+            return formatted.replacingOccurrences(of: "\\.?0+$", with: "", options: .regularExpression)
+        }
     }
     
     private func formatComplexForDisplay(_ value: Complex) -> String {
@@ -353,9 +362,9 @@ class CalculatorViewModel: ObservableObject {
         
         if self.angleMode == .degrees {
             let angleDegrees = angle * (180.0 / .pi)
-            return String(format: "%.4f ∠ %.2f°", magnitude, angleDegrees)
+            return "\(formatScalarForDisplay(magnitude)) ∠ \(String(format: "%.2f", angleDegrees))°"
         } else {
-            return String(format: "%.4f ∠ %.4f rad", magnitude, angle)
+            return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angle)) rad"
         }
     }
 
@@ -409,9 +418,15 @@ class CalculatorViewModel: ObservableObject {
         }.joined(separator: "\n")
     }
     
-    // --- Parsing Formatting Helpers (High Precision) ---
+    // --- Parsing Formatting Helpers (High Precision & Parser-Friendly) ---
+    // MODIFIED: This function now converts scientific notation to a parser-friendly format.
     private func formatScalarForParsing(_ value: Double) -> String {
-        return String(value)
+        let stringValue = String(value)
+        if stringValue.contains("e") {
+            // Convert scientific "e" to "*10^" for the parser
+            return stringValue.replacingOccurrences(of: "e", with: "*10^")
+        }
+        return stringValue
     }
     
     private func formatComplexForParsing(_ value: Complex) -> String {

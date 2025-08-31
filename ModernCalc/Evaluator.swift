@@ -1,6 +1,5 @@
 import Foundation
 
-// MODIFIED: Added a new error case for tuple-tuple operations.
 enum MathError: Error, CustomStringConvertible {
     case divisionByZero
     case unknownOperator(op: String)
@@ -23,6 +22,9 @@ enum MathError: Error, CustomStringConvertible {
         case .typeMismatch(let expected, let found): return "Error: Type mismatch. Expected \(expected), but found \(found)."
         case .unsupportedOperation(let op, let typeA, let typeB):
             if let typeB = typeB {
+                if typeA == "Tuple" && typeB == "Tuple" {
+                    return "Error: Operations between two multi-valued results are not supported."
+                }
                 return "Error: Operator '\(op)' is not supported between \(typeA) and \(typeB)."
             }
             if typeA == "Singular Matrix" { return "Error: Matrix is singular and cannot be inverted."}
@@ -37,6 +39,14 @@ enum MathError: Error, CustomStringConvertible {
 struct Evaluator {
 
     private let constants: [String: Double] = [ "pi": Double.pi, "e": M_E ]
+    // NEW: A dictionary of all standard SI prefixes.
+    private let siPrefixes: [String: Double] = [
+        "yotta": 1e24, "zetta": 1e21, "exa": 1e18, "peta": 1e15, "tera": 1e12,
+        "giga": 1e9, "mega": 1e6, "kilo": 1e3, "hecto": 1e2, "deca": 1e1,
+        "deci": 1e-1, "centi": 1e-2, "milli": 1e-3, "micro": 1e-6, "nano": 1e-9,
+        "pico": 1e-12, "femto": 1e-15, "atto": 1e-18, "zepto": 1e-21, "yocto": 1e-24
+    ]
+    
     private let scalarFunctions: [String: (Double) -> Double] = [
         "ln": log, "lg": log10, "log": log10
     ]
@@ -224,6 +234,8 @@ struct Evaluator {
         case let constantNode as ConstantNode:
             if let value = variables[constantNode.name] {
                 return (value, usedAngle)
+            } else if let value = siPrefixes[constantNode.name] {
+                return (.scalar(value), usedAngle)
             } else if let value = constants[constantNode.name] {
                 return (.scalar(value), usedAngle)
             } else {
@@ -429,7 +441,6 @@ struct Evaluator {
     }
 
     private func evaluateBinaryOperation(op: Token, left: MathValue, right: MathValue) throws -> MathValue {
-        // MODIFIED: Handle tuple arithmetic
         if case .tuple(let leftValues) = left {
             if case .tuple(let rightValues) = right {
                 guard leftValues.count == rightValues.count else {

@@ -35,6 +35,12 @@ class Lexer {
     private let input: String
     private var currentIndex: String.Index
     private let decimalSeparator: DecimalSeparator
+    // NEW: A set of all SI prefixes for quick lookup.
+    private let siPrefixes: Set<String> = [
+        "yotta", "zetta", "exa", "peta", "tera", "giga", "mega", "kilo",
+        "hecto", "deca", "deci", "centi", "milli", "micro", "nano",
+        "pico", "femto", "atto", "zepto", "yocto"
+    ]
 
     init(input: String, decimalSeparator: DecimalSeparator = .period) {
         self.input = input
@@ -44,7 +50,6 @@ class Lexer {
     
     func tokenize() -> [Token] {
         var tokens: [Token] = []
-        // MODIFIED: Added all Greek letters to the character set for identifiers.
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
         
         while let char = peek() {
