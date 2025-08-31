@@ -139,6 +139,8 @@ class CalculatorViewModel: ObservableObject {
     ]
     
     let physicalConstants: [PhysicalConstant] = [
+        .init(symbol: "π", name: "Pi", value: Double.pi),
+        .init(symbol: "e", name: "Euler's number", value: M_E),
         .init(symbol: "c", name: "Speed of light", value: 299792458),
         .init(symbol: "g", name: "Standard gravity", value: 9.80665),
         .init(symbol: "G", name: "Gravitational constant", value: 6.67430e-11),
@@ -169,8 +171,7 @@ class CalculatorViewModel: ObservableObject {
             .init(symbol: "√", name: "Square Root", insertionText: "√("),
             .init(symbol: "×", name: "Multiply"),
             .init(symbol: "÷", name: "Divide"),
-            .init(symbol: "^", name: "Power"),
-            .init(symbol: "π", name: "Pi")
+            .init(symbol: "ˆ", name: "Power")
         ]
         
         self.greekSymbols = [
@@ -402,6 +403,235 @@ class CalculatorViewModel: ObservableObject {
             self.liveResult = ""
         }
     }
+    
+    // --- LATEX FORMATTING ---
+    
+    func formatCalculationAsLaTeX(_ calculation: Calculation) -> String {
+        let expressionLaTeX = formatExpressionForLaTeX(calculation.expression)
+        let resultLaTeX = formatMathValueForLaTeX(calculation.result)
+        
+        switch calculation.type {
+        case .evaluation, .variableAssignment:
+            return "\(expressionLaTeX) = \(resultLaTeX)"
+        case .functionDefinition:
+            return expressionLaTeX
+        }
+    }
+    
+    private func formatExpressionForLaTeX(_ expression: String) -> String {
+        do {
+            let lexer = Lexer(input: expression)
+            let tokens = lexer.tokenize()
+            let parser = Parser(tokens: tokens)
+            let node = try parser.parse()
+            return formatNodeAsLaTeX(node)
+        } catch {
+            print("LaTeX generation failed to parse, falling back to string replacement. Error: \(error)")
+            return fallbackFormatExpressionForLaTeX(expression)
+        }
+    }
+    
+    // Helper for operator precedence for LaTeX formatting
+    private func latexOperatorPrecedence(for op: String) -> Int {
+        switch op {
+        case "±": return 1
+        case "+", "-": return 2
+        case "*", "/", "×", "÷": return 3
+        case "^": return 4
+        default: return 0
+        }
+    }
+
+    private func formatNodeAsLaTeX(_ node: ExpressionNode) -> String {
+        switch node {
+        case let numberNode as NumberNode:
+            return formatScalarForDisplay(numberNode.value)
+            
+        case let constantNode as ConstantNode:
+            if constantNode.name == "pi" { return "\\pi" }
+            return constantNode.name.replacingOccurrences(of: "π", with: "\\pi")
+            
+        case let unaryNode as UnaryOpNode:
+            let childLaTeX = formatNodeAsLaTeX(unaryNode.child)
+            if unaryNode.child is BinaryOpNode {
+                return "\(unaryNode.op.rawValue)(\(childLaTeX))"
+            }
+            return "\(unaryNode.op.rawValue)\(childLaTeX)"
+
+        case let binaryNode as BinaryOpNode:
+            var leftLaTeX = formatNodeAsLaTeX(binaryNode.left)
+            var rightLaTeX = formatNodeAsLaTeX(binaryNode.right)
+
+            if let leftBinary = binaryNode.left as? BinaryOpNode {
+                if latexOperatorPrecedence(for: leftBinary.op.rawValue) < latexOperatorPrecedence(for: binaryNode.op.rawValue) {
+                    leftLaTeX = "(\(leftLaTeX))"
+                }
+            }
+            if let rightBinary = binaryNode.right as? BinaryOpNode {
+                let currentPrecedence = latexOperatorPrecedence(for: binaryNode.op.rawValue)
+                let rightPrecedence = latexOperatorPrecedence(for: rightBinary.op.rawValue)
+                if rightPrecedence < currentPrecedence {
+                     rightLaTeX = "(\(rightLaTeX))"
+                } else if currentPrecedence == rightPrecedence && (binaryNode.op.rawValue == "-" || binaryNode.op.rawValue == "/") {
+                     rightLaTeX = "(\(rightLaTeX))"
+                }
+            }
+            
+            switch binaryNode.op.rawValue {
+            case "/", "÷":
+                return "\\frac{\(leftLaTeX)}{\(rightLaTeX)}"
+            case "*", "×":
+                 return "\(leftLaTeX) \\cdot \(rightLaTeX)"
+            case "^":
+                if binaryNode.left is BinaryOpNode || binaryNode.left is NumberNode && (binaryNode.left as! NumberNode).value < 0 {
+                    return "{\(leftLaTeX)}^{\(rightLaTeX)}"
+                }
+                return "\(leftLaTeX)^{\(rightLaTeX)}"
+            case "±":
+                return "\(leftLaTeX) \\pm \(rightLaTeX)"
+            case "∠":
+                return "\(leftLaTeX) \\angle \(rightLaTeX)"
+            default:
+                return "\(leftLaTeX) \(binaryNode.op.rawValue) \(rightLaTeX)"
+            }
+
+        case let functionCallNode as FunctionCallNode:
+            let args = functionCallNode.arguments.map { formatNodeAsLaTeX($0) }.joined(separator: ", ")
+            let knownFuncs = ["sin", "cos", "tan", "log", "ln", "det"]
+            if functionCallNode.name == "sqrt" {
+                return "\\sqrt{\(args)}"
+            } else if knownFuncs.contains(functionCallNode.name) {
+                return "\\\(functionCallNode.name)(\(args))"
+            }
+            return "\(functionCallNode.name.replacingOccurrences(of: "_", with: "\\_"))(\(args))"
+
+        case let assignmentNode as AssignmentNode:
+            return "\(assignmentNode.name) := \(formatNodeAsLaTeX(assignmentNode.expression))"
+            
+        case let funcDefNode as FunctionDefinitionNode:
+            let params = funcDefNode.parameterNames.joined(separator: ", ")
+            return "\(funcDefNode.name)(\(params)) := \(formatNodeAsLaTeX(funcDefNode.body))"
+
+        case is VectorNode, is MatrixNode:
+            do {
+                var emptyVars = [String: MathValue]()
+                var emptyFuncs = [String: FunctionDefinitionNode]()
+                let (value, _) = try evaluator.evaluate(node: node, variables: &emptyVars, functions: &emptyFuncs, angleMode: .radians)
+                return formatMathValueForLaTeX(value)
+            } catch {
+                return node.description
+            }
+        
+        default:
+            return node.description
+        }
+    }
+    
+    private func fallbackFormatExpressionForLaTeX(_ expression: String) -> String {
+        if let matrixLatex = parseMatrixVectorFrom(expression: expression) {
+            return matrixLatex
+        }
+        
+        var latex = expression
+        
+        if let regex = try? NSRegularExpression(pattern: "(?<=[0-9\\)])(?=[a-zA-Z\\(])") {
+            let range = NSRange(location: 0, length: latex.utf16.count)
+            latex = regex.stringByReplacingMatches(in: latex, options: [], range: range, withTemplate: " \\cdot ")
+        }
+        latex = latex.replacingOccurrences(of: " \\cdot e", with: "e")
+        latex = latex.replacingOccurrences(of: " \\cdot E", with: "E")
+        
+        if let regex = try? NSRegularExpression(pattern: "\\b(sqrt|sin|cos|tan|log|ln)\\((.*?)\\)") {
+            let range = NSRange(location: 0, length: latex.utf16.count)
+            let template = "\\\\$1{$2}"
+            latex = regex.stringByReplacingMatches(in: latex, options: [], range: range, withTemplate: template)
+        }
+        
+        latex = latex.replacingOccurrences(of: "*", with: " \\cdot ")
+        latex = latex.replacingOccurrences(of: "×", with: " \\cdot ")
+        latex = latex.replacingOccurrences(of: "÷", with: " / ")
+        latex = latex.replacingOccurrences(of: "pi", with: "\\pi")
+        latex = latex.replacingOccurrences(of: "π", with: "\\pi")
+        latex = latex.replacingOccurrences(of: "±", with: " \\pm ")
+        latex = latex.replacingOccurrences(of: "∠", with: " \\angle ")
+        latex = latex.replacingOccurrences(of: ":=", with: " := ")
+
+        return latex
+    }
+    
+    private func parseMatrixVectorFrom(expression: String) -> String? {
+        let trimmed = expression.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.starts(with: "matrix(") || trimmed.starts(with: "vector(") {
+            do {
+                let lexer = Lexer(input: expression)
+                let tokens = lexer.tokenize()
+                let parser = Parser(tokens: tokens)
+                let node = try parser.parse()
+                var emptyVars = [String: MathValue]()
+                var emptyFuncs = [String: FunctionDefinitionNode]()
+                let (value, _) = try evaluator.evaluate(node: node, variables: &emptyVars, functions: &emptyFuncs, angleMode: .radians)
+                return formatMathValueForLaTeX(value)
+            } catch {
+                return nil
+            }
+        }
+        return nil
+    }
+
+    private func formatMathValueForLaTeX(_ value: MathValue) -> String {
+        switch value {
+        case .scalar(let doubleValue):
+            return formatScalarForDisplay(doubleValue)
+        case .complex(let complexValue):
+            let realPart = formatScalarForDisplay(complexValue.real)
+            let imagPart = formatScalarForDisplay(abs(complexValue.imaginary))
+            if complexValue.real != 0 && complexValue.imaginary != 0 {
+                return "\(realPart) \(complexValue.imaginary < 0 ? "-" : "+") \(imagPart)i"
+            } else if complexValue.real != 0 {
+                return realPart
+            } else if complexValue.imaginary != 0 {
+                return "\(formatScalarForDisplay(complexValue.imaginary))i"
+            } else {
+                return "0"
+            }
+        case .vector(let vector):
+            let elements = vector.values.map { formatScalarForDisplay($0) }.joined(separator: " \\\\ ")
+            return "\\begin{pmatrix} \(elements) \\end{pmatrix}"
+        case .matrix(let matrix):
+            let rows = (0..<matrix.rows).map { r in
+                (0..<matrix.columns).map { c in
+                    formatScalarForDisplay(matrix[r, c])
+                }.joined(separator: " & ")
+            }.joined(separator: " \\\\ ")
+            return "\\begin{pmatrix} \(rows) \\end{pmatrix}"
+        case .tuple(let values):
+            return values.map { formatMathValueForLaTeX($0) }.joined(separator: " \\text{ or } ")
+        case .polar(let complexValue):
+            let magnitude = formatScalarForDisplay(complexValue.abs())
+            let angle = complexValue.argument()
+            let angleString: String
+            if self.angleMode == .degrees {
+                let angleDegrees = angle * (180.0 / .pi)
+                angleString = "\(String(format: "%.2f", angleDegrees))^\\circ"
+            } else {
+                angleString = formatScalarForDisplay(angle)
+            }
+            return "\(magnitude) \\angle \(angleString)"
+        case .functionDefinition(let name):
+            return "\\text{Function defined: } \(name)"
+        case .complexVector(let cVector):
+            let elements = cVector.values.map { formatMathValueForLaTeX(.complex($0)) }.joined(separator: " \\\\ ")
+            return "\\begin{pmatrix} \(elements) \\end{pmatrix}"
+        case .complexMatrix(let cMatrix):
+            let rows = (0..<cMatrix.rows).map { r in
+                (0..<cMatrix.columns).map { c in
+                    formatMathValueForLaTeX(.complex(cMatrix[r, c]))
+                }.joined(separator: " & ")
+            }.joined(separator: " \\\\ ")
+            return "\\begin{pmatrix} \(rows) \\end{pmatrix}"
+        }
+    }
+
 
     // --- FORMATTING HELPERS ---
     

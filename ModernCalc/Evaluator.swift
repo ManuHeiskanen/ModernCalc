@@ -40,7 +40,6 @@ enum MathError: Error, CustomStringConvertible {
 struct Evaluator {
 
     private let constants: [String: Double] = [
-        // Basic
         "pi": Double.pi,
         "e": M_E,
         
@@ -755,4 +754,5 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
+
 
