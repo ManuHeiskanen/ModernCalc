@@ -36,12 +36,18 @@ struct Calculation: Identifiable, Hashable {
     }
 }
 
-// NEW: A struct to hold information about built-in functions for the help view.
 struct BuiltinFunction: Identifiable, Hashable {
     let id = UUID()
     let name: String
     let signature: String
     let description: String
+}
+
+// NEW: A struct to hold information about the symbols for the popover.
+struct MathSymbol: Identifiable {
+    let id = UUID()
+    let symbol: String
+    let name: String // For accessibility and tooltips
 }
 
 
@@ -63,7 +69,28 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
-    // NEW: The complete list of built-in functions for the help view.
+    // NEW: The data source for the symbol grid popover.
+    let mathSymbols: [MathSymbol] = [
+        .init(symbol: "±", name: "Plus-Minus"),
+        .init(symbol: "∠", name: "Angle"),
+        .init(symbol: "√", name: "Square Root"),
+        .init(symbol: "×", name: "Multiply"),
+        .init(symbol: "÷", name: "Divide"),
+        .init(symbol: "^", name: "Power"),
+        .init(symbol: "π", name: "Pi"),
+        .init(symbol: "θ", name: "Theta"),
+        .init(symbol: "α", name: "Alpha"),
+        .init(symbol: "β", name: "Beta"),
+        .init(symbol: "γ", name: "Gamma"),
+        .init(symbol: "δ", name: "Delta"),
+        .init(symbol: "λ", name: "Lambda"),
+        .init(symbol: "μ", name: "Mu"),
+        .init(symbol: "ρ", name: "Rho"),
+        .init(symbol: "σ", name: "Sigma"),
+        .init(symbol: "τ", name: "Tau"),
+        .init(symbol: "ω", name: "Omega")
+    ]
+    
     let builtinFunctions: [BuiltinFunction] = [
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
         .init(name: "cos", signature: "cos(angle)", description: "Calculates the cosine of an angle."),

@@ -55,7 +55,8 @@ class Lexer {
                 continue
             }
             
-            if char.isLetter {
+            // MODIFIED: Greek letters are now handled by isLetter
+            if char.isLetter || "αβγδθλμπρστω".contains(char) {
                 if char == "i" {
                     if peekNext() == "'" {
                         advance()
@@ -82,14 +83,23 @@ class Lexer {
             case "+", "-", "*", "/", "%", "^", "=":
                 advance()
                 tokens.append(Token(type: .op(char), rawValue: String(char)))
+            // NEW: Handle aliases for multiplication and division
+            case "×":
+                advance()
+                tokens.append(Token(type: .op("*"), rawValue: "×"))
+            case "÷":
+                advance()
+                tokens.append(Token(type: .op("/"), rawValue: "÷"))
             case "±":
                 advance()
                 tokens.append(Token(type: .op("±"), rawValue: "±"))
-            // NEW: Recognize the polar operator
             case "∠":
                 advance()
                 tokens.append(Token(type: .op("∠"), rawValue: "∠"))
-            // NEW: Ignore the degree symbol
+            // NEW: Treat π as the identifier "pi"
+            case "π":
+                advance()
+                tokens.append(Token(type: .identifier("pi"), rawValue: "π"))
             case "°":
                 advance()
                 continue
@@ -129,12 +139,11 @@ class Lexer {
             }
         }
         
-        // Check if the number is immediately followed by 'i'
         if let char = peek(), char == "i" {
             let numberString = String(input[startIndex..<currentIndex])
             let sanitizedString = numberString.replacingOccurrences(of: ",", with: ".")
             if let value = Double(sanitizedString) {
-                advance() // consume 'i'
+                advance()
                 return Token(type: .complexLiteral(value), rawValue: numberString + "i")
             }
         }
@@ -151,7 +160,7 @@ class Lexer {
     
     private func lexIdentifierOrComplex() -> Token {
         let startIndex = currentIndex
-        while let char = peek(), char.isLetter {
+        while let char = peek(), char.isLetter || "αβγδθλμπρστω".contains(char) {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])

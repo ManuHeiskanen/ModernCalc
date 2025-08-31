@@ -15,7 +15,6 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // MODIFIED: The menu button has been moved to its own HStack at the top.
             HStack {
                 Button(action: { isShowingSheet = true }) {
                     Image(systemName: "ellipsis.circle.fill")
@@ -52,6 +51,7 @@ struct ContentView: View {
             CalculatorInputView(
                 expression: $viewModel.rawExpression,
                 previewText: viewModel.previewText,
+                symbols: viewModel.mathSymbols, // Pass the symbols
                 onTap: { viewModel.resetNavigation() }
             )
             .focused($isInputFocused)
@@ -69,7 +69,6 @@ struct ContentView: View {
                 }
                 return .ignored
             }
-            // MODIFIED: The overlay has been removed from here.
             .sheet(isPresented: $isShowingSheet) {
                 VariableEditorView(viewModel: viewModel)
             }
@@ -242,22 +241,25 @@ struct FormattedExpressionView: View {
 struct CalculatorInputView: View {
     @Binding var expression: String
     var previewText: String
+    var symbols: [MathSymbol]
     var onTap: () -> Void
+    
+    // NEW: State to control the symbols popover.
+    @State private var isShowingSymbolsPopover = false
 
     var body: some View {
         HStack(spacing: 0) {
             ZStack(alignment: .leading) {
+                // This is a hidden text field used to size the view correctly.
                 HStack(spacing: 0) {
                     Text(expression)
                         .font(.system(size: 26, weight: .regular, design: .monospaced))
                         .opacity(0)
-                    
                     if !previewText.isEmpty && !expression.isEmpty {
                          Text(previewText)
                             .font(.system(size: 26, weight: .regular, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
-                    
                     if expression.isEmpty {
                          Text(previewText.isEmpty ? "Enter expression..." : previewText)
                             .font(.system(size: 26, weight: .regular, design: .monospaced))
@@ -273,8 +275,50 @@ struct CalculatorInputView: View {
                     .onTapGesture { onTap() }
             }
             Spacer()
+            
+            // NEW: The button to show the symbols popover.
+            Button(action: { isShowingSymbolsPopover = true }) {
+                Image(systemName: "plus.slash.minus")
+                    .font(.system(size: 20))
+            }
+            .buttonStyle(.plain)
+            .padding()
+            .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
+                SymbolsGridView(expression: $expression, symbols: symbols, isPresented: $isShowingSymbolsPopover)
+            }
         }
         .frame(height: 70)
+    }
+}
+
+// NEW: A dedicated view for the symbols grid inside the popover.
+struct SymbolsGridView: View {
+    @Binding var expression: String
+    let symbols: [MathSymbol]
+    @Binding var isPresented: Bool
+
+    let columns = [GridItem(.adaptive(minimum: 45))]
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(symbols) { symbol in
+                    Button(action: {
+                        expression += symbol.symbol
+                    }) {
+                        Text(symbol.symbol)
+                            .font(.title2)
+                            .frame(width: 40, height: 40)
+                            .background(Color.secondary.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .help(symbol.name) // Add a tooltip
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding()
+        }
+        .frame(width: 280, height: 250)
     }
 }
 
