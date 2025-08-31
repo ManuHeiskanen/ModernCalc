@@ -43,8 +43,6 @@ struct BuiltinFunction: Identifiable, Hashable {
     let description: String
 }
 
-// NEW: A struct to hold the data for a physical constant.
-// It is Identifiable so it can be used in a ForEach loop in SwiftUI.
 struct PhysicalConstant: Identifiable, Hashable {
     let id = UUID()
     let symbol: String
@@ -85,48 +83,15 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
-    // NEW: Expose the list of SI prefixes for UI highlighting.
     let siPrefixes: Set<String> = [
         "yotta", "zetta", "exa", "peta", "tera", "giga", "mega", "kilo",
         "hecto", "deca", "deci", "centi", "milli", "micro", "nano",
         "pico", "femto", "atto", "zepto", "yocto"
     ]
     
-    let operatorSymbols: [MathSymbol] = [
-        .init(symbol: "±", name: "Plus-Minus"),
-        .init(symbol: "∠", name: "Angle"),
-        .init(symbol: "√", name: "Square Root", insertionText: "√("),
-        .init(symbol: "×", name: "Multiply"),
-        .init(symbol: "÷", name: "Divide"),
-        .init(symbol: "^", name: "Power"),
-        .init(symbol: "π", name: "Pi")
-    ]
-    
-    let greekSymbols: [MathSymbol] = [
-        .init(symbol: "α", name: "Alpha (lowercase)"), .init(symbol: "Α", name: "Alpha (uppercase)"),
-        .init(symbol: "β", name: "Beta (lowercase)"), .init(symbol: "Β", name: "Beta (uppercase)"),
-        .init(symbol: "γ", name: "Gamma (lowercase)"), .init(symbol: "Γ", name: "Gamma (uppercase)"),
-        .init(symbol: "δ", name: "Delta (lowercase)"), .init(symbol: "Δ", name: "Delta (uppercase)"),
-        .init(symbol: "ε", name: "Epsilon (lowercase)"), .init(symbol: "Ε", name: "Epsilon (uppercase)"),
-        .init(symbol: "ζ", name: "Zeta (lowercase)"), .init(symbol: "Ζ", name: "Zeta (uppercase)"),
-        .init(symbol: "η", name: "Eta (lowercase)"), .init(symbol: "Η", name: "Eta (uppercase)"),
-        .init(symbol: "θ", name: "Theta (lowercase)"), .init(symbol: "Θ", name: "Theta (uppercase)"),
-        .init(symbol: "ι", name: "Iota (lowercase)"), .init(symbol: "Ι", name: "Iota (uppercase)"),
-        .init(symbol: "κ", name: "Kappa (lowercase)"), .init(symbol: "Κ", name: "Kappa (uppercase)"),
-        .init(symbol: "λ", name: "Lambda (lowercase)"), .init(symbol: "Λ", name: "Lambda (uppercase)"),
-        .init(symbol: "μ", name: "Mu (lowercase)"), .init(symbol: "Μ", name: "Mu (uppercase)"),
-        .init(symbol: "ν", name: "Nu (lowercase)"), .init(symbol: "Ν", name: "Nu (uppercase)"),
-        .init(symbol: "ξ", name: "Xi (lowercase)"), .init(symbol: "Ξ", name: "Xi (uppercase)"),
-        .init(symbol: "ο", name: "Omicron (lowercase)"), .init(symbol: "Ο", name: "Omicron (uppercase)"),
-        .init(symbol: "ρ", name: "Rho (lowercase)"), .init(symbol: "Ρ", name: "Rho (uppercase)"),
-        .init(symbol: "σ", name: "Sigma (lowercase)"), .init(symbol: "Σ", name: "Sigma (uppercase)"),
-        .init(symbol: "τ", name: "Tau (lowercase)"), .init(symbol: "Τ", name: "Tau (uppercase)"),
-        .init(symbol: "υ", name: "Upsilon (lowercase)"), .init(symbol: "Υ", name: "Upsilon (uppercase)"),
-        .init(symbol: "φ", name: "Phi (lowercase)"), .init(symbol: "Φ", name: "Phi (uppercase)"),
-        .init(symbol: "χ", name: "Chi (lowercase)"), .init(symbol: "Χ", name: "Chi (uppercase)"),
-        .init(symbol: "ψ", name: "Psi (lowercase)"), .init(symbol: "Ψ", name: "Psi (uppercase)"),
-        .init(symbol: "ω", name: "Omega (lowercase)"), .init(symbol: "Ω", name: "Omega (uppercase)")
-    ]
+    let operatorSymbols: [MathSymbol]
+    let greekSymbols: [MathSymbol]
+    let constantSymbols: [MathSymbol]
     
     let builtinFunctions: [BuiltinFunction] = [
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
@@ -163,7 +128,6 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations.")
     ]
     
-    // The list of physical constants for the UI.
     let physicalConstants: [PhysicalConstant] = [
         .init(symbol: "c", name: "Speed of light", value: 299792458),
         .init(symbol: "g", name: "Standard gravity", value: 9.80665),
@@ -178,11 +142,57 @@ class CalculatorViewModel: ObservableObject {
         .init(symbol: "e0", name: "Elementary charge", value: 1.602176634e-19),
         .init(symbol: "NA", name: "Avogadro constant", value: 6.02214076e23),
         .init(symbol: "R", name: "Gas constant", value: 8.314462618),
-        .init(symbol: "kB", name: "Boltzmann constant", value: 1.380649e-23)
+        .init(symbol: "kB", name: "Boltzmann constant", value: 1.380649e-23),
+        .init(symbol: "F", name: "Faraday constant", value: 96485.33212),
+        .init(symbol: "Rinf", name: "Rydberg constant", value: 10973731.568160),
+        .init(symbol: "σ", name: "Stefan-Boltzmann constant", value: 5.670374419e-8),
+        .init(symbol: "b", name: "Wien's displacement constant", value: 2.897771955e-3),
+        .init(symbol: "atm", name: "Standard atmosphere", value: 101325),
+        .init(symbol: "Vm", name: "Molar volume (STP)", value: 22.41396954e-3)
     ]
 
 
     init() {
+        self.operatorSymbols = [
+            .init(symbol: "±", name: "Plus-Minus"),
+            .init(symbol: "∠", name: "Angle"),
+            .init(symbol: "√", name: "Square Root", insertionText: "√("),
+            .init(symbol: "×", name: "Multiply"),
+            .init(symbol: "÷", name: "Divide"),
+            .init(symbol: "^", name: "Power"),
+            .init(symbol: "π", name: "Pi")
+        ]
+        
+        self.greekSymbols = [
+            .init(symbol: "α", name: "Alpha (lowercase)"), .init(symbol: "Α", name: "Alpha (uppercase)"),
+            .init(symbol: "β", name: "Beta (lowercase)"), .init(symbol: "Β", name: "Beta (uppercase)"),
+            .init(symbol: "γ", name: "Gamma (lowercase)"), .init(symbol: "Γ", name: "Gamma (uppercase)"),
+            .init(symbol: "δ", name: "Delta (lowercase)"), .init(symbol: "Δ", name: "Delta (uppercase)"),
+            .init(symbol: "ε", name: "Epsilon (lowercase)"), .init(symbol: "Ε", name: "Epsilon (uppercase)"),
+            .init(symbol: "ζ", name: "Zeta (lowercase)"), .init(symbol: "Ζ", name: "Zeta (uppercase)"),
+            .init(symbol: "η", name: "Eta (lowercase)"), .init(symbol: "Η", name: "Eta (uppercase)"),
+            .init(symbol: "θ", name: "Theta (lowercase)"), .init(symbol: "Θ", name: "Theta (uppercase)"),
+            .init(symbol: "ι", name: "Iota (lowercase)"), .init(symbol: "Ι", name: "Iota (uppercase)"),
+            .init(symbol: "κ", name: "Kappa (lowercase)"), .init(symbol: "Κ", name: "Kappa (uppercase)"),
+            .init(symbol: "λ", name: "Lambda (lowercase)"), .init(symbol: "Λ", name: "Lambda (uppercase)"),
+            .init(symbol: "μ", name: "Mu (lowercase)"), .init(symbol: "Μ", name: "Mu (uppercase)"),
+            .init(symbol: "ν", name: "Nu (lowercase)"), .init(symbol: "Ν", name: "Nu (uppercase)"),
+            .init(symbol: "ξ", name: "Xi (lowercase)"), .init(symbol: "Ξ", name: "Xi (uppercase)"),
+            .init(symbol: "ο", name: "Omicron (lowercase)"), .init(symbol: "Ο", name: "Omicron (uppercase)"),
+            .init(symbol: "ρ", name: "Rho (lowercase)"), .init(symbol: "Ρ", name: "Rho (uppercase)"),
+            .init(symbol: "σ", name: "Sigma (lowercase)"), .init(symbol: "Σ", name: "Sigma (uppercase)"),
+            .init(symbol: "τ", name: "Tau (lowercase)"), .init(symbol: "Τ", name: "Tau (uppercase)"),
+            .init(symbol: "υ", name: "Upsilon (lowercase)"), .init(symbol: "Υ", name: "Upsilon (uppercase)"),
+            .init(symbol: "φ", name: "Phi (lowercase)"), .init(symbol: "Φ", name: "Phi (uppercase)"),
+            .init(symbol: "χ", name: "Chi (lowercase)"), .init(symbol: "Χ", name: "Chi (uppercase)"),
+            .init(symbol: "ψ", name: "Psi (lowercase)"), .init(symbol: "Ψ", name: "Psi (uppercase)"),
+            .init(symbol: "ω", name: "Omega (lowercase)"), .init(symbol: "Ω", name: "Omega (uppercase)")
+        ]
+        
+        self.constantSymbols = physicalConstants.map {
+            MathSymbol(symbol: $0.symbol, name: $0.name, insertionText: $0.symbol)
+        }
+        
         cancellable = $rawExpression
             .sink { [weak self] newExpression in
                 guard let self = self else { return }
@@ -360,7 +370,6 @@ class CalculatorViewModel: ObservableObject {
         let definitionsToRebuild = self.userFunctionDefinitions
         guard !definitionsToRebuild.isEmpty else { return }
         
-        // Create temporary dictionaries to batch the work and avoid rapid UI updates.
         var tempVars = self.variables
         var tempFuncs: [String: FunctionDefinitionNode] = [:]
 
@@ -371,14 +380,12 @@ class CalculatorViewModel: ObservableObject {
                 let parser = Parser(tokens: tokens)
                 let expressionTree = try parser.parse()
                 
-                // Evaluate but only update the temporary dictionaries
                 _ = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             } catch {
                 print("Error rebuilding function '\(definitionString)': \(error)")
             }
         }
 
-        // Now, publish the changes to the UI only once.
         DispatchQueue.main.async {
             self.functions = tempFuncs
             self.variables = tempVars

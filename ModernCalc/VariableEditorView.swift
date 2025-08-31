@@ -96,12 +96,17 @@ struct VariableEditorView: View {
     private var userDefinedView: some View {
         List {
             Section {
-                VStack {
-                    if viewModel.sortedVariables.isEmpty {
-                        Text("No variables defined.")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(viewModel.sortedVariables, id: \.0) { name, value in
+                // Check if there are any variables to show
+                if viewModel.sortedVariables.isEmpty {
+                    Text("No variables defined.")
+                        .foregroundColor(.secondary)
+                        .padding()
+                } else {
+                    ForEach(viewModel.sortedVariables, id: \.0) { name, value in
+                        Button(action: {
+                            viewModel.rawExpression += name
+                            dismiss()
+                        }) {
                             HStack {
                                 Text(name)
                                     .font(.system(.body, design: .monospaced))
@@ -115,8 +120,9 @@ struct VariableEditorView: View {
                                 }
                                 .buttonStyle(.plain)
                             }
-                            .padding(.vertical, 4)
                         }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4)
                     }
                 }
             } header: {
@@ -124,12 +130,16 @@ struct VariableEditorView: View {
             }
 
             Section {
-                VStack {
-                    if viewModel.sortedFunctions.isEmpty {
-                        Text("No functions defined.")
-                            .foregroundColor(.secondary)
-                    } else {
-                        ForEach(viewModel.sortedFunctions, id: \.0) { name, node in
+                if viewModel.sortedFunctions.isEmpty {
+                    Text("No functions defined.")
+                        .foregroundColor(.secondary)
+                        .padding()
+                } else {
+                    ForEach(viewModel.sortedFunctions, id: \.0) { name, node in
+                        Button(action: {
+                            viewModel.rawExpression += "\(name)("
+                            dismiss()
+                        }) {
                             HStack {
                                 Text(node.description)
                                     .font(.system(.body, design: .monospaced))
@@ -141,8 +151,9 @@ struct VariableEditorView: View {
                                 }
                                 .buttonStyle(.plain)
                             }
-                            .padding(.vertical, 4)
                         }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 4)
                     }
                 }
             } header: {
@@ -157,12 +168,18 @@ struct VariableEditorView: View {
         VStack {
             List {
                 ForEach(filteredBuiltinFunctions) { function in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(function.signature)
-                            .font(.system(.body, design: .monospaced)).fontWeight(.bold)
-                        Text(function.description)
-                            .foregroundColor(.secondary)
+                    Button(action: {
+                        viewModel.rawExpression += "\(function.name)("
+                        dismiss()
+                    }) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(function.signature)
+                                .font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                            Text(function.description)
+                                .foregroundColor(.secondary)
+                        }
                     }
+                    .buttonStyle(.plain)
                     .padding(.vertical, 6)
                 }
             }
@@ -176,21 +193,27 @@ struct VariableEditorView: View {
         VStack {
             List {
                 ForEach(filteredConstants) { constant in
-                    HStack(alignment: .top) {
-                        Text(constant.symbol)
-                            .font(.system(.body, design: .monospaced)).fontWeight(.bold)
-                            .frame(width: 40, alignment: .leading)
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(constant.name)
-                                .foregroundColor(.primary)
-                            Text(String(constant.value))
-                                .foregroundColor(.secondary)
-                                .font(.system(.body, design: .monospaced))
+                    Button(action: {
+                        viewModel.rawExpression += constant.symbol
+                        dismiss()
+                    }) {
+                        HStack(alignment: .top) {
+                            Text(constant.symbol)
+                                .font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                                .frame(width: 40, alignment: .leading)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(constant.name)
+                                    .foregroundColor(.primary)
+                                Text(String(constant.value))
+                                    .foregroundColor(.secondary)
+                                    .font(.system(.body, design: .monospaced))
+                            }
+                            
+                            Spacer()
                         }
-                        
-                        Spacer()
                     }
+                    .buttonStyle(.plain)
                     .padding(.vertical, 6)
                 }
             }

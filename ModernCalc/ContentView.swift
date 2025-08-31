@@ -14,10 +14,11 @@ struct ContentView: View {
     @State private var isShowingSheet = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // ZStack allows the button to be overlaid on top of the HistoryView
-            // without taking up its own vertical space in the main VStack.
-            ZStack {
+        ZStack(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                // This spacer creates room for the menu button
+                Spacer().frame(height: 40)
+                
                 HistoryView(
                     viewModel: viewModel,
                     history: viewModel.history,
@@ -25,66 +26,65 @@ struct ContentView: View {
                     selectedHistoryId: viewModel.selectedHistoryId,
                     selectedHistoryPart: viewModel.selectedHistoryPart
                 )
+                Divider()
                 
-                // This VStack ensures the button stays at the top of the ZStack area.
-                VStack {
-                    HStack {
-                        Button(action: { isShowingSheet = true }) {
-                            Image(systemName: "ellipsis.circle.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .padding(10)
-                        .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
-                        .cornerRadius(8)
-                        .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                        .onHover { hovering in
-                            withAnimation(.easeInOut(duration: 0.15)) {
-                                isHoveringOnMenuButton = hovering
-                            }
-                        }
-                        Spacer()
+                FormattedExpressionWithButtonsView(
+                    result: viewModel.liveResult,
+                    expression: $viewModel.rawExpression,
+                    greekSymbols: viewModel.greekSymbols
+                )
+                Divider()
+
+                CalculatorInputView(
+                    expression: $viewModel.rawExpression,
+                    previewText: viewModel.previewText,
+                    operatorSymbols: viewModel.operatorSymbols,
+                    constantSymbols: viewModel.constantSymbols,
+                    onTap: { viewModel.resetNavigation() }
+                )
+                .focused($isInputFocused)
+                .onAppear {
+                    isInputFocused = true
+                }
+                .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
+                    if key.key == .return {
+                        viewModel.commitCalculation()
+                        return .handled
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 8)
                     
-                    Spacer()
+                    if viewModel.handleKeyPress(keys: [key.key]) {
+                        return .handled
+                    }
+                    return .ignored
+                }
+                .sheet(isPresented: $isShowingSheet) {
+                    VariableEditorView(viewModel: viewModel)
                 }
             }
-
-            Divider()
+            .frame(minWidth: 400, minHeight: 500)
             
-            FormattedExpressionView(result: viewModel.liveResult)
-            Divider()
-
-            CalculatorInputView(
-                expression: $viewModel.rawExpression,
-                previewText: viewModel.previewText,
-                operatorSymbols: viewModel.operatorSymbols,
-                greekSymbols: viewModel.greekSymbols,
-                onTap: { viewModel.resetNavigation() }
-            )
-            .focused($isInputFocused)
-            .onAppear {
-                isInputFocused = true
-            }
-            .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
-                if key.key == .return {
-                    viewModel.commitCalculation()
-                    return .handled
+            // Menu button now floats on top of the view
+            HStack {
+                Button(action: { isShowingSheet = true }) {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 24))
+                        .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
                 }
-                
-                if viewModel.handleKeyPress(keys: [key.key]) {
-                    return .handled
+                .buttonStyle(.plain)
+                .padding(10)
+                .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
+                .cornerRadius(8)
+                .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringOnMenuButton = hovering
+                    }
                 }
-                return .ignored
+                Spacer()
             }
-            .sheet(isPresented: $isShowingSheet) {
-                VariableEditorView(viewModel: viewModel)
-            }
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
         }
-        .frame(minWidth: 400, minHeight: 500)
         .toolbar {
             ToolbarItemGroup {
                 HStack(spacing: 0) {
@@ -260,13 +260,8 @@ struct HistoryView: View {
         .frame(maxHeight: .infinity)
     }
     
-    // MODIFIED: This function now uses a more advanced regex to correctly find SI prefixes.
     private func highlightSIPrefixes(in expression: String) -> AttributedString {
         var attributedString = AttributedString(expression)
-        
-        // This pattern looks for any of the SI prefixes that are not immediately
-        // preceded by another letter, and are followed by a word boundary.
-        // This correctly identifies "kilo" in "2kilo" but not in "akilo".
         let pattern = "(?<![a-zA-Z])(" + viewModel.siPrefixes.joined(separator: "|") + ")\\b"
         
         do {
@@ -275,16 +270,13 @@ struct HistoryView: View {
             let matches = regex.matches(in: expression, options: [], range: nsRange)
             
             for match in matches {
-                // The first capture group (at index 1) is the prefix we want to color.
                 if let range = Range(match.range(at: 1), in: expression) {
-                    // Convert the String.Index range to AttributedString.Index range
                     if let attrRange = attributedString.range(of: expression[range]) {
                          attributedString[attrRange].foregroundColor = .teal
                     }
                 }
             }
         } catch {
-            // If regex fails, just return the original string. It's safer.
             print("Regex error for SI prefix highlighting: \(error)")
         }
         
@@ -298,26 +290,39 @@ struct HistoryView: View {
         if let hoveredPart = hoveredItem?.part, case .result(let hoveredIndex) = hoveredPart, isHovered {
             return hoveredIndex == index
         }
-        
         if case .result(let selectedIndex) = selectedHistoryPart, isSelected {
             return selectedIndex == index
         }
-        
         return false
     }
 }
 
-
-struct FormattedExpressionView: View {
+struct FormattedExpressionWithButtonsView: View {
     var result: String
+    @Binding var expression: String
+    var greekSymbols: [MathSymbol]
+    @State private var isShowingGreekPopover = false
+    
     var body: some View {
         ZStack {
             Color.gray.opacity(0.1)
-            Text(result)
-                .font(.system(size: 22, weight: .regular))
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+            HStack {
+                Button(action: { isShowingGreekPopover = true }) {
+                    Text("α")
+                        .font(.system(size: 22))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .popover(isPresented: $isShowingGreekPopover, arrowEdge: .top) {
+                    GreekSymbolsGridView(expression: $expression, greekSymbols: greekSymbols)
+                }
+                
+                Text(result)
+                    .font(.system(size: 22, weight: .regular))
+                    .padding(.vertical)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
         }
         .frame(height: 60)
     }
@@ -327,27 +332,34 @@ struct CalculatorInputView: View {
     @Binding var expression: String
     var previewText: String
     var operatorSymbols: [MathSymbol]
-    var greekSymbols: [MathSymbol]
+    var constantSymbols: [MathSymbol]
     var onTap: () -> Void
     
     @State private var isShowingSymbolsPopover = false
 
     var body: some View {
         HStack(spacing: 0) {
+            Button(action: { isShowingSymbolsPopover = true }) {
+                Image(systemName: "plus.slash.minus")
+                    .font(.system(size: 20))
+            }
+            .buttonStyle(.plain)
+            .padding()
+            .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
+                SymbolsGridView(expression: $expression, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
+            }
+            
             ZStack(alignment: .leading) {
                 HStack(spacing: 0) {
                     Text(expression)
-                        .font(.system(size: 26, weight: .regular, design: .monospaced))
-                        .opacity(0)
+                        .font(.system(size: 26, weight: .regular, design: .monospaced)).opacity(0)
                     if !previewText.isEmpty && !expression.isEmpty {
                          Text(previewText)
-                            .font(.system(size: 26, weight: .regular, design: .monospaced))
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary)
                     }
                     if expression.isEmpty {
                          Text(previewText.isEmpty ? "Enter expression..." : previewText)
-                            .font(.system(size: 26, weight: .regular, design: .monospaced))
-                            .foregroundColor(.secondary)
+                            .font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary)
                     }
                 }
                 .padding(.horizontal)
@@ -359,16 +371,6 @@ struct CalculatorInputView: View {
                     .onTapGesture { onTap() }
             }
             Spacer()
-            
-            Button(action: { isShowingSymbolsPopover = true }) {
-                Image(systemName: "plus.slash.minus")
-                    .font(.system(size: 20))
-            }
-            .buttonStyle(.plain)
-            .padding()
-            .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
-                SymbolsGridView(expression: $expression, operatorSymbols: operatorSymbols, greekSymbols: greekSymbols)
-            }
         }
         .frame(height: 70)
     }
@@ -377,7 +379,7 @@ struct CalculatorInputView: View {
 struct SymbolsGridView: View {
     @Binding var expression: String
     let operatorSymbols: [MathSymbol]
-    let greekSymbols: [MathSymbol]
+    let constantSymbols: [MathSymbol]
 
     let columns = [GridItem(.adaptive(minimum: 45))]
 
@@ -385,35 +387,25 @@ struct SymbolsGridView: View {
         VStack(spacing: 15) {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(operatorSymbols) { symbol in
-                    Button(action: {
-                        expression += symbol.insertionText ?? symbol.symbol
-                    }) {
+                    Button(action: { expression += symbol.insertionText ?? symbol.symbol }) {
                         Text(symbol.symbol)
-                            .font(.title2)
-                            .frame(width: 40, height: 40)
+                            .font(.title2).frame(width: 40, height: 40)
                             .background(Color.secondary.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .help(symbol.name)
-                    }
-                    .buttonStyle(.plain)
+                    }.buttonStyle(.plain)
                 }
             }
-            
             Divider()
-            
             LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(greekSymbols) { symbol in
-                    Button(action: {
-                        expression += symbol.insertionText ?? symbol.symbol
-                    }) {
+                ForEach(constantSymbols) { symbol in
+                    Button(action: { expression += symbol.insertionText ?? symbol.symbol }) {
                         Text(symbol.symbol)
-                            .font(.title2)
-                            .frame(width: 40, height: 40)
-                            .background(Color.green.opacity(0.2))
+                            .font(.title3).frame(width: 40, height: 40)
+                            .background(Color.blue.opacity(0.2))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .help(symbol.name)
-                    }
-                    .buttonStyle(.plain)
+                    }.buttonStyle(.plain)
                 }
             }
         }
@@ -421,3 +413,29 @@ struct SymbolsGridView: View {
         .frame(width: 320)
     }
 }
+
+struct GreekSymbolsGridView: View {
+    @Binding var expression: String
+    let greekSymbols: [MathSymbol]
+
+    let columns = [GridItem(.adaptive(minimum: 45))]
+    
+    var body: some View {
+        VStack {
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(greekSymbols) { symbol in
+                    Button(action: { expression += symbol.insertionText ?? symbol.symbol }) {
+                        Text(symbol.symbol)
+                            .font(.title2).frame(width: 40, height: 40)
+                            .background(Color.green.opacity(0.2))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .help(symbol.name)
+                    }.buttonStyle(.plain)
+                }
+            }
+        }
+        .padding()
+        .frame(width: 320)
+    }
+}
+

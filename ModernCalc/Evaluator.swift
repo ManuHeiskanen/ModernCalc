@@ -52,16 +52,22 @@ struct Evaluator {
         "h": 6.62607015e-34, // Planck constant (J·s)
         "ħ": 1.054571817e-34,// Reduced Planck constant (J·s)
         
-        // Atomic
+        // Atomic & Chemistry
         "me": 9.1093837015e-31, // Electron mass (kg)
         "mp": 1.67262192369e-27, // Proton mass (kg)
         "mn": 1.67492749804e-27, // Neutron mass (kg)
         "e0": 1.602176634e-19,  // Elementary charge (C)
-        
-        // Chemistry
         "NA": 6.02214076e23,     // Avogadro constant (mol^-1)
         "R": 8.314462618,       // Gas constant (J/(mol·K))
-        "kB": 1.380649e-23       // Boltzmann constant (J/K)
+        "kB": 1.380649e-23,       // Boltzmann constant (J/K)
+        "F": 96485.33212,      // Faraday constant (C/mol)
+        "Rinf": 10973731.568160, // Rydberg constant (m^-1)
+
+        // Thermodynamics & Engineering
+        "σ": 5.670374419e-8,   // Stefan-Boltzmann constant (W·m⁻²·K⁻⁴)
+        "b": 2.897771955e-3,   // Wien's displacement law constant (m·K)
+        "atm": 101325,         // Standard atmosphere (Pa)
+        "Vm": 22.41396954e-3    // Molar volume of ideal gas at STP (m³/mol)
     ]
     
     // NEW: A dictionary of all standard SI prefixes.
@@ -693,4 +699,5 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
+
 
