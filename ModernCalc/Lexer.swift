@@ -44,6 +44,9 @@ class Lexer {
     
     func tokenize() -> [Token] {
         var tokens: [Token] = []
+        // MODIFIED: Added all Greek letters to the character set for identifiers.
+        let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
+        
         while let char = peek() {
             if char.isWhitespace {
                 advance()
@@ -55,8 +58,7 @@ class Lexer {
                 continue
             }
             
-            // MODIFIED: Greek letters (including π) are handled by the identifier logic.
-            if char.isLetter || "αβγδθλμπρστωπ".contains(char) {
+            if char.isLetter || greekLetters.contains(char) {
                 if char == "i" {
                     if peekNext() == "'" {
                         advance()
@@ -158,7 +160,8 @@ class Lexer {
     
     private func lexIdentifierOrComplex() -> Token {
         let startIndex = currentIndex
-        while let char = peek(), char.isLetter || "αβγδθλμπρστωπ".contains(char) {
+        let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
+        while let char = peek(), char.isLetter || greekLetters.contains(char) {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
@@ -167,7 +170,6 @@ class Lexer {
             return Token(type: .complexLiteral(1.0), rawValue: "i")
         }
         
-        // MODIFIED: Treat the π symbol as the "pi" identifier.
         if identifierString == "π" {
             return Token(type: .identifier("pi"), rawValue: "π")
         }

@@ -51,7 +51,6 @@ struct ContentView: View {
             CalculatorInputView(
                 expression: $viewModel.rawExpression,
                 previewText: viewModel.previewText,
-                // MODIFIED: Pass both symbol lists to the input view.
                 operatorSymbols: viewModel.operatorSymbols,
                 greekSymbols: viewModel.greekSymbols,
                 onTap: { viewModel.resetNavigation() }
@@ -286,7 +285,6 @@ struct FormattedExpressionView: View {
 struct CalculatorInputView: View {
     @Binding var expression: String
     var previewText: String
-    // MODIFIED: Takes two separate symbol lists.
     var operatorSymbols: [MathSymbol]
     var greekSymbols: [MathSymbol]
     var onTap: () -> Void
@@ -328,7 +326,6 @@ struct CalculatorInputView: View {
             .buttonStyle(.plain)
             .padding()
             .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
-                // MODIFIED: Pass both symbol lists to the grid view.
                 SymbolsGridView(expression: $expression, operatorSymbols: operatorSymbols, greekSymbols: greekSymbols)
             }
         }
@@ -338,14 +335,12 @@ struct CalculatorInputView: View {
 
 struct SymbolsGridView: View {
     @Binding var expression: String
-    // MODIFIED: Receives two separate symbol lists.
     let operatorSymbols: [MathSymbol]
     let greekSymbols: [MathSymbol]
 
     let columns = [GridItem(.adaptive(minimum: 45))]
 
     var body: some View {
-        // MODIFIED: The view is now a VStack containing two grids.
         VStack(spacing: 15) {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(operatorSymbols) { symbol in
@@ -373,7 +368,6 @@ struct SymbolsGridView: View {
                         Text(symbol.symbol)
                             .font(.title2)
                             .frame(width: 40, height: 40)
-                            // NEW: Apply the light green background color.
                             .background(Color.green.opacity(0.2))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             .help(symbol.name)
@@ -383,7 +377,8 @@ struct SymbolsGridView: View {
             }
         }
         .padding()
-        .frame(width: 280)
+        // MODIFIED: Removed fixed height to allow the popover to resize.
+        .frame(width: 320)
     }
 }
 

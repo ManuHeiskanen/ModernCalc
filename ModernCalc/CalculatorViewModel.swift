@@ -75,7 +75,6 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
-    // MODIFIED: Symbols are now split into two organized groups.
     let operatorSymbols: [MathSymbol] = [
         .init(symbol: "±", name: "Plus-Minus"),
         .init(symbol: "∠", name: "Angle"),
@@ -86,18 +85,31 @@ class CalculatorViewModel: ObservableObject {
         .init(symbol: "π", name: "Pi")
     ]
     
+    // MODIFIED: Added all uppercase and lowercase Greek letters.
     let greekSymbols: [MathSymbol] = [
-        .init(symbol: "α", name: "Alpha"),
-        .init(symbol: "β", name: "Beta"),
-        .init(symbol: "γ", name: "Gamma"),
-        .init(symbol: "δ", name: "Delta"),
-        .init(symbol: "θ", name: "Theta"),
-        .init(symbol: "λ", name: "Lambda"),
-        .init(symbol: "μ", name: "Mu"),
-        .init(symbol: "ρ", name: "Rho"),
-        .init(symbol: "σ", name: "Sigma"),
-        .init(symbol: "τ", name: "Tau"),
-        .init(symbol: "ω", name: "Omega")
+        .init(symbol: "α", name: "Alpha (lowercase)"), .init(symbol: "Α", name: "Alpha (uppercase)"),
+        .init(symbol: "β", name: "Beta (lowercase)"), .init(symbol: "Β", name: "Beta (uppercase)"),
+        .init(symbol: "γ", name: "Gamma (lowercase)"), .init(symbol: "Γ", name: "Gamma (uppercase)"),
+        .init(symbol: "δ", name: "Delta (lowercase)"), .init(symbol: "Δ", name: "Delta (uppercase)"),
+        .init(symbol: "ε", name: "Epsilon (lowercase)"), .init(symbol: "Ε", name: "Epsilon (uppercase)"),
+        .init(symbol: "ζ", name: "Zeta (lowercase)"), .init(symbol: "Ζ", name: "Zeta (uppercase)"),
+        .init(symbol: "η", name: "Eta (lowercase)"), .init(symbol: "Η", name: "Eta (uppercase)"),
+        .init(symbol: "θ", name: "Theta (lowercase)"), .init(symbol: "Θ", name: "Theta (uppercase)"),
+        .init(symbol: "ι", name: "Iota (lowercase)"), .init(symbol: "Ι", name: "Iota (uppercase)"),
+        .init(symbol: "κ", name: "Kappa (lowercase)"), .init(symbol: "Κ", name: "Kappa (uppercase)"),
+        .init(symbol: "λ", name: "Lambda (lowercase)"), .init(symbol: "Λ", name: "Lambda (uppercase)"),
+        .init(symbol: "μ", name: "Mu (lowercase)"), .init(symbol: "Μ", name: "Mu (uppercase)"),
+        .init(symbol: "ν", name: "Nu (lowercase)"), .init(symbol: "Ν", name: "Nu (uppercase)"),
+        .init(symbol: "ξ", name: "Xi (lowercase)"), .init(symbol: "Ξ", name: "Xi (uppercase)"),
+        .init(symbol: "ο", name: "Omicron (lowercase)"), .init(symbol: "Ο", name: "Omicron (uppercase)"),
+        .init(symbol: "ρ", name: "Rho (lowercase)"), .init(symbol: "Ρ", name: "Rho (uppercase)"),
+        .init(symbol: "σ", name: "Sigma (lowercase)"), .init(symbol: "Σ", name: "Sigma (uppercase)"),
+        .init(symbol: "τ", name: "Tau (lowercase)"), .init(symbol: "Τ", name: "Tau (uppercase)"),
+        .init(symbol: "υ", name: "Upsilon (lowercase)"), .init(symbol: "Υ", name: "Upsilon (uppercase)"),
+        .init(symbol: "φ", name: "Phi (lowercase)"), .init(symbol: "Φ", name: "Phi (uppercase)"),
+        .init(symbol: "χ", name: "Chi (lowercase)"), .init(symbol: "Χ", name: "Chi (uppercase)"),
+        .init(symbol: "ψ", name: "Psi (lowercase)"), .init(symbol: "Ψ", name: "Psi (uppercase)"),
+        .init(symbol: "ω", name: "Omega (lowercase)"), .init(symbol: "Ω", name: "Omega (uppercase)")
     ]
     
     let builtinFunctions: [BuiltinFunction] = [
