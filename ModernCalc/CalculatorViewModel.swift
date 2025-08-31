@@ -330,16 +330,30 @@ class CalculatorViewModel: ObservableObject {
     
     private func rebuildFunctionsFromDefinitions() {
         let definitionsToRebuild = self.userFunctionDefinitions
+        guard !definitionsToRebuild.isEmpty else { return }
         
-        // This calculate method directly updates the view model's state,
-        // which is the most reliable way to re-populate the live `functions` dictionary.
+        // Create temporary dictionaries to batch the work and avoid rapid UI updates.
+        var tempVars = self.variables
+        var tempFuncs: [String: FunctionDefinitionNode] = [:]
+
         for (_, definitionString) in definitionsToRebuild {
-            calculate(expression: definitionString)
+            do {
+                let lexer = Lexer(input: definitionString)
+                let tokens = lexer.tokenize()
+                let parser = Parser(tokens: tokens)
+                let expressionTree = try parser.parse()
+                
+                // Evaluate but only update the temporary dictionaries
+                _ = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
+            } catch {
+                print("Error rebuilding function '\(definitionString)': \(error)")
+            }
         }
 
-        // The calculate method will leave the result of the last definition in `liveResult`.
-        // We clear it here so the UI is clean on launch.
+        // Now, publish the changes to the UI only once.
         DispatchQueue.main.async {
+            self.functions = tempFuncs
+            self.variables = tempVars
             self.liveResult = ""
         }
     }
@@ -512,3 +526,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+

@@ -331,7 +331,7 @@ struct Evaluator {
                 guard case .scalar(let r) = rValue, case .scalar(let theta) = thetaValue else {
                     throw MathError.typeMismatch(expected: "Scalar ∠ Scalar", found: "\(rValue.typeName) ∠ \(thetaValue.typeName)")
                 }
-                let thetaRad = theta * .pi / 180.0
+                let thetaRad = angleMode == .degrees ? theta * .pi / 180.0 : theta
                 return (.complex(Complex(real: r * cos(thetaRad), imaginary: r * sin(thetaRad))), true)
             }
             
@@ -668,4 +668,3 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
-

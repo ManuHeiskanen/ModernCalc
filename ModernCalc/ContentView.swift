@@ -15,34 +15,44 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Button(action: { isShowingSheet = true }) {
-                    Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(10)
-                .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
-                .cornerRadius(8)
-                .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHoveringOnMenuButton = hovering
+            // ZStack allows the button to be overlaid on top of the HistoryView
+            // without taking up its own vertical space in the main VStack.
+            ZStack {
+                HistoryView(
+                    viewModel: viewModel,
+                    history: viewModel.history,
+                    rawExpression: $viewModel.rawExpression,
+                    selectedHistoryId: viewModel.selectedHistoryId,
+                    selectedHistoryPart: viewModel.selectedHistoryPart
+                )
+                
+                // This VStack ensures the button stays at the top of the ZStack area.
+                VStack {
+                    HStack {
+                        Button(action: { isShowingSheet = true }) {
+                            Image(systemName: "ellipsis.circle.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(10)
+                        .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
+                        .cornerRadius(8)
+                        .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
+                        .onHover { hovering in
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                isHoveringOnMenuButton = hovering
+                            }
+                        }
+                        Spacer()
                     }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    
+                    Spacer()
                 }
-                Spacer()
             }
-            .padding(.horizontal)
-            .padding(.top, 8)
 
-            HistoryView(
-                viewModel: viewModel,
-                history: viewModel.history,
-                rawExpression: $viewModel.rawExpression,
-                selectedHistoryId: viewModel.selectedHistoryId,
-                selectedHistoryPart: viewModel.selectedHistoryPart
-            )
             Divider()
             
             FormattedExpressionView(result: viewModel.liveResult)
@@ -411,4 +421,3 @@ struct SymbolsGridView: View {
         .frame(width: 320)
     }
 }
-
