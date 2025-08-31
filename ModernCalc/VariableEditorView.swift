@@ -11,15 +11,10 @@ struct VariableEditorView: View {
     @ObservedObject var viewModel: CalculatorViewModel
     @Environment(\.dismiss) var dismiss
     
-    // Define an enum for the tabs for better readability and safety.
-    enum EditorTab {
-        case userDefined, builtIn, constants
-    }
-    
     @State private var searchText = ""
-    @State private var selectedTab: EditorTab = .userDefined
+    @State private var selectedTab = 0
 
-    // A computed property to filter the built-in functions based on search text.
+    // Computed properties to filter lists based on search text
     var filteredBuiltinFunctions: [BuiltinFunction] {
         if searchText.isEmpty {
             return viewModel.builtinFunctions
@@ -31,14 +26,13 @@ struct VariableEditorView: View {
         }
     }
     
-    // A computed property to filter the physical constants based on search text.
     var filteredConstants: [PhysicalConstant] {
         if searchText.isEmpty {
             return viewModel.physicalConstants
         } else {
             return viewModel.physicalConstants.filter {
-                $0.name.localizedCaseInsensitiveContains(searchText) ||
-                $0.symbol.localizedCaseInsensitiveContains(searchText)
+                $0.symbol.localizedCaseInsensitiveContains(searchText) ||
+                $0.name.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
@@ -48,7 +42,7 @@ struct VariableEditorView: View {
             // --- Header ---
             HStack {
                 // The title changes based on the selected tab.
-                Text(headerTitle)
+                Text(tabTitle)
                     .font(.title2).bold()
                 Spacer()
                 Button("Done") {
@@ -60,68 +54,68 @@ struct VariableEditorView: View {
             
             Divider()
 
-            // Replaced the List with a TabView that uses the enum.
+            // Main TabView for different sections
             TabView(selection: $selectedTab) {
-                // --- Tab 1: User-Defined Items ---
                 userDefinedView
                     .tabItem { Text("User Defined") }
-                    .tag(EditorTab.userDefined)
+                    .tag(0)
 
-                // --- Tab 2: Built-in Functions ---
                 builtinFunctionsView
                     .tabItem { Text("Built-in Functions") }
-                    .tag(EditorTab.builtIn)
-                    
-                // --- Tab 3: Physical Constants ---
+                    .tag(1)
+                
                 constantsView
                     .tabItem { Text("Constants") }
-                    .tag(EditorTab.constants)
+                    .tag(2)
             }
-            // Clear search text when switching tabs for a better user experience.
-            .onChange(of: selectedTab) { _ in searchText = "" }
+            // Use the new, modern syntax for onChange
+            .onChange(of: selectedTab) {
+                searchText = ""
+            }
         }
         .frame(minWidth: 450, minHeight: 400, idealHeight: 600)
     }
     
-    // A computed property for the header title based on the selected tab.
-    private var headerTitle: String {
+    private var tabTitle: String {
         switch selectedTab {
-        case .userDefined: return "Variables & Functions"
-        case .builtIn: return "Built-in Functions"
-        case .constants: return "Physical Constants"
+        case 0: return "Variables & Functions"
+        case 1: return "Built-in Functions"
+        case 2: return "Constants"
+        default: return ""
         }
     }
     
-    // A view for the user-defined variables and functions.
+    // --- Views for each tab ---
+    
     private var userDefinedView: some View {
         List {
             Section {
-                // Check if there are any variables to show
                 if viewModel.sortedVariables.isEmpty {
                     Text("No variables defined.")
                         .foregroundColor(.secondary)
-                        .padding()
                 } else {
                     ForEach(viewModel.sortedVariables, id: \.0) { name, value in
-                        Button(action: {
-                            viewModel.rawExpression += name
-                            dismiss()
-                        }) {
-                            HStack {
+                        HStack {
+                            Button(action: {
+                                viewModel.rawExpression += name
+                                dismiss()
+                            }) {
                                 Text(name)
                                     .font(.system(.body, design: .monospaced))
-                                Spacer()
-                                Text(viewModel.formatLivePreview(value))
-                                    .foregroundColor(.secondary)
-                                Button(role: .destructive) {
-                                    viewModel.deleteVariable(name: name)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.plain)
+                                    .foregroundColor(.primary) // Ensure button text is readable
                             }
+                            .buttonStyle(.plain)
+                            
+                            Spacer()
+                            Text(viewModel.formatLivePreview(value))
+                                .foregroundColor(.secondary)
+                            Button(role: .destructive) {
+                                viewModel.deleteVariable(name: name)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                         .padding(.vertical, 4)
                     }
                 }
@@ -133,26 +127,27 @@ struct VariableEditorView: View {
                 if viewModel.sortedFunctions.isEmpty {
                     Text("No functions defined.")
                         .foregroundColor(.secondary)
-                        .padding()
                 } else {
                     ForEach(viewModel.sortedFunctions, id: \.0) { name, node in
-                        Button(action: {
-                            viewModel.rawExpression += "\(name)("
-                            dismiss()
-                        }) {
-                            HStack {
+                        HStack {
+                            Button(action: {
+                                viewModel.rawExpression += name + "("
+                                dismiss()
+                            }) {
                                 Text(node.description)
                                     .font(.system(.body, design: .monospaced))
-                                Spacer()
-                                Button(role: .destructive) {
-                                    viewModel.deleteFunction(name: name)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.plain)
+                                    .foregroundColor(.primary)
                             }
+                            .buttonStyle(.plain)
+                            
+                            Spacer()
+                            Button(role: .destructive) {
+                                viewModel.deleteFunction(name: name)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                         .padding(.vertical, 4)
                     }
                 }
@@ -163,63 +158,54 @@ struct VariableEditorView: View {
         .listStyle(.sidebar)
     }
     
-    // A view for the searchable list of built-in functions.
     private var builtinFunctionsView: some View {
-        VStack {
-            List {
-                ForEach(filteredBuiltinFunctions) { function in
-                    Button(action: {
-                        viewModel.rawExpression += "\(function.name)("
-                        dismiss()
-                    }) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(function.signature)
-                                .font(.system(.body, design: .monospaced)).fontWeight(.bold)
-                            Text(function.description)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 6)
+        // Use a searchable list for built-in functions
+        List(filteredBuiltinFunctions) { function in
+            Button(action: {
+                viewModel.rawExpression += function.name + "("
+                dismiss()
+            }) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(function.signature)
+                        .font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                    Text(function.description)
+                        .foregroundColor(.secondary)
                 }
+                .foregroundColor(.primary) // Ensure text color is correct
+                .padding(.vertical, 6)
             }
-            .listStyle(.sidebar)
-            .searchable(text: $searchText, prompt: "Search Functions")
+            .buttonStyle(.plain)
         }
+        .listStyle(.sidebar)
+        .searchable(text: $searchText, prompt: "Search Functions")
     }
     
-    // A view for the searchable list of physical constants.
     private var constantsView: some View {
-        VStack {
-            List {
-                ForEach(filteredConstants) { constant in
-                    Button(action: {
-                        viewModel.rawExpression += constant.symbol
-                        dismiss()
-                    }) {
-                        HStack(alignment: .top) {
-                            Text(constant.symbol)
-                                .font(.system(.body, design: .monospaced)).fontWeight(.bold)
-                                .frame(width: 40, alignment: .leading)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(constant.name)
-                                    .foregroundColor(.primary)
-                                Text(String(constant.value))
-                                    .foregroundColor(.secondary)
-                                    .font(.system(.body, design: .monospaced))
-                            }
-                            
-                            Spacer()
-                        }
+        // Use a searchable list for physical constants
+        List(filteredConstants) { constant in
+            Button(action: {
+                viewModel.rawExpression += constant.symbol
+                dismiss()
+            }) {
+                HStack {
+                    Text(constant.symbol)
+                        .font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                        .frame(minWidth: 40, alignment: .leading)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(constant.name)
+                        Text(String(constant.value))
+                            .foregroundColor(.secondary)
+                            .font(.system(.body, design: .monospaced))
                     }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 6)
                 }
+                .foregroundColor(.primary)
+                .padding(.vertical, 6)
             }
-            .listStyle(.sidebar)
-            .searchable(text: $searchText, prompt: "Search Constants")
+            .buttonStyle(.plain)
         }
+        .listStyle(.sidebar)
+        .searchable(text: $searchText, prompt: "Search Constants")
     }
 }
 
