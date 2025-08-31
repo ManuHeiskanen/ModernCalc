@@ -9,7 +9,7 @@ import Foundation
 import Combine
 import SwiftUI
 
-enum AngleMode {
+enum AngleMode: Codable {
     case degrees, radians
 }
 
@@ -66,6 +66,7 @@ class CalculatorViewModel: ObservableObject {
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
     @Published var angleMode: AngleMode = .degrees
+    @Published var userFunctionDefinitions: [String: String] = [:]
 
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
@@ -161,6 +162,7 @@ class CalculatorViewModel: ObservableObject {
                     self.calculate(expression: newExpression)
                 }
             }
+        loadState()
     }
 
     private func calculate(expression: String) {
@@ -239,6 +241,14 @@ class CalculatorViewModel: ObservableObject {
                 }
             }
             
+            // Persist state when variables or functions are defined.
+            if calcType == .variableAssignment {
+                saveState()
+            } else if calcType == .functionDefinition, case .functionDefinition(let name) = valueToCommit {
+                userFunctionDefinitions[name] = rawExpression
+                saveState()
+            }
+            
             let newCalculation = Calculation(
                 expression: rawExpression,
                 result: valueToCommit,
@@ -275,8 +285,64 @@ class CalculatorViewModel: ObservableObject {
     var sortedVariables: [(String, MathValue)] { variables.sorted { $0.key < $1.key } }
     var sortedFunctions: [(String, FunctionDefinitionNode)] { functions.sorted { $0.key < $1.key } }
     
-    func deleteVariable(name: String) { variables.removeValue(forKey: name) }
-    func deleteFunction(name: String) { functions.removeValue(forKey: name) }
+    func deleteVariable(name: String) {
+        variables.removeValue(forKey: name)
+        saveState()
+    }
+    
+    func deleteFunction(name: String) {
+        functions.removeValue(forKey: name)
+        userFunctionDefinitions.removeValue(forKey: name)
+        saveState()
+    }
+
+    // --- PERSISTENCE ---
+
+    private func saveState() {
+        do {
+            let variablesData = try JSONEncoder().encode(variables)
+            let functionsData = try JSONEncoder().encode(userFunctionDefinitions)
+            UserDefaults.standard.set(variablesData, forKey: "userVariables")
+            UserDefaults.standard.set(functionsData, forKey: "userFunctionDefinitions")
+        } catch {
+            print("Error saving state: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadState() {
+        do {
+            if let variablesData = UserDefaults.standard.data(forKey: "userVariables") {
+                let decodedVars = try JSONDecoder().decode([String: MathValue].self, from: variablesData)
+                // Filter out the 'ans' variable so it doesn't persist between sessions
+                self.variables = decodedVars.filter { $0.key != ansVariable }
+            }
+            if let functionsData = UserDefaults.standard.data(forKey: "userFunctionDefinitions") {
+                self.userFunctionDefinitions = try JSONDecoder().decode([String: String].self, from: functionsData)
+                rebuildFunctionsFromDefinitions()
+            }
+        } catch {
+            print("Error loading state: \(error.localizedDescription)")
+            // If decoding fails for any reason, start with a clean slate.
+            self.variables = [:]
+            self.userFunctionDefinitions = [:]
+        }
+    }
+    
+    private func rebuildFunctionsFromDefinitions() {
+        let definitionsToRebuild = self.userFunctionDefinitions
+        
+        // This calculate method directly updates the view model's state,
+        // which is the most reliable way to re-populate the live `functions` dictionary.
+        for (_, definitionString) in definitionsToRebuild {
+            calculate(expression: definitionString)
+        }
+
+        // The calculate method will leave the result of the last definition in `liveResult`.
+        // We clear it here so the UI is clean on launch.
+        DispatchQueue.main.async {
+            self.liveResult = ""
+        }
+    }
 
     // --- FORMATTING HELPERS ---
     
@@ -446,4 +512,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-

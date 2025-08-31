@@ -9,7 +9,7 @@ import Foundation
 
 // --- CORE DATA TYPES ---
 
-struct Complex: Equatable {
+struct Complex: Equatable, Codable {
     var real: Double
     var imaginary: Double
     
@@ -74,7 +74,7 @@ struct Complex: Equatable {
     }
 }
 
-struct Vector: Equatable {
+struct Vector: Equatable, Codable {
     let values: [Double]
     var dimension: Int { values.count }
     
@@ -136,7 +136,7 @@ struct Vector: Equatable {
     }
 }
 
-struct Matrix: Equatable {
+struct Matrix: Equatable, Codable {
     let values: [Double]
     let rows: Int
     let columns: Int
@@ -236,7 +236,7 @@ func combinations(n: Double, k: Double) throws -> Double {
 }
 
 
-struct ComplexVector: Equatable {
+struct ComplexVector: Equatable, Codable {
     let values: [Complex]
     var dimension: Int { values.count }
     
@@ -266,7 +266,7 @@ struct ComplexVector: Equatable {
     }
 }
 
-struct ComplexMatrix: Equatable {
+struct ComplexMatrix: Equatable, Codable {
     let values: [Complex]
     let rows: Int
     let columns: Int
@@ -301,7 +301,7 @@ struct ComplexMatrix: Equatable {
     }
 }
 
-enum MathValue: Equatable {
+enum MathValue: Equatable, Codable {
     case scalar(Double)
     case complex(Complex)
     case vector(Vector)
@@ -325,5 +325,63 @@ enum MathValue: Equatable {
         case .polar: return "Polar"
         }
     }
-}
+    
+    // MARK: - Codable Implementation
+    
+    enum CodingKeys: String, CodingKey {
+        case type, value
+    }
 
+    // Custom Encoder
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .scalar(let double):
+            try container.encode("scalar", forKey: .type)
+            try container.encode(double, forKey: .value)
+        case .complex(let complex):
+            try container.encode("complex", forKey: .type)
+            try container.encode(complex, forKey: .value)
+        case .vector(let vector):
+            try container.encode("vector", forKey: .type)
+            try container.encode(vector, forKey: .value)
+        case .matrix(let matrix):
+            try container.encode("matrix", forKey: .type)
+            try container.encode(matrix, forKey: .value)
+        case .tuple(let values):
+            try container.encode("tuple", forKey: .type)
+            try container.encode(values, forKey: .value)
+        case .functionDefinition(let name):
+            try container.encode("functionDefinition", forKey: .type)
+            try container.encode(name, forKey: .value)
+        case .complexVector(let cVector):
+            try container.encode("complexVector", forKey: .type)
+            try container.encode(cVector, forKey: .value)
+        case .complexMatrix(let cMatrix):
+            try container.encode("complexMatrix", forKey: .type)
+            try container.encode(cMatrix, forKey: .value)
+        case .polar(let complex):
+            try container.encode("polar", forKey: .type)
+            try container.encode(complex, forKey: .value)
+        }
+    }
+
+    // Custom Decoder
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        switch type {
+        case "scalar": self = .scalar(try container.decode(Double.self, forKey: .value))
+        case "complex": self = .complex(try container.decode(Complex.self, forKey: .value))
+        case "vector": self = .vector(try container.decode(Vector.self, forKey: .value))
+        case "matrix": self = .matrix(try container.decode(Matrix.self, forKey: .value))
+        case "tuple": self = .tuple(try container.decode([MathValue].self, forKey: .value))
+        case "functionDefinition": self = .functionDefinition(try container.decode(String.self, forKey: .value))
+        case "complexVector": self = .complexVector(try container.decode(ComplexVector.self, forKey: .value))
+        case "complexMatrix": self = .complexMatrix(try container.decode(ComplexMatrix.self, forKey: .value))
+        case "polar": self = .polar(try container.decode(Complex.self, forKey: .value))
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
+        }
+    }
+}
