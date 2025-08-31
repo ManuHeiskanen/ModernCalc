@@ -55,7 +55,8 @@ class Lexer {
                 continue
             }
             
-            if char.isLetter || "αβγδθλμπρστω".contains(char) {
+            // MODIFIED: Greek letters (including π) are handled by the identifier logic.
+            if char.isLetter || "αβγδθλμπρστωπ".contains(char) {
                 if char == "i" {
                     if peekNext() == "'" {
                         advance()
@@ -82,7 +83,6 @@ class Lexer {
             case "+", "-", "*", "/", "%", "^", "=":
                 advance()
                 tokens.append(Token(type: .op(char), rawValue: String(char)))
-            // MODIFIED: Handle aliases for operators and functions
             case "×":
                 advance()
                 tokens.append(Token(type: .op("*"), rawValue: "×"))
@@ -98,9 +98,6 @@ class Lexer {
             case "∠":
                 advance()
                 tokens.append(Token(type: .op("∠"), rawValue: "∠"))
-            case "π":
-                advance()
-                tokens.append(Token(type: .identifier("pi"), rawValue: "π"))
             case "°":
                 advance()
                 continue
@@ -161,13 +158,18 @@ class Lexer {
     
     private func lexIdentifierOrComplex() -> Token {
         let startIndex = currentIndex
-        while let char = peek(), char.isLetter || "αβγδθλμπρστω".contains(char) {
+        while let char = peek(), char.isLetter || "αβγδθλμπρστωπ".contains(char) {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
         
         if identifierString == "i" {
             return Token(type: .complexLiteral(1.0), rawValue: "i")
+        }
+        
+        // MODIFIED: Treat the π symbol as the "pi" identifier.
+        if identifierString == "π" {
+            return Token(type: .identifier("pi"), rawValue: "π")
         }
         
         return Token(type: .identifier(identifierString), rawValue: identifierString)

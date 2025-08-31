@@ -43,7 +43,6 @@ struct BuiltinFunction: Identifiable, Hashable {
     let description: String
 }
 
-// MODIFIED: Added an optional insertionText for special cases like sqrt.
 struct MathSymbol: Identifiable {
     let id = UUID()
     let symbol: String
@@ -76,20 +75,23 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
-    // MODIFIED: The √ symbol now has special insertion text.
-    let mathSymbols: [MathSymbol] = [
+    // MODIFIED: Symbols are now split into two organized groups.
+    let operatorSymbols: [MathSymbol] = [
         .init(symbol: "±", name: "Plus-Minus"),
         .init(symbol: "∠", name: "Angle"),
         .init(symbol: "√", name: "Square Root", insertionText: "√("),
         .init(symbol: "×", name: "Multiply"),
         .init(symbol: "÷", name: "Divide"),
         .init(symbol: "^", name: "Power"),
-        .init(symbol: "π", name: "Pi"),
-        .init(symbol: "θ", name: "Theta"),
+        .init(symbol: "π", name: "Pi")
+    ]
+    
+    let greekSymbols: [MathSymbol] = [
         .init(symbol: "α", name: "Alpha"),
         .init(symbol: "β", name: "Beta"),
         .init(symbol: "γ", name: "Gamma"),
         .init(symbol: "δ", name: "Delta"),
+        .init(symbol: "θ", name: "Theta"),
         .init(symbol: "λ", name: "Lambda"),
         .init(symbol: "μ", name: "Mu"),
         .init(symbol: "ρ", name: "Rho"),

@@ -51,7 +51,9 @@ struct ContentView: View {
             CalculatorInputView(
                 expression: $viewModel.rawExpression,
                 previewText: viewModel.previewText,
-                symbols: viewModel.mathSymbols,
+                // MODIFIED: Pass both symbol lists to the input view.
+                operatorSymbols: viewModel.operatorSymbols,
+                greekSymbols: viewModel.greekSymbols,
                 onTap: { viewModel.resetNavigation() }
             )
             .focused($isInputFocused)
@@ -284,7 +286,9 @@ struct FormattedExpressionView: View {
 struct CalculatorInputView: View {
     @Binding var expression: String
     var previewText: String
-    var symbols: [MathSymbol]
+    // MODIFIED: Takes two separate symbol lists.
+    var operatorSymbols: [MathSymbol]
+    var greekSymbols: [MathSymbol]
     var onTap: () -> Void
     
     @State private var isShowingSymbolsPopover = false
@@ -324,7 +328,8 @@ struct CalculatorInputView: View {
             .buttonStyle(.plain)
             .padding()
             .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
-                SymbolsGridView(expression: $expression, symbols: symbols, isPresented: $isShowingSymbolsPopover)
+                // MODIFIED: Pass both symbol lists to the grid view.
+                SymbolsGridView(expression: $expression, operatorSymbols: operatorSymbols, greekSymbols: greekSymbols)
             }
         }
         .frame(height: 70)
@@ -333,16 +338,17 @@ struct CalculatorInputView: View {
 
 struct SymbolsGridView: View {
     @Binding var expression: String
-    let symbols: [MathSymbol]
-    @Binding var isPresented: Bool
+    // MODIFIED: Receives two separate symbol lists.
+    let operatorSymbols: [MathSymbol]
+    let greekSymbols: [MathSymbol]
 
     let columns = [GridItem(.adaptive(minimum: 45))]
 
     var body: some View {
-        ScrollView {
+        // MODIFIED: The view is now a VStack containing two grids.
+        VStack(spacing: 15) {
             LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(symbols) { symbol in
-                    // MODIFIED: The button action now uses insertionText if available.
+                ForEach(operatorSymbols) { symbol in
                     Button(action: {
                         expression += symbol.insertionText ?? symbol.symbol
                     }) {
@@ -356,9 +362,28 @@ struct SymbolsGridView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding()
+            
+            Divider()
+            
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(greekSymbols) { symbol in
+                    Button(action: {
+                        expression += symbol.insertionText ?? symbol.symbol
+                    }) {
+                        Text(symbol.symbol)
+                            .font(.title2)
+                            .frame(width: 40, height: 40)
+                            // NEW: Apply the light green background color.
+                            .background(Color.green.opacity(0.2))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .help(symbol.name)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
-        .frame(width: 280, height: 250)
+        .padding()
+        .frame(width: 280)
     }
 }
 
