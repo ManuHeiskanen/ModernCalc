@@ -43,11 +43,18 @@ struct BuiltinFunction: Identifiable, Hashable {
     let description: String
 }
 
-// NEW: A struct to hold information about the symbols for the popover.
+// MODIFIED: Added an optional insertionText for special cases like sqrt.
 struct MathSymbol: Identifiable {
     let id = UUID()
     let symbol: String
-    let name: String // For accessibility and tooltips
+    let name: String
+    let insertionText: String?
+
+    init(symbol: String, name: String, insertionText: String? = nil) {
+        self.symbol = symbol
+        self.name = name
+        self.insertionText = insertionText
+    }
 }
 
 
@@ -69,11 +76,11 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
-    // NEW: The data source for the symbol grid popover.
+    // MODIFIED: The √ symbol now has special insertion text.
     let mathSymbols: [MathSymbol] = [
         .init(symbol: "±", name: "Plus-Minus"),
         .init(symbol: "∠", name: "Angle"),
-        .init(symbol: "√", name: "Square Root"),
+        .init(symbol: "√", name: "Square Root", insertionText: "√("),
         .init(symbol: "×", name: "Multiply"),
         .init(symbol: "÷", name: "Divide"),
         .init(symbol: "^", name: "Power"),
@@ -273,7 +280,7 @@ class CalculatorViewModel: ObservableObject {
         case .complex(let complexValue): return formatComplexForDisplay(complexValue)
         case .vector(let vector): return formatVectorForDisplay(vector)
         case .matrix(let matrix): return formatMatrixForDisplay(matrix)
-        case .tuple(let values): return values.map { formatForHistory($0) }.joined(separator: " or ")
+        case .tuple(let values): return values.map { formatForHistory($0) }.joined(separator: " OR ")
         case .complexVector(let cVector): return formatComplexVectorForDisplay(cVector)
         case .complexMatrix(let cMatrix): return formatComplexMatrixForDisplay(cMatrix)
         case .functionDefinition: return ""

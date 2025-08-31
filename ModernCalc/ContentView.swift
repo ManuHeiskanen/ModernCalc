@@ -257,7 +257,6 @@ struct HistoryView: View {
             return hoveredIndex == index
         }
         
-        // FIX: Removed the unnecessary 'if let' and directly checked the case.
         if case .result(let selectedIndex) = selectedHistoryPart, isSelected {
             return selectedIndex == index
         }
@@ -343,8 +342,9 @@ struct SymbolsGridView: View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(symbols) { symbol in
+                    // MODIFIED: The button action now uses insertionText if available.
                     Button(action: {
-                        expression += symbol.symbol
+                        expression += symbol.insertionText ?? symbol.symbol
                     }) {
                         Text(symbol.symbol)
                             .font(.title2)

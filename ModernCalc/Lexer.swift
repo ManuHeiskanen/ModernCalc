@@ -55,7 +55,6 @@ class Lexer {
                 continue
             }
             
-            // MODIFIED: Greek letters are now handled by isLetter
             if char.isLetter || "αβγδθλμπρστω".contains(char) {
                 if char == "i" {
                     if peekNext() == "'" {
@@ -83,20 +82,22 @@ class Lexer {
             case "+", "-", "*", "/", "%", "^", "=":
                 advance()
                 tokens.append(Token(type: .op(char), rawValue: String(char)))
-            // NEW: Handle aliases for multiplication and division
+            // MODIFIED: Handle aliases for operators and functions
             case "×":
                 advance()
                 tokens.append(Token(type: .op("*"), rawValue: "×"))
             case "÷":
                 advance()
                 tokens.append(Token(type: .op("/"), rawValue: "÷"))
+            case "√":
+                advance()
+                tokens.append(Token(type: .identifier("sqrt"), rawValue: "√"))
             case "±":
                 advance()
                 tokens.append(Token(type: .op("±"), rawValue: "±"))
             case "∠":
                 advance()
                 tokens.append(Token(type: .op("∠"), rawValue: "∠"))
-            // NEW: Treat π as the identifier "pi"
             case "π":
                 advance()
                 tokens.append(Token(type: .identifier("pi"), rawValue: "π"))
