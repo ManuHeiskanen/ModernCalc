@@ -9,7 +9,7 @@ import Foundation
 import Combine
 import SwiftUI
 
-enum AngleMode: Codable {
+enum AngleMode: String, Codable {
     case degrees, radians
 }
 
@@ -63,6 +63,12 @@ struct MathSymbol: Identifiable {
     }
 }
 
+struct HelpTopic: Identifiable, Hashable {
+    let id = UUID()
+    let title: String
+    let content: String
+}
+
 
 class CalculatorViewModel: ObservableObject {
 
@@ -72,8 +78,17 @@ class CalculatorViewModel: ObservableObject {
     @Published var previewText: String = ""
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
-    @Published var angleMode: AngleMode = .degrees
+    
+    @Published var angleMode: AngleMode = .degrees {
+        didSet {
+            saveState()
+        }
+    }
     @Published var userFunctionDefinitions: [String: String] = [:]
+    
+    @Published var cursorPosition = NSRange()
+    
+    private var settings: UserSettings
 
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
@@ -163,8 +178,40 @@ class CalculatorViewModel: ObservableObject {
         .init(symbol: "Vm", name: "Molar volume (STP)", value: 22.41396954e-3)
     ]
 
+    let helpTopics: [HelpTopic] = [
+        .init(title: "Quick Start", content:
+            """
+            - **Basic Calculations:** Type any mathematical expression and the result will update live. Press `Return` to commit it to history.
+            - **History Navigation:** Use the `Up` and `Down` arrow keys to navigate your calculation history. Use `Left` and `Right` to select either the expression or the result. Press `Return` to insert the selected part into the input field.
+            - **LaTeX Export:** Hover over any history row and click the copy icon (`doc.on.doc`) to copy the entire equation to your clipboard as a formatted LaTeX string.
+            - **`ans` Variable:** The result of the last calculation is always stored in a variable called `ans`.
+            """
+        ),
+        .init(title: "Syntax Reference", content:
+            """
+            This calculator supports advanced syntax for complex operations. Use the following formats:
+            - **Variable Assignment:** `x := 5 * 2`
+            - **Function Definition:** `f(x, y) := x^2 + y^2`
+            - **Complex Numbers:** `3 + 4i` or `(3+4i)`
+            - **Vectors:** `vector(1; 2; 3)`
+            - **Matrices:** `matrix(1, 2; 3, 4)`
+            - **Polar Coordinates:** `5 ∠ 30` (respects DEG/RAD mode)
+            """
+        ),
+        .init(title: "Operators", content:
+            """
+            - **Standard:** `+`, `-`, `*`, `/`
+            - **Power:** `^`
+            - **Modulus:** `%`
+            - **Implicit Multiplication:** Supported for cases like `2x`, `(2)(3)`, or `2sqrt(9)`.
+            """
+        )
+    ]
 
-    init() {
+
+    init(settings: UserSettings) {
+        self.settings = settings
+        
         self.operatorSymbols = [
             .init(symbol: "±", name: "Plus-Minus"),
             .init(symbol: "∠", name: "Angle"),
@@ -224,7 +271,7 @@ class CalculatorViewModel: ObservableObject {
         }
 
         do {
-            let lexer = Lexer(input: expression)
+            let lexer = Lexer(input: expression, decimalSeparator: settings.decimalSeparator)
             let tokens = lexer.tokenize()
             let parser = Parser(tokens: tokens)
             let expressionTree = try parser.parse()
@@ -262,12 +309,12 @@ class CalculatorViewModel: ObservableObject {
         if let selectedItem = history.first(where: { $0.id == navigationManager.selectedHistoryId }) {
             DispatchQueue.main.async {
                 if selectedItem.type == .functionDefinition {
-                    self.rawExpression += selectedItem.expression.replacingOccurrences(of: " ", with: "")
+                    self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: ""))
                 } else {
                     if self.navigationManager.selectedPart == .equation {
-                        self.rawExpression += selectedItem.expression.replacingOccurrences(of: " ", with: "")
+                        self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: ""))
                     } else {
-                        self.rawExpression += self.formatForParsing(selectedItem.result)
+                        self.insertTextAtCursor(self.formatForParsing(selectedItem.result))
                     }
                 }
                 self.resetNavigation()
@@ -290,7 +337,6 @@ class CalculatorViewModel: ObservableObject {
                 }
             }
             
-            // Persist state when variables or functions are defined.
             if calcType == .variableAssignment {
                 saveState()
             } else if calcType == .functionDefinition, case .functionDefinition(let name) = valueToCommit {
@@ -344,6 +390,20 @@ class CalculatorViewModel: ObservableObject {
         userFunctionDefinitions.removeValue(forKey: name)
         saveState()
     }
+    
+    func insertTextAtCursor(_ textToInsert: String) {
+        guard let range = Range(cursorPosition, in: rawExpression) else {
+            rawExpression += textToInsert
+            let newLocation = rawExpression.utf16.count
+            cursorPosition = NSRange(location: newLocation, length: 0)
+            return
+        }
+        
+        rawExpression.replaceSubrange(range, with: textToInsert)
+        
+        let newLocation = cursorPosition.location + textToInsert.utf16.count
+        cursorPosition = NSRange(location: newLocation, length: 0)
+    }
 
     // --- PERSISTENCE ---
 
@@ -353,6 +413,9 @@ class CalculatorViewModel: ObservableObject {
             let functionsData = try JSONEncoder().encode(userFunctionDefinitions)
             UserDefaults.standard.set(variablesData, forKey: "userVariables")
             UserDefaults.standard.set(functionsData, forKey: "userFunctionDefinitions")
+            
+            UserDefaults.standard.set(angleMode.rawValue, forKey: "angleModeSetting")
+            
         } catch {
             print("Error saving state: \(error.localizedDescription)")
         }
@@ -362,7 +425,6 @@ class CalculatorViewModel: ObservableObject {
         do {
             if let variablesData = UserDefaults.standard.data(forKey: "userVariables") {
                 let decodedVars = try JSONDecoder().decode([String: MathValue].self, from: variablesData)
-                // Filter out the 'ans' variable so it doesn't persist between sessions
                 self.variables = decodedVars.filter { $0.key != ansVariable }
             }
             if let functionsData = UserDefaults.standard.data(forKey: "userFunctionDefinitions") {
@@ -370,10 +432,13 @@ class CalculatorViewModel: ObservableObject {
                 rebuildFunctionsFromDefinitions()
             }
         } catch {
-            print("Error loading state: \(error.localizedDescription)")
-            // If decoding fails for any reason, start with a clean slate.
+            print("Error loading variable/function state: \(error.localizedDescription)")
             self.variables = [:]
             self.userFunctionDefinitions = [:]
+        }
+        
+        if let savedAngleMode = UserDefaults.standard.string(forKey: "angleModeSetting") {
+            self.angleMode = AngleMode(rawValue: savedAngleMode) ?? .degrees
         }
     }
     
@@ -386,7 +451,7 @@ class CalculatorViewModel: ObservableObject {
 
         for (_, definitionString) in definitionsToRebuild {
             do {
-                let lexer = Lexer(input: definitionString)
+                let lexer = Lexer(input: definitionString, decimalSeparator: settings.decimalSeparator)
                 let tokens = lexer.tokenize()
                 let parser = Parser(tokens: tokens)
                 let expressionTree = try parser.parse()
@@ -407,7 +472,7 @@ class CalculatorViewModel: ObservableObject {
     // --- LATEX FORMATTING ---
     
     func formatCalculationAsLaTeX(_ calculation: Calculation) -> String {
-        return LaTeXEngine.format(calculation: calculation, evaluator: self.evaluator, angleMode: self.angleMode)
+        return LaTeXEngine.format(calculation: calculation, evaluator: self.evaluator, angleMode: self.angleMode, settings: self.settings)
     }
 
 
@@ -473,21 +538,39 @@ class CalculatorViewModel: ObservableObject {
         return "cmatrix(\(rows))"
     }
 
-    private func formatScalarForDisplay(_ value: Double) -> String {
-        if value.truncatingRemainder(dividingBy: 1) == 0 {
-            return String(format: "%.0f", value)
+    func formatScalarForDisplay(_ value: Double) -> String {
+        let formattedString: String
+        switch settings.displayMode {
+        case .auto:
+            if value.truncatingRemainder(dividingBy: 1) == 0 {
+                formattedString = String(format: "%.0f", value)
+            } else {
+                let absValue = abs(value)
+                if absValue > 0 && (absValue < 1e-4 || absValue >= 1e15) {
+                    formattedString = String(format: "%.4g", value)
+                } else {
+                    let tempFormatted = String(format: "%.10f", value)
+                    if let regex = try? NSRegularExpression(pattern: "\\.?0+$") {
+                        let nsString = tempFormatted as NSString
+                        let range = NSRange(location: 0, length: nsString.length)
+                        let modString = regex.stringByReplacingMatches(in: tempFormatted, options: [], range: range, withTemplate: "")
+                        let finalString = modString.isEmpty ? "0" : modString
+                        formattedString = finalString.hasSuffix(".") ? String(finalString.dropLast()) : finalString
+                    } else {
+                        formattedString = tempFormatted
+                    }
+                }
+            }
+        case .scientific:
+            formattedString = String(format: "%.*e", settings.fixedDecimalPlaces, value)
+        case .fixed:
+            formattedString = String(format: "%.\(settings.fixedDecimalPlaces)f", value)
         }
         
-        let absValue = abs(value)
-        if absValue > 0 && (absValue < 1e-4 || absValue >= 1e15) {
-            return String(format: "%.4g", value)
-        } else {
-            let formatted = String(format: "%.4f", value)
-            if let regex = try? NSRegularExpression(pattern: "\\.?0+$", options: .caseInsensitive) {
-                return regex.stringByReplacingMatches(in: formatted, options: [], range: NSRange(location: 0, length: formatted.utf16.count), withTemplate: "")
-            }
-            return formatted
+        if settings.decimalSeparator == .comma {
+            return formattedString.replacingOccurrences(of: ".", with: ",")
         }
+        return formattedString
     }
     
     private func formatComplexForDisplay(_ value: Complex) -> String {
@@ -504,7 +587,7 @@ class CalculatorViewModel: ObservableObject {
         
         if self.angleMode == .degrees {
             let angleDegrees = angle * (180.0 / .pi)
-            return "\(formatScalarForDisplay(magnitude)) ∠ \(String(format: "%.2f", angleDegrees))°"
+            return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angleDegrees))°"
         } else {
             return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angle)) rad"
         }
@@ -565,7 +648,7 @@ class CalculatorViewModel: ObservableObject {
         if stringValue.contains("e") {
             return "(\(stringValue.replacingOccurrences(of: "e", with: "*10^")))"
         }
-        return stringValue
+        return stringValue.replacingOccurrences(of: ",", with: ".")
     }
     
     private func formatComplexForParsing(_ value: Complex) -> String {
@@ -579,4 +662,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-

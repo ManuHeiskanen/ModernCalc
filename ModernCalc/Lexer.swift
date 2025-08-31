@@ -27,21 +27,13 @@ struct Token: Equatable {
 }
 
 class Lexer {
-    enum DecimalSeparator: Character {
-        case period = "."
-        case comma = ","
-    }
-
+    // NOTE: The DecimalSeparator enum has been moved to UserSettings.swift to be shared globally.
+    
     private let input: String
     private var currentIndex: String.Index
     private let decimalSeparator: DecimalSeparator
-    // NEW: A set of all SI prefixes for quick lookup.
-    private let siPrefixes: Set<String> = [
-        "yotta", "zetta", "exa", "peta", "tera", "giga", "mega", "kilo",
-        "hecto", "deca", "deci", "centi", "milli", "micro", "nano",
-        "pico", "femto", "atto", "zepto", "yocto"
-    ]
 
+    // The init now uses the global DecimalSeparator type.
     init(input: String, decimalSeparator: DecimalSeparator = .period) {
         self.input = input
         self.currentIndex = input.startIndex
@@ -63,22 +55,19 @@ class Lexer {
                 continue
             }
             
-            if char.isLetter || greekLetters.contains(char) {
+            if char.isLetter || greekLetters.contains(char) || char == "_" {
                 if char == "i" {
                     if peekNext() == "'" {
-                        advance()
-                        advance()
+                        advance(); advance()
                         tokens.append(Token(type: .unitVector("i"), rawValue: "i'"))
                     } else {
                         tokens.append(lexIdentifierOrComplex())
                     }
                 } else if char == "j" && peekNext() == "'" {
-                    advance()
-                    advance()
+                    advance(); advance()
                     tokens.append(Token(type: .unitVector("j"), rawValue: "j'"))
                 } else if char == "k" && peekNext() == "'" {
-                    advance()
-                    advance()
+                    advance(); advance()
                     tokens.append(Token(type: .unitVector("k"), rawValue: "k'"))
                 } else {
                     tokens.append(lexIdentifierOrComplex())
@@ -134,9 +123,10 @@ class Lexer {
         var hasDecimal = false
 
         while let char = peek() {
+            // Use the character property of the global enum.
             if char.isNumber {
                 advance()
-            } else if char == decimalSeparator.rawValue && !hasDecimal {
+            } else if char == decimalSeparator.character && !hasDecimal {
                 hasDecimal = true
                 advance()
             } else {
@@ -200,3 +190,4 @@ class Lexer {
         return char
     }
 }
+

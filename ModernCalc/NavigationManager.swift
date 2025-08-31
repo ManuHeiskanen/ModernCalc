@@ -97,4 +97,3 @@ class NavigationManager: ObservableObject {
         selectedPart = .result(index: 0)
     }
 }
-
