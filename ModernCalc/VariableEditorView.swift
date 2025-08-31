@@ -10,11 +10,16 @@ import SwiftUI
 struct VariableEditorView: View {
     @ObservedObject var viewModel: CalculatorViewModel
     @Environment(\.dismiss) var dismiss
-    // NEW: State for the search text and the selected tab.
+    
+    // Define an enum for the tabs for better readability and safety.
+    enum EditorTab {
+        case userDefined, builtIn, constants
+    }
+    
     @State private var searchText = ""
-    @State private var selectedTab = 0
+    @State private var selectedTab: EditorTab = .userDefined
 
-    // NEW: A computed property to filter the built-in functions based on search text.
+    // A computed property to filter the built-in functions based on search text.
     var filteredBuiltinFunctions: [BuiltinFunction] {
         if searchText.isEmpty {
             return viewModel.builtinFunctions
@@ -25,13 +30,25 @@ struct VariableEditorView: View {
             }
         }
     }
+    
+    // A computed property to filter the physical constants based on search text.
+    var filteredConstants: [PhysicalConstant] {
+        if searchText.isEmpty {
+            return viewModel.physicalConstants
+        } else {
+            return viewModel.physicalConstants.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText) ||
+                $0.symbol.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             // --- Header ---
             HStack {
                 // The title changes based on the selected tab.
-                Text(selectedTab == 0 ? "Variables & Functions" : "Built-in Functions")
+                Text(headerTitle)
                     .font(.title2).bold()
                 Spacer()
                 Button("Done") {
@@ -43,23 +60,39 @@ struct VariableEditorView: View {
             
             Divider()
 
-            // MODIFIED: Replaced the List with a TabView.
+            // Replaced the List with a TabView that uses the enum.
             TabView(selection: $selectedTab) {
                 // --- Tab 1: User-Defined Items ---
                 userDefinedView
                     .tabItem { Text("User Defined") }
-                    .tag(0)
+                    .tag(EditorTab.userDefined)
 
                 // --- Tab 2: Built-in Functions ---
                 builtinFunctionsView
                     .tabItem { Text("Built-in Functions") }
-                    .tag(1)
+                    .tag(EditorTab.builtIn)
+                    
+                // --- Tab 3: Physical Constants ---
+                constantsView
+                    .tabItem { Text("Constants") }
+                    .tag(EditorTab.constants)
             }
+            // Clear search text when switching tabs for a better user experience.
+            .onChange(of: selectedTab) { _ in searchText = "" }
         }
         .frame(minWidth: 450, minHeight: 400, idealHeight: 600)
     }
     
-    // NEW: A view for the user-defined variables and functions.
+    // A computed property for the header title based on the selected tab.
+    private var headerTitle: String {
+        switch selectedTab {
+        case .userDefined: return "Variables & Functions"
+        case .builtIn: return "Built-in Functions"
+        case .constants: return "Physical Constants"
+        }
+    }
+    
+    // A view for the user-defined variables and functions.
     private var userDefinedView: some View {
         List {
             Section {
@@ -119,7 +152,7 @@ struct VariableEditorView: View {
         .listStyle(.sidebar)
     }
     
-    // NEW: A view for the searchable list of built-in functions.
+    // A view for the searchable list of built-in functions.
     private var builtinFunctionsView: some View {
         VStack {
             List {
@@ -137,4 +170,33 @@ struct VariableEditorView: View {
             .searchable(text: $searchText, prompt: "Search Functions")
         }
     }
+    
+    // A view for the searchable list of physical constants.
+    private var constantsView: some View {
+        VStack {
+            List {
+                ForEach(filteredConstants) { constant in
+                    HStack(alignment: .top) {
+                        Text(constant.symbol)
+                            .font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                            .frame(width: 40, alignment: .leading)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(constant.name)
+                                .foregroundColor(.primary)
+                            Text(String(constant.value))
+                                .foregroundColor(.secondary)
+                                .font(.system(.body, design: .monospaced))
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+            .listStyle(.sidebar)
+            .searchable(text: $searchText, prompt: "Search Constants")
+        }
+    }
 }
+

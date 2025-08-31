@@ -38,7 +38,32 @@ enum MathError: Error, CustomStringConvertible {
 
 struct Evaluator {
 
-    private let constants: [String: Double] = [ "pi": Double.pi, "e": M_E ]
+    private let constants: [String: Double] = [
+        // Basic
+        "pi": Double.pi,
+        "e": M_E,
+        
+        // Physics
+        "c": 299792458,      // Speed of light (m/s)
+        "μ0": 1.25663706212e-6, // Vacuum permeability (H/m)
+        "ε0": 8.8541878128e-12, // Vacuum permittivity (F/m)
+        "g": 9.80665,        // Standard gravity (m/s^2)
+        "G": 6.67430e-11,    // Gravitational constant (m^3 kg^-1 s^-2)
+        "h": 6.62607015e-34, // Planck constant (J·s)
+        "ħ": 1.054571817e-34,// Reduced Planck constant (J·s)
+        
+        // Atomic
+        "me": 9.1093837015e-31, // Electron mass (kg)
+        "mp": 1.67262192369e-27, // Proton mass (kg)
+        "mn": 1.67492749804e-27, // Neutron mass (kg)
+        "e0": 1.602176634e-19,  // Elementary charge (C)
+        
+        // Chemistry
+        "NA": 6.02214076e23,     // Avogadro constant (mol^-1)
+        "R": 8.314462618,       // Gas constant (J/(mol·K))
+        "kB": 1.380649e-23       // Boltzmann constant (J/K)
+    ]
+    
     // NEW: A dictionary of all standard SI prefixes.
     private let siPrefixes: [String: Double] = [
         "yotta": 1e24, "zetta": 1e21, "exa": 1e18, "peta": 1e15, "tera": 1e12,
@@ -668,3 +693,4 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
+

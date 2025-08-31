@@ -43,6 +43,15 @@ struct BuiltinFunction: Identifiable, Hashable {
     let description: String
 }
 
+// NEW: A struct to hold the data for a physical constant.
+// It is Identifiable so it can be used in a ForEach loop in SwiftUI.
+struct PhysicalConstant: Identifiable, Hashable {
+    let id = UUID()
+    let symbol: String
+    let name: String
+    let value: Double
+}
+
 struct MathSymbol: Identifiable {
     let id = UUID()
     let symbol: String
@@ -153,6 +162,25 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations.")
     ]
+    
+    // The list of physical constants for the UI.
+    let physicalConstants: [PhysicalConstant] = [
+        .init(symbol: "c", name: "Speed of light", value: 299792458),
+        .init(symbol: "g", name: "Standard gravity", value: 9.80665),
+        .init(symbol: "G", name: "Gravitational constant", value: 6.67430e-11),
+        .init(symbol: "h", name: "Planck constant", value: 6.62607015e-34),
+        .init(symbol: "ħ", name: "Reduced Planck constant", value: 1.054571817e-34),
+        .init(symbol: "μ0", name: "Vacuum permeability", value: 1.25663706212e-6),
+        .init(symbol: "ε0", name: "Vacuum permittivity", value: 8.8541878128e-12),
+        .init(symbol: "me", name: "Electron mass", value: 9.1093837015e-31),
+        .init(symbol: "mp", name: "Proton mass", value: 1.67262192369e-27),
+        .init(symbol: "mn", name: "Neutron mass", value: 1.67492749804e-27),
+        .init(symbol: "e0", name: "Elementary charge", value: 1.602176634e-19),
+        .init(symbol: "NA", name: "Avogadro constant", value: 6.02214076e23),
+        .init(symbol: "R", name: "Gas constant", value: 8.314462618),
+        .init(symbol: "kB", name: "Boltzmann constant", value: 1.380649e-23)
+    ]
+
 
     init() {
         cancellable = $rawExpression
