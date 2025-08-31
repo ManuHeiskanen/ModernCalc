@@ -125,7 +125,17 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "conj", signature: "conj(complex)", description: "Calculates the complex conjugate."),
         .init(name: "arg", signature: "arg(complex)", description: "Calculates the argument (phase) of a complex number."),
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
-        .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations.")
+        .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
+        .init(name: "hypot", signature: "hypot(sideA, sideB)", description: "Calculates the hypotenuse of a right triangle."),
+        .init(name: "side", signature: "side(hyp, sideA)", description: "Calculates the missing side of a right triangle."),
+        .init(name: "area_rect", signature: "area_rect(width, height)", description: "Calculates the area of a rectangle."),
+        .init(name: "area_tri", signature: "area_tri(base, height)", description: "Calculates the area of a triangle."),
+        .init(name: "area_circle", signature: "area_circle(radius)", description: "Calculates the area of a circle."),
+        .init(name: "circum_circle", signature: "circum_circle(radius)", description: "Calculates the circumference of a circle."),
+        .init(name: "vol_sphere", signature: "vol_sphere(radius)", description: "Calculates the volume of a sphere."),
+        .init(name: "vol_cube", signature: "vol_cube(side)", description: "Calculates the volume of a cube."),
+        .init(name: "vol_cylinder", signature: "vol_cylinder(radius, height)", description: "Calculates the volume of a cylinder."),
+        .init(name: "vol_cone", signature: "vol_cone(radius, height)", description: "Calculates the volume of a cone.")
     ]
     
     let physicalConstants: [PhysicalConstant] = [

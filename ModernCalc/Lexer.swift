@@ -166,7 +166,7 @@ class Lexer {
     private func lexIdentifierOrComplex() -> Token {
         let startIndex = currentIndex
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
-        while let char = peek(), char.isLetter || greekLetters.contains(char) {
+        while let char = peek(), char.isLetter || greekLetters.contains(char) || char == "_" {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
@@ -200,4 +200,3 @@ class Lexer {
         return char
     }
 }
-

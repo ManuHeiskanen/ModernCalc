@@ -27,6 +27,7 @@ enum MathError: Error, CustomStringConvertible {
                 }
                 return "Error: Operator '\(op)' is not supported between \(typeA) and \(typeB)."
             }
+            if typeA == "hyp < side" { return "Error: Hypotenuse must be greater than or equal to the side." }
             if typeA == "Singular Matrix" { return "Error: Matrix is singular and cannot be inverted."}
             return "Error: Operator '\(op)' is not supported for \(typeA)."
         case .dimensionMismatch(let reason): return "Error: Dimension mismatch. \(reason)."
@@ -150,6 +151,22 @@ struct Evaluator {
         "conj": { arg in
             guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
             return .complex(c.conjugate())
+        },
+        "area_circle": { arg in
+            guard case .scalar(let r) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(Double.pi * r * r)
+        },
+        "circum_circle": { arg in
+            guard case .scalar(let r) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(2 * Double.pi * r)
+        },
+        "vol_sphere": { arg in
+            guard case .scalar(let r) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar((4.0/3.0) * Double.pi * pow(r, 3))
+        },
+        "vol_cube": { arg in
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(pow(s, 3))
         }
     ]
     
@@ -215,6 +232,45 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
             }
             return .scalar(try combinations(n: n, k: k))
+        },
+        "hypot": { a, b in
+            guard case .scalar(let s1) = a, case .scalar(let s2) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar(Foundation.sqrt(s1*s1 + s2*s2))
+        },
+        "side": { a, b in
+            guard case .scalar(let c) = a, case .scalar(let s) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars (hyp, side)", found: "\(a.typeName), \(b.typeName)")
+            }
+            guard c >= s else {
+                throw MathError.unsupportedOperation(op: "side", typeA: "hyp < side", typeB: nil)
+            }
+            return .scalar(Foundation.sqrt(c*c - s*s))
+        },
+        "area_rect": { a, b in
+            guard case .scalar(let w) = a, case .scalar(let h) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars (width, height)", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar(w * h)
+        },
+        "area_tri": { a, b in
+            guard case .scalar(let base) = a, case .scalar(let h) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars (base, height)", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar(0.5 * base * h)
+        },
+        "vol_cylinder": { a, b in
+            guard case .scalar(let r) = a, case .scalar(let h) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars (radius, height)", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar(Double.pi * r * r * h)
+        },
+        "vol_cone": { a, b in
+            guard case .scalar(let r) = a, case .scalar(let h) = b else {
+                throw MathError.typeMismatch(expected: "Two Scalars (radius, height)", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .scalar((1.0/3.0) * Double.pi * r * r * h)
         }
     ]
     
@@ -699,5 +755,4 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
-
 
