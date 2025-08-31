@@ -123,7 +123,7 @@ struct HistoryView: View {
                         VStack(alignment: .trailing, spacing: 4) {
                             switch calculation.type {
                             case .functionDefinition:
-                                Text(calculation.expression)
+                                Text(highlightSIPrefixes(in: calculation.expression))
                                     .font(.system(size: 24, weight: .light, design: .monospaced))
                                     .foregroundColor(.primary)
                                     .padding(.horizontal, 2)
@@ -152,7 +152,7 @@ struct HistoryView: View {
                                                 .frame(width: 8, height: 8)
                                                 .offset(y: -4)
                                         }
-                                        Text(calculation.expression)
+                                        Text(highlightSIPrefixes(in: calculation.expression))
                                     }
                                     .font(.system(size: 24, weight: .light, design: .monospaced))
                                     .foregroundColor(.primary)
@@ -248,6 +248,37 @@ struct HistoryView: View {
             }
         }
         .frame(maxHeight: .infinity)
+    }
+    
+    // MODIFIED: This function now uses a more advanced regex to correctly find SI prefixes.
+    private func highlightSIPrefixes(in expression: String) -> AttributedString {
+        var attributedString = AttributedString(expression)
+        
+        // This pattern looks for any of the SI prefixes that are not immediately
+        // preceded by another letter, and are followed by a word boundary.
+        // This correctly identifies "kilo" in "2kilo" but not in "akilo".
+        let pattern = "(?<![a-zA-Z])(" + viewModel.siPrefixes.joined(separator: "|") + ")\\b"
+        
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            let nsRange = NSRange(expression.startIndex..., in: expression)
+            let matches = regex.matches(in: expression, options: [], range: nsRange)
+            
+            for match in matches {
+                // The first capture group (at index 1) is the prefix we want to color.
+                if let range = Range(match.range(at: 1), in: expression) {
+                    // Convert the String.Index range to AttributedString.Index range
+                    if let attrRange = attributedString.range(of: expression[range]) {
+                         attributedString[attrRange].foregroundColor = .teal
+                    }
+                }
+            }
+        } catch {
+            // If regex fails, just return the original string. It's safer.
+            print("Regex error for SI prefix highlighting: \(error)")
+        }
+        
+        return attributedString
     }
     
     private func isResultSelected(calculation: Calculation, index: Int) -> Bool {
@@ -377,7 +408,6 @@ struct SymbolsGridView: View {
             }
         }
         .padding()
-        // MODIFIED: Removed fixed height to allow the popover to resize.
         .frame(width: 320)
     }
 }

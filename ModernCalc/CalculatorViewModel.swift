@@ -75,6 +75,13 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
+    // NEW: Expose the list of SI prefixes for UI highlighting.
+    let siPrefixes: Set<String> = [
+        "yotta", "zetta", "exa", "peta", "tera", "giga", "mega", "kilo",
+        "hecto", "deca", "deci", "centi", "milli", "micro", "nano",
+        "pico", "femto", "atto", "zepto", "yocto"
+    ]
+    
     let operatorSymbols: [MathSymbol] = [
         .init(symbol: "±", name: "Plus-Minus"),
         .init(symbol: "∠", name: "Angle"),
@@ -333,7 +340,6 @@ class CalculatorViewModel: ObservableObject {
         return "cmatrix(\(rows))"
     }
 
-    // MODIFIED: This function now uses adaptive precision and scientific notation.
     private func formatScalarForDisplay(_ value: Double) -> String {
         if value.truncatingRemainder(dividingBy: 1) == 0 {
             return String(format: "%.0f", value)
@@ -344,7 +350,10 @@ class CalculatorViewModel: ObservableObject {
             return String(format: "%.4g", value)
         } else {
             let formatted = String(format: "%.4f", value)
-            return formatted.replacingOccurrences(of: "\\.?0+$", with: "", options: .regularExpression)
+            if let regex = try? NSRegularExpression(pattern: "\\.?0+$", options: .caseInsensitive) {
+                return regex.stringByReplacingMatches(in: formatted, options: [], range: NSRange(location: 0, length: formatted.utf16.count), withTemplate: "")
+            }
+            return formatted
         }
     }
     
@@ -418,13 +427,10 @@ class CalculatorViewModel: ObservableObject {
         }.joined(separator: "\n")
     }
     
-    // --- Parsing Formatting Helpers (High Precision & Parser-Friendly) ---
-    // MODIFIED: This function now converts scientific notation to a parser-friendly format.
     private func formatScalarForParsing(_ value: Double) -> String {
         let stringValue = String(value)
         if stringValue.contains("e") {
-            // Convert scientific "e" to "*10^" for the parser
-            return stringValue.replacingOccurrences(of: "e", with: "*10^")
+            return "(\(stringValue.replacingOccurrences(of: "e", with: "*10^")))"
         }
         return stringValue
     }
