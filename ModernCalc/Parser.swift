@@ -15,7 +15,7 @@ struct FunctionDefinitionNode: ExpressionNode {
 }
 struct TupleNode: ExpressionNode {
     let elements: [ExpressionNode]
-    var description: String { "(\(elements.map { $0.description }.joined(separator: " ± ")))" }
+    var description: String { "(\(elements.map { $0.description }.joined(separator: " OR ")))" }
 }
 struct AssignmentNode: ExpressionNode {
     let name: String, expression: ExpressionNode
@@ -141,13 +141,6 @@ class Parser {
             if let precedence = operatorPrecedence, let op = opToken, precedence > currentPrecedence {
                 if !isImplicit {
                     try advance()
-                }
-
-                if op.rawValue == "±" {
-                    let right = try parseExpression(currentPrecedence: precedence)
-                    let plusNode = BinaryOpNode(op: Token(type: .op("+"), rawValue: "+"), left: left, right: right)
-                    let minusNode = BinaryOpNode(op: Token(type: .op("-"), rawValue: "-"), left: left, right: right)
-                    return TupleNode(elements: [plusNode, minusNode])
                 }
                 
                 let nextPrecedence = (op.rawValue == "^") ? precedence - 1 : precedence
@@ -306,7 +299,6 @@ class Parser {
         return ComplexMatrixNode(rows: rows)
     }
 
-    // --- Precedence and Helper Functions ---
     private func unaryOperatorPrecedence() -> Int { return 6 }
     private func implicitMultiplicationPrecedence() -> Int { return 4 }
     private func infixOperatorPrecedence(for token: Token) -> Int? {
@@ -314,7 +306,7 @@ class Parser {
             switch opString {
             case "±": return 1
             case "+", "-": return 2
-            case "*", "/", "∠": return 3 // NEW: Add precedence for polar operator
+            case "*", "/", "∠": return 3
             case "%": return 4
             case "^": return 5
             default: return nil

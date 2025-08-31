@@ -51,7 +51,7 @@ struct ContentView: View {
             CalculatorInputView(
                 expression: $viewModel.rawExpression,
                 previewText: viewModel.previewText,
-                symbols: viewModel.mathSymbols, // Pass the symbols
+                symbols: viewModel.mathSymbols,
                 onTap: { viewModel.resetNavigation() }
             )
             .focused($isInputFocused)
@@ -172,24 +172,52 @@ struct HistoryView: View {
                                     Text("=")
                                         .font(.system(size: 24, weight: .light, design: .monospaced))
                                         .foregroundColor(.secondary)
-                                        
-                                    Text(viewModel.formatForHistory(calculation.result))
-                                        .font(.system(size: 24, weight: .light, design: .monospaced))
-                                        .multilineTextAlignment(.trailing)
-                                        .foregroundColor(.primary)
-                                        .padding(.horizontal, 2)
-                                        .padding(.vertical, 2)
-                                        .background(
-                                            (hoveredItem?.id == calculation.id && hoveredItem?.part == .result) || (selectedHistoryId == calculation.id && selectedHistoryPart == .result) ?
-                                            Color.accentColor.opacity(0.25) : Color.clear
-                                        )
-                                        .onHover { isHovering in
-                                            withAnimation(.easeOut(duration: 0.15)) {
-                                                hoveredItem = isHovering ? (id: calculation.id, part: .result) : nil
+                                    
+                                    if case .tuple(let values) = calculation.result {
+                                        HStack(spacing: 0) {
+                                            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                                                Text(viewModel.formatForHistory(value))
+                                                    .font(.system(size: 24, weight: .light, design: .monospaced))
+                                                    .multilineTextAlignment(.trailing)
+                                                    .foregroundColor(.primary)
+                                                    .padding(.horizontal, 2)
+                                                    .padding(.vertical, 2)
+                                                    .background(
+                                                        isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear
+                                                    )
+                                                    .onHover { isHovering in
+                                                        withAnimation(.easeOut(duration: 0.15)) {
+                                                            hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil
+                                                        }
+                                                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                                    }
+                                                    .onTapGesture { rawExpression += viewModel.formatForParsing(value) }
+                                                
+                                                if index < values.count - 1 {
+                                                    Text(" OR ")
+                                                        .font(.system(size: 20, weight: .light, design: .monospaced))
+                                                        .foregroundColor(.secondary)
+                                                }
                                             }
-                                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                         }
-                                        .onTapGesture { rawExpression += viewModel.formatForParsing(calculation.result) }
+                                    } else {
+                                        Text(viewModel.formatForHistory(calculation.result))
+                                            .font(.system(size: 24, weight: .light, design: .monospaced))
+                                            .multilineTextAlignment(.trailing)
+                                            .foregroundColor(.primary)
+                                            .padding(.horizontal, 2)
+                                            .padding(.vertical, 2)
+                                            .background(
+                                                isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear
+                                            )
+                                            .onHover { isHovering in
+                                                withAnimation(.easeOut(duration: 0.15)) {
+                                                    hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil
+                                                }
+                                                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                            }
+                                            .onTapGesture { rawExpression += viewModel.formatForParsing(calculation.result) }
+                                    }
                                 }
                                 .padding(.vertical, 12)
                                 .padding(.horizontal)
@@ -220,6 +248,22 @@ struct HistoryView: View {
         }
         .frame(maxHeight: .infinity)
     }
+    
+    private func isResultSelected(calculation: Calculation, index: Int) -> Bool {
+        let isHovered = (hoveredItem?.id == calculation.id)
+        let isSelected = (selectedHistoryId == calculation.id)
+        
+        if let hoveredPart = hoveredItem?.part, case .result(let hoveredIndex) = hoveredPart, isHovered {
+            return hoveredIndex == index
+        }
+        
+        // FIX: Removed the unnecessary 'if let' and directly checked the case.
+        if case .result(let selectedIndex) = selectedHistoryPart, isSelected {
+            return selectedIndex == index
+        }
+        
+        return false
+    }
 }
 
 
@@ -244,13 +288,11 @@ struct CalculatorInputView: View {
     var symbols: [MathSymbol]
     var onTap: () -> Void
     
-    // NEW: State to control the symbols popover.
     @State private var isShowingSymbolsPopover = false
 
     var body: some View {
         HStack(spacing: 0) {
             ZStack(alignment: .leading) {
-                // This is a hidden text field used to size the view correctly.
                 HStack(spacing: 0) {
                     Text(expression)
                         .font(.system(size: 26, weight: .regular, design: .monospaced))
@@ -276,7 +318,6 @@ struct CalculatorInputView: View {
             }
             Spacer()
             
-            // NEW: The button to show the symbols popover.
             Button(action: { isShowingSymbolsPopover = true }) {
                 Image(systemName: "plus.slash.minus")
                     .font(.system(size: 20))
@@ -291,7 +332,6 @@ struct CalculatorInputView: View {
     }
 }
 
-// NEW: A dedicated view for the symbols grid inside the popover.
 struct SymbolsGridView: View {
     @Binding var expression: String
     let symbols: [MathSymbol]
@@ -311,7 +351,7 @@ struct SymbolsGridView: View {
                             .frame(width: 40, height: 40)
                             .background(Color.secondary.opacity(0.1))
                             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .help(symbol.name) // Add a tooltip
+                            .help(symbol.name)
                     }
                     .buttonStyle(.plain)
                 }

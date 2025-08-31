@@ -9,16 +9,16 @@ import Foundation
 import Combine
 import SwiftUI
 
-enum SelectionPart {
+// MODIFIED: SelectionPart now holds the index of the selected result.
+enum SelectionPart: Equatable {
     case equation
-    case result
+    case result(index: Int)
 }
 
 class NavigationManager: ObservableObject {
     @Published var selectedHistoryId: UUID? = nil
-    @Published var selectedPart: SelectionPart = .result
+    @Published var selectedPart: SelectionPart = .result(index: 0)
 
-    // MODIFIED: Accepts the viewModel to format the result string for preview.
     func handleKeyPress(keys: Set<KeyEquivalent>, history: [Calculation], viewModel: CalculatorViewModel) -> String? {
         guard !history.isEmpty else { return nil }
         
@@ -30,29 +30,63 @@ class NavigationManager: ObservableObject {
             } else {
                 selectedHistoryId = history.last?.id
             }
+            // Reset to the first result part when changing rows.
+            selectedPart = .result(index: 0)
+            
         } else if keys.contains(.downArrow) {
             if let index = currentIndex, index < history.count - 1 {
                 selectedHistoryId = history[index + 1].id
+                selectedPart = .result(index: 0)
             } else {
                 selectedHistoryId = nil
-                return nil // Return nil when deselecting
+                return nil
             }
-        // MODIFIED: Check the calculation type instead of the old isDefinition flag.
+            
         } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), selectedItem.type != .functionDefinition {
+            // NEW: Logic to navigate between multiple results of a tuple.
+            let resultCount: Int
+            if case .tuple(let values) = selectedItem.result {
+                resultCount = values.count
+            } else {
+                resultCount = 1
+            }
+
             if keys.contains(.leftArrow) {
-                selectedPart = .equation
+                if case .result(let index) = selectedPart {
+                    if index > 0 {
+                        selectedPart = .result(index: index - 1)
+                    } else {
+                        selectedPart = .equation
+                    }
+                }
             } else if keys.contains(.rightArrow) {
-                selectedPart = .result
+                if selectedPart == .equation {
+                    selectedPart = .result(index: 0)
+                } else if case .result(let index) = selectedPart {
+                    if index < resultCount - 1 {
+                        selectedPart = .result(index: index + 1)
+                    }
+                }
             }
         }
         
         if let selectedItem = history.first(where: { $0.id == selectedHistoryId }) {
-            // MODIFIED: Check the calculation type.
             if selectedItem.type == .functionDefinition {
                 return selectedItem.expression.replacingOccurrences(of: " ", with: "")
             }
-            let resultString = viewModel.formatForParsing(selectedItem.result)
-            return selectedPart == .equation ? selectedItem.expression.replacingOccurrences(of: " ", with: "") : resultString
+            
+            // NEW: Return the specific result from the tuple based on the selected index.
+            if case .result(let index) = selectedPart {
+                if case .tuple(let values) = selectedItem.result {
+                    if index < values.count {
+                        return viewModel.formatForParsing(values[index])
+                    }
+                } else if index == 0 { // For single results
+                    return viewModel.formatForParsing(selectedItem.result)
+                }
+            }
+            
+            return selectedItem.expression.replacingOccurrences(of: " ", with: "")
         } else {
             return nil
         }
@@ -60,7 +94,7 @@ class NavigationManager: ObservableObject {
 
     func resetSelection() {
         selectedHistoryId = nil
-        selectedPart = .result
+        selectedPart = .result(index: 0)
     }
 }
 
