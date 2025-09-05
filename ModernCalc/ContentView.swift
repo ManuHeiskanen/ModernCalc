@@ -12,7 +12,7 @@ struct ContentView: View {
     @StateObject private var viewModel: CalculatorViewModel
     
     @FocusState private var isInputFocused: Bool
-    @State private var isHoveringOnMenuButton = false
+    // This state remains to control the sheet, but the button itself is moved.
     @State private var isShowingSheet = false
     
     init(settings: UserSettings) {
@@ -21,79 +21,62 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            VStack(spacing: 0) {
-                Spacer().frame(height: 40)
-                
-                HistoryView(
-                    viewModel: viewModel,
-                    history: viewModel.history,
-                    rawExpression: $viewModel.rawExpression,
-                    selectedHistoryId: viewModel.selectedHistoryId,
-                    selectedHistoryPart: viewModel.selectedHistoryPart
-                )
-                Divider()
-                
-                FormattedExpressionWithButtonsView(
-                    viewModel: viewModel,
-                    result: viewModel.liveResult,
-                    greekSymbols: viewModel.greekSymbols
-                )
-                Divider()
-
-                CalculatorInputView(
-                    viewModel: viewModel,
-                    expression: $viewModel.rawExpression,
-                    cursorPosition: $viewModel.cursorPosition,
-                    previewText: viewModel.previewText,
-                    operatorSymbols: viewModel.operatorSymbols,
-                    constantSymbols: viewModel.constantSymbols,
-                    onTap: { viewModel.resetNavigation() }
-                )
-                .focused($isInputFocused)
-                .onAppear {
-                    isInputFocused = true
-                }
-                .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
-                    if key.key == .return {
-                        DispatchQueue.main.async{
-                            viewModel.commitCalculation()
-                        }
-                        return .handled
-                    }
-                    
-                    if viewModel.handleKeyPress(keys: [key.key]) {
-                        return .handled
-                    }
-                    return .ignored
-                }
-                .sheet(isPresented: $isShowingSheet) {
-                    VariableEditorView(viewModel: viewModel, settings: settings)
-                }
-            }
-            .frame(minWidth: 410, minHeight: 300)
+        // --- CHANGE 1: The main ZStack is now a VStack ---
+        // This removes the overlay behavior at the top level.
+        VStack(spacing: 0) {
+            // --- CHANGE 2: The top spacer is removed ---
+            // The button is no longer here, so the spacer isn't needed.
             
-            HStack {
-                Button(action: { isShowingSheet = true }) {
-                    Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 24))
-                        .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(10)
-                .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
-                .cornerRadius(8)
-                .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHoveringOnMenuButton = hovering
-                    }
-                }
-                Spacer()
+            HistoryView(
+                viewModel: viewModel,
+                history: viewModel.history,
+                rawExpression: $viewModel.rawExpression,
+                selectedHistoryId: viewModel.selectedHistoryId,
+                selectedHistoryPart: viewModel.selectedHistoryPart,
+                // --- CHANGE 3: Pass a binding to the sheet state ---
+                isShowingSheet: $isShowingSheet
+            )
+            Divider()
+            
+            FormattedExpressionWithButtonsView(
+                viewModel: viewModel,
+                result: viewModel.liveResult,
+                greekSymbols: viewModel.greekSymbols
+            )
+            Divider()
+
+            CalculatorInputView(
+                viewModel: viewModel,
+                expression: $viewModel.rawExpression,
+                cursorPosition: $viewModel.cursorPosition,
+                previewText: viewModel.previewText,
+                operatorSymbols: viewModel.operatorSymbols,
+                constantSymbols: viewModel.constantSymbols,
+                onTap: { viewModel.resetNavigation() }
+            )
+            .focused($isInputFocused)
+            .onAppear {
+                isInputFocused = true
             }
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
+            .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
+                if key.key == .return {
+                    DispatchQueue.main.async{
+                        viewModel.commitCalculation()
+                    }
+                    return .handled
+                }
+                
+                if viewModel.handleKeyPress(keys: [key.key]) {
+                    return .handled
+                }
+                return .ignored
+            }
+            .sheet(isPresented: $isShowingSheet) {
+                VariableEditorView(viewModel: viewModel, settings: settings)
+            }
         }
+        .frame(minWidth: 410, minHeight: 300)
+        // --- CHANGE 4: The HStack containing the button is removed entirely from here ---
         .toolbar {
             ToolbarItemGroup {
                 HStack(spacing: 0) {
@@ -131,6 +114,11 @@ struct HistoryView: View {
     @Binding var rawExpression: String
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
+    
+    // --- CHANGE 5: Add a binding for the sheet and state for the button hover ---
+    @Binding var isShowingSheet: Bool
+    @State private var isHoveringOnMenuButton = false
+    
     @State private var lastAddedId: UUID?
     @State private var hoveredItem: (id: UUID, part: SelectionPart)?
     @State private var hoveredRowId: UUID?
@@ -141,79 +129,109 @@ struct HistoryView: View {
             ScrollViewReader { scrollViewProxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(history) { calculation in
-                            VStack(alignment: .trailing, spacing: 4) {
-                                switch calculation.type {
-                                case .functionDefinition, .variableAssignment:
-                                    HStack {
-                                        Text(highlightSIPrefixes(in: calculation.expression))
-                                            .font(.system(size: 24, weight: .light, design: .monospaced))
-                                            .foregroundColor(.primary)
-                                            .padding(.horizontal, 2)
-                                            .padding(.vertical, 2)
-                                            .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.25) : Color.clear)
+                        // --- CHANGE 6: Enumerate the history to get the index of each item ---
+                        ForEach(Array(history.enumerated()), id: \.element.id) { index, calculation in
+                            // --- CHANGE 7: Wrap the row in a ZStack for layering ---
+                            ZStack(alignment: .topLeading) {
+                                // This is the original row content
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    switch calculation.type {
+                                    case .functionDefinition, .variableAssignment:
+                                        HStack {
+                                            Text(highlightSIPrefixes(in: calculation.expression))
+                                                .font(.system(size: 24, weight: .light, design: .monospaced))
+                                                .foregroundColor(.primary)
+                                                .padding(.horizontal, 2)
+                                                .padding(.vertical, 2)
+                                                .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                                .onHover { isHovering in
+                                                    withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                                                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                                }
+                                                .onTapGesture { viewModel.insertTextAtCursor(calculation.expression.replacingOccurrences(of: " ", with: "")) }
+                                            
+                                            Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
+                                        }
+                                        .padding(.vertical, 12).padding(.horizontal)
+                                        // --- CHANGE 8: Ensure the content aligns to the right ---
+                                        .frame(maxWidth: .infinity, alignment: .trailing)
+                                        
+                                    case .evaluation:
+                                        HStack(alignment: .bottom, spacing: 8) {
+                                            HStack(spacing: 8) {
+                                                if calculation.usedAngleSensitiveFunction {
+                                                    Circle().fill(calculation.angleMode == .degrees ? .orange : .purple).frame(width: 8, height: 8).offset(y: -4)
+                                                }
+                                                Text(highlightSIPrefixes(in: calculation.expression))
+                                            }
+                                            .font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                            .background((hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ? Color.accentColor.opacity(0.25) : Color.clear)
                                             .onHover { isHovering in
                                                 withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
                                                 if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                             }
                                             .onTapGesture { viewModel.insertTextAtCursor(calculation.expression.replacingOccurrences(of: " ", with: "")) }
-                                        
-                                        Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
-                                    }
-                                    .padding(.vertical, 12).padding(.horizontal).frame(maxWidth: .infinity, alignment: .trailing)
-                                
-                                case .evaluation:
-                                    HStack(alignment: .bottom, spacing: 8) {
-                                        HStack(spacing: 8) {
-                                            if calculation.usedAngleSensitiveFunction {
-                                                Circle().fill(calculation.angleMode == .degrees ? .orange : .purple).frame(width: 8, height: 8).offset(y: -4)
-                                            }
-                                            Text(highlightSIPrefixes(in: calculation.expression))
-                                        }
-                                        .font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                                        .background((hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                        .onHover { isHovering in
-                                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
-                                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                                        }
-                                        .onTapGesture { viewModel.insertTextAtCursor(calculation.expression.replacingOccurrences(of: " ", with: "")) }
 
-                                        Text("=").font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.secondary)
-                                        
-                                        if case .tuple(let values) = calculation.result {
-                                            HStack(spacing: 0) {
-                                                ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                                                    Text(viewModel.formatForHistory(value))
-                                                        .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                                                        .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                                        .onHover { isHovering in
-                                                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
-                                                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                            Text("=").font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                                            
+                                            if case .tuple(let values) = calculation.result {
+                                                HStack(spacing: 0) {
+                                                    ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                                                        Text(viewModel.formatForHistory(value))
+                                                            .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                                            .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                                            .onHover { isHovering in
+                                                                withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
+                                                                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                                            }
+                                                            .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(value)) }
+                                                        
+                                                        if index < values.count - 1 {
+                                                            Text(" OR ").font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
                                                         }
-                                                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(value)) }
-                                                    
-                                                    if index < values.count - 1 {
-                                                        Text(" OR ").font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
                                                     }
                                                 }
+                                            } else {
+                                                Text(viewModel.formatForHistory(calculation.result))
+                                                    .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                                    .background(isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                                    .onHover { isHovering in
+                                                        withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
+                                                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                                    }
+                                                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
                                             }
-                                        } else {
-                                            Text(viewModel.formatForHistory(calculation.result))
-                                                .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                                                .background(isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                                .onHover { isHovering in
-                                                    withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
-                                                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                                                }
-                                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
+                                            
+                                            Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
                                         }
-                                        
-                                        Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
+                                        .padding(.vertical, 12).padding(.horizontal)
+                                        // --- CHANGE 8: Ensure the content aligns to the right ---
+                                        .frame(maxWidth: .infinity, alignment: .trailing)
                                     }
-                                    .padding(.vertical, 12).padding(.horizontal).frame(maxWidth: .infinity, alignment: .trailing)
+                                    
+                                    Divider().opacity(0.4)
                                 }
                                 
-                                Divider().opacity(0.4)
+                                // --- CHANGE 9: Conditionally add the button ONLY on the first row ---
+                                if index == 0 {
+                                    Button(action: { isShowingSheet = true }) {
+                                        Image(systemName: "ellipsis.circle.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(10)
+                                    .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
+                                    .cornerRadius(8)
+                                    .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
+                                    .onHover { hovering in
+                                        withAnimation(.easeInOut(duration: 0.15)) {
+                                            isHoveringOnMenuButton = hovering
+                                        }
+                                    }
+                                    .padding(.horizontal)
+                                    .padding(.top, 4) // Adjust padding to vertically align with the text
+                                }
                             }
                             .id(calculation.id).transition(.opacity)
                             .background(calculation.id == lastAddedId ? Color.accentColor.opacity(0.1) : Color.clear)
@@ -380,4 +398,3 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
-
