@@ -38,7 +38,8 @@ struct LaTeXEngine {
     
     // --- AST-Based Formatting ---
     
-    private static func formatNode(_ node: ExpressionNode, evaluator: Evaluator, settings: UserSettings) -> String {
+    // Made this function public so it can be accessed from the ViewModel
+    static func formatNode(_ node: ExpressionNode, evaluator: Evaluator, settings: UserSettings) -> String {
         switch node {
         case let numberNode as NumberNode:
             return formatScalar(numberNode.value, settings: settings)
@@ -103,15 +104,25 @@ struct LaTeXEngine {
             let params = funcDefNode.parameterNames.joined(separator: ", ")
             return "\(funcDefNode.name)(\(params)) := \(formatNode(funcDefNode.body, evaluator: evaluator, settings: settings))"
 
-        case is VectorNode, is MatrixNode:
-            do {
-                var emptyVars = [String: MathValue]()
-                var emptyFuncs = [String: FunctionDefinitionNode]()
-                let (value, _) = try evaluator.evaluate(node: node, variables: &emptyVars, functions: &emptyFuncs, angleMode: .radians)
-                return formatMathValue(value, angleMode: .radians, settings: settings)
-            } catch {
-                return node.description
-            }
+        case let vectorNode as VectorNode:
+            let elements = vectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
+            return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+
+        case let matrixNode as MatrixNode:
+            let rows = matrixNode.rows.map { row in
+                row.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " & ")
+            }.joined(separator: " \\\\ ")
+            return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+
+        case let cVectorNode as ComplexVectorNode:
+            let elements = cVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
+            return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+
+        case let cMatrixNode as ComplexMatrixNode:
+            let rows = cMatrixNode.rows.map { row in
+                row.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " & ")
+            }.joined(separator: " \\\\ ")
+            return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
         default:
             return node.description
@@ -134,14 +145,14 @@ struct LaTeXEngine {
             else { return "0" }
         case .vector(let vector):
             let elements = vector.values.map { formatScalar($0, settings: settings) }.joined(separator: " \\\\ ")
-            return "\\begin{pmatrix} \(elements) \\end{pmatrix}"
+            return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
         case .matrix(let matrix):
             let rows = (0..<matrix.rows).map { r in
                 (0..<matrix.columns).map { c in
                     formatScalar(matrix[r, c], settings: settings)
                 }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
-            return "\\begin{pmatrix} \(rows) \\end{pmatrix}"
+            return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         case .tuple(let values):
             return values.map { formatMathValue($0, angleMode: angleMode, settings: settings) }.joined(separator: " \\text{ or } ")
         case .polar(let complexValue):
@@ -153,14 +164,14 @@ struct LaTeXEngine {
             return "\\text{Function defined: } \(name)"
         case .complexVector(let cVector):
             let elements = cVector.values.map { formatMathValue(.complex($0), angleMode: angleMode, settings: settings) }.joined(separator: " \\\\ ")
-            return "\\begin{pmatrix} \(elements) \\end{pmatrix}"
+            return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
         case .complexMatrix(let cMatrix):
             let rows = (0..<cMatrix.rows).map { r in
                 (0..<cMatrix.columns).map { c in
                     formatMathValue(.complex(cMatrix[r, c]), angleMode: angleMode, settings: settings)
                 }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
-            return "\\begin{pmatrix} \(rows) \\end{pmatrix}"
+            return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         }
     }
 

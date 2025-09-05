@@ -75,6 +75,7 @@ class CalculatorViewModel: ObservableObject {
     @Published var rawExpression: String = ""
     @Published var history: [Calculation] = []
     @Published var liveResult: String = ""
+    @Published var liveLaTeXPreview: String = "" // For the live formatted expression
     @Published var previewText: String = ""
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
@@ -265,6 +266,7 @@ class CalculatorViewModel: ObservableObject {
         guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
             DispatchQueue.main.async {
                 self.liveResult = ""
+                self.liveLaTeXPreview = "" // Clear LaTeX preview
                 self.lastSuccessfulValue = nil
             }
             return
@@ -275,6 +277,9 @@ class CalculatorViewModel: ObservableObject {
             let tokens = lexer.tokenize()
             let parser = Parser(tokens: tokens)
             let expressionTree = try parser.parse()
+            
+            // Generate live LaTeX from the parsed expression tree
+            let expressionLaTeX = LaTeXEngine.formatNode(expressionTree, evaluator: self.evaluator, settings: self.settings)
             
             var tempVars = self.variables
             var tempFuncs = self.functions
@@ -287,6 +292,9 @@ class CalculatorViewModel: ObservableObject {
                 self.lastSuccessfulValue = value
                 self.lastUsedAngleFlag = usedAngle
                 
+                // Update the live LaTeX preview
+                self.liveLaTeXPreview = expressionLaTeX
+                
                 if case .functionDefinition(let name) = value {
                     self.liveResult = "Function '\(name)' defined."
                 } else {
@@ -296,6 +304,8 @@ class CalculatorViewModel: ObservableObject {
         } catch let error {
             DispatchQueue.main.async {
                 self.lastSuccessfulValue = nil
+                // On error, show raw expression in preview
+                self.liveLaTeXPreview = self.rawExpression
                 if let displayError = error as? CustomStringConvertible {
                     self.liveResult = displayError.description
                 } else {
@@ -481,14 +491,14 @@ class CalculatorViewModel: ObservableObject {
     func formatLivePreview(_ value: MathValue) -> String {
         switch value {
         case .scalar(let doubleValue): return formatScalarForDisplay(doubleValue)
-        case .complex(let complexValue): return "Result: \(formatComplexForDisplay(complexValue))"
-        case .vector(let vector): return "Result: Vector [\(vector.dimension)]"
-        case .matrix(let matrix): return "Result: Matrix [\(matrix.rows)x\(matrix.columns)]"
+        case .complex(let complexValue): return formatComplexForDisplay(complexValue)
+        case .vector(let vector): return formatForHistory(.vector(vector))
+        case .matrix(let matrix): return formatForHistory(.matrix(matrix))
         case .tuple(let values): return "Result: \(values.count) possible values"
-        case .complexVector(let cVector): return "Result: Complex Vector [\(cVector.dimension)]"
-        case .complexMatrix(let cMatrix): return "Result: Complex Matrix [\(cMatrix.rows)x\(cMatrix.columns)]"
+        case .complexVector(let cVector): return formatForHistory(.complexVector(cVector))
+        case .complexMatrix(let cMatrix): return formatForHistory(.complexMatrix(cMatrix))
         case .functionDefinition(let name): return "Function '\(name)' defined."
-        case .polar(let complexValue): return "Result: \(formatPolarForDisplay(complexValue))"
+        case .polar(let complexValue): return formatPolarForDisplay(complexValue)
         }
     }
     
@@ -662,3 +672,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
