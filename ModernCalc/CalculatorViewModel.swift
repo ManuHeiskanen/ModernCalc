@@ -291,14 +291,26 @@ class CalculatorViewModel: ObservableObject {
                 self.lastSuccessfulValue = value
                 self.lastUsedAngleFlag = usedAngle
                 
-                // --- CHANGE ---
-                // Combine expression and result into a single LaTeX string for the live preview.
                 if case .functionDefinition = value {
                     self.liveLaTeXPreview = expressionLaTeX
                 } else {
-                    let resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                    // --- NEW: Use live rounding settings if enabled ---
+                    let resultLaTeX: String
+                    if self.settings.enableLiveRounding {
+                        // Create a temporary, one-off settings object configured for fixed-decimal formatting.
+                        let liveSettings = UserSettings()
+                        liveSettings.displayMode = .fixed
+                        liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
+                        liveSettings.decimalSeparator = self.settings.decimalSeparator
+                        
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
+                    } else {
+                        // Otherwise, use the user's standard formatting settings.
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                    }
                     self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
                 }
+                
                 // Clear any previous error messages on success.
                 self.liveResult = ""
             }

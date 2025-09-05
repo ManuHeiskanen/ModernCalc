@@ -47,10 +47,22 @@ class UserSettings: ObservableObject {
         }
     }
     
+    @Published var enableLiveRounding: Bool {
+        didSet {
+            UserDefaults.standard.set(enableLiveRounding, forKey: "enableLiveRounding")
+        }
+    }
+    
+    @Published var livePreviewDecimalPlaces: Int {
+        didSet {
+            UserDefaults.standard.set(livePreviewDecimalPlaces, forKey: "livePreviewDecimalPlaces")
+        }
+    }
+    
     init() {
-        // Load saved settings on initialization, or use defaults.
         let defaults = UserDefaults.standard
         
+        // --- Phase 1: Initialize ALL stored properties from UserDefaults ---
         let savedDisplayMode = defaults.string(forKey: "numberDisplayMode") ?? ""
         self.displayMode = NumberDisplayMode(rawValue: savedDisplayMode) ?? .auto
         
@@ -58,8 +70,18 @@ class UserSettings: ObservableObject {
         self.decimalSeparator = DecimalSeparator(rawValue: savedSeparator) ?? .period
         
         self.fixedDecimalPlaces = defaults.integer(forKey: "fixedDecimalPlaces")
+        
+        self.enableLiveRounding = defaults.bool(forKey: "enableLiveRounding")
+        
+        self.livePreviewDecimalPlaces = defaults.integer(forKey: "livePreviewDecimalPlaces")
+        
+        // --- Phase 2: After 'self' is initialized, check and apply default values ---
         if self.fixedDecimalPlaces == 0 {
             self.fixedDecimalPlaces = 4 // Default to 4 if not set
+        }
+        
+        if self.livePreviewDecimalPlaces == 0 {
+            self.livePreviewDecimalPlaces = 2 // Default to 2 if not set
         }
     }
 }

@@ -179,7 +179,7 @@ struct VariableEditorView: View {
     private var settingsView: some View {
         VStack {
             Form {
-                Section(header: Text("Number Formatting")) {
+                Section(header: Text("History & Export Formatting")) {
                     Picker("Display Mode", selection: $settings.displayMode) {
                         ForEach(NumberDisplayMode.allCases, id: \.self) {
                             Text($0.rawValue)
@@ -197,6 +197,15 @@ struct VariableEditorView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                }
+                
+                // --- NEW: UI for live preview rounding ---
+                Section(header: Text("Live Preview Formatting")) {
+                    Toggle("Round live result", isOn: $settings.enableLiveRounding.animation())
+                    
+                    if settings.enableLiveRounding {
+                        Stepper("Decimal Places: \(settings.livePreviewDecimalPlaces)", value: $settings.livePreviewDecimalPlaces, in: 0...10)
+                    }
                 }
             }
             .padding()
@@ -221,4 +230,3 @@ struct VariableEditorView: View {
         }
     }
 }
-
