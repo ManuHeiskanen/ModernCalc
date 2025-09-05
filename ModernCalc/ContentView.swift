@@ -69,7 +69,7 @@ struct ContentView: View {
                     VariableEditorView(viewModel: viewModel, settings: settings)
                 }
             }
-            .frame(minWidth: 400, minHeight: 500)
+            .frame(minWidth: 410, minHeight: 300)
             
             HStack {
                 Button(action: { isShowingSheet = true }) {
