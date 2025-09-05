@@ -22,8 +22,8 @@ private class EquationRenderer {
     // The SVG output processor options - align the rendered equation to the left.
     private let outputOptions = SVGOutputProcessorOptions(displayAlign: SVGOutputProcessorOptions.DisplayAlignments.left)
     
-    // The conversion options - render the equation as a block element.
-    private let convOptions = ConversionOptions(display: true)
+    // --- FIX: Set the 'em' size to control the base font size of the rendered output ---
+    private let convOptions = ConversionOptions(display: true, em: 14)
     
     private init() throws {
         // Initialize MathJax, specifying SVG as the preferred (and only) output format.
@@ -50,6 +50,8 @@ struct MathJaxView: View {
     
     var latex: String
 
+    @Environment(\.colorScheme) var colorScheme
+
     // State to hold the final rendered image.
     @State private var renderedImage: NSImage?
     // State for fallback text on error.
@@ -62,7 +64,8 @@ struct MathJaxView: View {
                 Image(nsImage: renderedImage)
                     .resizable()
                     .scaledToFit()
-                    .padding(.vertical, 4) // Add some padding to prevent clipping
+                    .padding(.vertical, 10)
+                    .padding(.horizontal)
             } else if let errorText = errorText {
                 // On failure, display the raw LaTeX that caused the error.
                 Text(errorText)
@@ -75,6 +78,7 @@ struct MathJaxView: View {
                 Color.clear
             }
         }
+        .foregroundColor(colorScheme == .dark ? .white : .black)
         .task(id: latex) {
             // This task automatically cancels and restarts whenever the `latex` input changes.
             guard !latex.isEmpty else {
@@ -97,6 +101,8 @@ struct MathJaxView: View {
                     throw ConversionError.imageCreationFailed
                 }
                 
+                image.isTemplate = true
+                
                 // 4. Update the UI on the main thread.
                 await MainActor.run {
                     self.renderedImage = image
@@ -118,4 +124,3 @@ struct MathJaxView: View {
         case imageCreationFailed
     }
 }
-

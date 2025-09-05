@@ -37,6 +37,7 @@ struct ContentView: View {
                 result: viewModel.liveResult,
                 greekSymbols: viewModel.greekSymbols
             )
+            .frame(height: 60) // --- REVERTED: Use a fixed height for the container ---
             Divider()
 
             CalculatorInputView(
@@ -296,24 +297,32 @@ struct FormattedExpressionWithButtonsView: View {
         ZStack {
             Color.gray.opacity(0.1)
             HStack {
-                Button(action: { isShowingGreekPopover = true }) { Text("α").font(.system(size: 22)) }.buttonStyle(.plain).padding(.horizontal)
-                    .popover(isPresented: $isShowingGreekPopover, arrowEdge: .top) {
-                        GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
-                    }
+                Button(action: { isShowingGreekPopover = true }) {
+                    Text("α").font(.system(size: 22))
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal)
+                .popover(isPresented: $isShowingGreekPopover, arrowEdge: .top) {
+                    GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
+                }
                 
-                // --- FIX ---
-                // Use MathJaxView to properly render the LaTeX string.
-                MathJaxView(latex: latexPreview)
-                
-                Spacer()
-                
-                Text(result)
-                    .font(.system(size: 22, weight: .regular))
-                    .padding(.trailing)
-                    .textSelection(.enabled)
+                // Conditionally show either the error or the LaTeX preview
+                if !result.isEmpty {
+                    // Display the error message, left-aligned
+                    Text(result)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(.red)
+                        .padding(.trailing)
+                        .textSelection(.enabled)
+                    
+                    Spacer() // Pushes the error message to the left
+                } else {
+                    // Display the rendered LaTeX
+                    MathJaxView(latex: latexPreview)
+                    Spacer() // Takes up any remaining space
+                }
             }
         }
-        .frame(height: 60)
     }
 }
 
@@ -400,4 +409,3 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
-
