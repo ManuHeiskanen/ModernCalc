@@ -72,7 +72,18 @@ struct CursorAwareTextField: NSViewRepresentable {
 
         func controlTextDidChange(_ obj: Notification) {
             // If the view is being updated by SwiftUI, ignore this delegate callback.
-            guard !isUpdatingFromSwiftUI, let textField = obj.object as? NSTextField else { return }
+            guard !isUpdatingFromSwiftUI,
+                  let textField = obj.object as? NSTextField,
+                  // FIX: Cast the current editor to NSTextView to access hasMarkedText.
+                  let editor = textField.currentEditor() as? NSTextView
+            else { return }
+
+            // If text is being composed (e.g., after a dead key press),
+            // wait until composition is finished before updating the binding.
+            if editor.hasMarkedText() {
+                return
+            }
+            
             parent.text = textField.stringValue
         }
         
@@ -102,9 +113,15 @@ struct CursorAwareTextField: NSViewRepresentable {
             else {
                 return
             }
+
+            // Also guard selection changes against marked text to avoid conflicts.
+            if textView.hasMarkedText() {
+                return
+            }
             
             // The flag system allows us to update the binding synchronously without warnings.
             parent.selectedRange = textView.selectedRange
         }
     }
 }
+
