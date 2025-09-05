@@ -3,8 +3,7 @@
 //  ModernCalc
 //
 //  Created by Manu Heiskanen on 28.8.2025.
-//
-
+//a
 import SwiftUI
 
 struct ContentView: View {
@@ -21,25 +20,20 @@ struct ContentView: View {
     }
 
     var body: some View {
-        // --- CHANGE 1: The main ZStack is now a VStack ---
-        // This removes the overlay behavior at the top level.
         VStack(spacing: 0) {
-            // --- CHANGE 2: The top spacer is removed ---
-            // The button is no longer here, so the spacer isn't needed.
-            
             HistoryView(
                 viewModel: viewModel,
                 history: viewModel.history,
                 rawExpression: $viewModel.rawExpression,
                 selectedHistoryId: viewModel.selectedHistoryId,
                 selectedHistoryPart: viewModel.selectedHistoryPart,
-                // --- CHANGE 3: Pass a binding to the sheet state ---
                 isShowingSheet: $isShowingSheet
             )
             Divider()
             
             FormattedExpressionWithButtonsView(
                 viewModel: viewModel,
+                latexPreview: viewModel.liveLaTeXPreview, // Pass the LaTeX string to the view
                 result: viewModel.liveResult,
                 greekSymbols: viewModel.greekSymbols
             )
@@ -76,7 +70,6 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 410, minHeight: 300)
-        // --- CHANGE 4: The HStack containing the button is removed entirely from here ---
         .toolbar {
             ToolbarItemGroup {
                 HStack(spacing: 0) {
@@ -115,7 +108,6 @@ struct HistoryView: View {
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
     
-    // --- CHANGE 5: Add a binding for the sheet and state for the button hover ---
     @Binding var isShowingSheet: Bool
     @State private var isHoveringOnMenuButton = false
     
@@ -129,12 +121,8 @@ struct HistoryView: View {
             ScrollViewReader { scrollViewProxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        // --- CHANGE 6: Enumerate the history to get the index of each item ---
                         ForEach(Array(history.enumerated()), id: \.element.id) { index, calculation in
-                            // --- CHANGE 7: Wrap the row in a ZStack for layering ---
-                            // --- EDIT: Changed alignment to .topLeading to align the button with the top of the row. ---
                             ZStack(alignment: .topLeading) {
-                                // This is the original row content
                                 VStack(alignment: .trailing, spacing: 4) {
                                     switch calculation.type {
                                     case .functionDefinition, .variableAssignment:
@@ -154,7 +142,6 @@ struct HistoryView: View {
                                             Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
                                         }
                                         .padding(.vertical, 8).padding(.horizontal)
-                                        // --- CHANGE 8: Ensure the content aligns to the right ---
                                         .frame(maxWidth: .infinity, alignment: .trailing)
                                         
                                     case .evaluation:
@@ -206,14 +193,11 @@ struct HistoryView: View {
                                             Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
                                         }
                                         .padding(.vertical, 12).padding(.horizontal)
-                                        // --- CHANGE 8: Ensure the content aligns to the right ---
                                         .frame(maxWidth: .infinity, alignment: .trailing)
                                     }
                                     
                                     Divider().opacity(0.4)
                                 }
-                                
-                                // --- EDIT: The button has been removed from the ForEach loop ---
                             }
                             .id(calculation.id).transition(.opacity)
                             .background(calculation.id == lastAddedId ? Color.accentColor.opacity(0.1) : Color.clear)
@@ -259,13 +243,11 @@ struct HistoryView: View {
                         }
                     }
                     .padding(.leading, 8)
-                    
-                    // Menu button top padding
                     .padding(.top, 6)
                     
-                    Spacer() // Pushes the button to the left
+                    Spacer()
                 }
-                Spacer() // Pushes the button to the top
+                Spacer()
             }
 
             if showCopyMessage { Text("Copied to Clipboard").padding(.horizontal, 16).padding(.vertical, 10).background(.ultraThickMaterial).cornerRadius(12).transition(.opacity.animation(.easeInOut)) }
@@ -305,6 +287,7 @@ struct HistoryView: View {
 
 struct FormattedExpressionWithButtonsView: View {
     var viewModel: CalculatorViewModel
+    var latexPreview: String
     var result: String
     var greekSymbols: [MathSymbol]
     @State private var isShowingGreekPopover = false
@@ -318,12 +301,22 @@ struct FormattedExpressionWithButtonsView: View {
                         GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
                     }
                 
-                Text(result).font(.system(size: 22, weight: .regular)).padding(.vertical).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                // --- FIX ---
+                // Use MathJaxView to properly render the LaTeX string.
+                MathJaxView(latex: latexPreview)
+                
+                Spacer()
+                
+                Text(result)
+                    .font(.system(size: 22, weight: .regular))
+                    .padding(.trailing)
+                    .textSelection(.enabled)
             }
         }
         .frame(height: 60)
     }
 }
+
 
 struct CalculatorInputView: View {
     var viewModel: CalculatorViewModel

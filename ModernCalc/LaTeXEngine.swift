@@ -131,7 +131,8 @@ struct LaTeXEngine {
     
     // --- Value Formatting ---
     
-    private static func formatMathValue(_ value: MathValue, angleMode: AngleMode, settings: UserSettings) -> String {
+    // --- CHANGE: Removed 'private' to make it accessible from the ViewModel ---
+    static func formatMathValue(_ value: MathValue, angleMode: AngleMode, settings: UserSettings) -> String {
         switch value {
         case .scalar(let doubleValue):
             return formatScalar(doubleValue, settings: settings)
@@ -222,4 +223,3 @@ struct LaTeXEngine {
         return latex
     }
 }
-

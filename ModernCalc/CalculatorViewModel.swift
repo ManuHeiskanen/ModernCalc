@@ -74,8 +74,8 @@ class CalculatorViewModel: ObservableObject {
 
     @Published var rawExpression: String = ""
     @Published var history: [Calculation] = []
-    @Published var liveResult: String = ""
-    @Published var liveLaTeXPreview: String = "" // For the live formatted expression
+    @Published var liveResult: String = "" // Now used for error messages
+    @Published var liveLaTeXPreview: String = "" // Now holds the full equation as LaTeX
     @Published var previewText: String = ""
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
@@ -266,7 +266,7 @@ class CalculatorViewModel: ObservableObject {
         guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
             DispatchQueue.main.async {
                 self.liveResult = ""
-                self.liveLaTeXPreview = "" // Clear LaTeX preview
+                self.liveLaTeXPreview = ""
                 self.lastSuccessfulValue = nil
             }
             return
@@ -278,7 +278,6 @@ class CalculatorViewModel: ObservableObject {
             let parser = Parser(tokens: tokens)
             let expressionTree = try parser.parse()
             
-            // Generate live LaTeX from the parsed expression tree
             let expressionLaTeX = LaTeXEngine.formatNode(expressionTree, evaluator: self.evaluator, settings: self.settings)
             
             var tempVars = self.variables
@@ -292,20 +291,23 @@ class CalculatorViewModel: ObservableObject {
                 self.lastSuccessfulValue = value
                 self.lastUsedAngleFlag = usedAngle
                 
-                // Update the live LaTeX preview
-                self.liveLaTeXPreview = expressionLaTeX
-                
-                if case .functionDefinition(let name) = value {
-                    self.liveResult = "Function '\(name)' defined."
+                // --- CHANGE ---
+                // Combine expression and result into a single LaTeX string for the live preview.
+                if case .functionDefinition = value {
+                    self.liveLaTeXPreview = expressionLaTeX
                 } else {
-                    self.liveResult = self.formatLivePreview(value)
+                    let resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                    self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
                 }
+                // Clear any previous error messages on success.
+                self.liveResult = ""
             }
         } catch let error {
             DispatchQueue.main.async {
                 self.lastSuccessfulValue = nil
-                // On error, show raw expression in preview
-                self.liveLaTeXPreview = self.rawExpression
+                // On error, clear the LaTeX preview.
+                self.liveLaTeXPreview = ""
+                // Use liveResult to display the error message.
                 if let displayError = error as? CustomStringConvertible {
                     self.liveResult = displayError.description
                 } else {
@@ -672,4 +674,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
