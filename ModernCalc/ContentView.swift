@@ -132,6 +132,7 @@ struct HistoryView: View {
                         // --- CHANGE 6: Enumerate the history to get the index of each item ---
                         ForEach(Array(history.enumerated()), id: \.element.id) { index, calculation in
                             // --- CHANGE 7: Wrap the row in a ZStack for layering ---
+                            // --- EDIT: Changed alignment to .topLeading to align the button with the top of the row. ---
                             ZStack(alignment: .topLeading) {
                                 // This is the original row content
                                 VStack(alignment: .trailing, spacing: 4) {
@@ -152,7 +153,7 @@ struct HistoryView: View {
                                             
                                             Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
                                         }
-                                        .padding(.vertical, 12).padding(.horizontal)
+                                        .padding(.vertical, 8).padding(.horizontal)
                                         // --- CHANGE 8: Ensure the content aligns to the right ---
                                         .frame(maxWidth: .infinity, alignment: .trailing)
                                         
@@ -212,26 +213,7 @@ struct HistoryView: View {
                                     Divider().opacity(0.4)
                                 }
                                 
-                                // --- CHANGE 9: Conditionally add the button ONLY on the first row ---
-                                if index == 0 {
-                                    Button(action: { isShowingSheet = true }) {
-                                        Image(systemName: "ellipsis.circle.fill")
-                                            .font(.system(size: 24))
-                                            .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .padding(10)
-                                    .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
-                                    .cornerRadius(8)
-                                    .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                                    .onHover { hovering in
-                                        withAnimation(.easeInOut(duration: 0.15)) {
-                                            isHoveringOnMenuButton = hovering
-                                        }
-                                    }
-                                    .padding(.horizontal)
-                                    .padding(.top, 4) // Adjust padding to vertically align with the text
-                                }
+                                // --- EDIT: The button has been removed from the ForEach loop ---
                             }
                             .id(calculation.id).transition(.opacity)
                             .background(calculation.id == lastAddedId ? Color.accentColor.opacity(0.1) : Color.clear)
@@ -259,6 +241,33 @@ struct HistoryView: View {
             }
             .frame(maxHeight: .infinity)
             
+            VStack {
+                HStack {
+                    Button(action: { isShowingSheet = true }) {
+                        Image(systemName: "ellipsis.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(10)
+                    .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
+                    .cornerRadius(8)
+                    .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isHoveringOnMenuButton = hovering
+                        }
+                    }
+                    .padding(.leading, 8)
+                    
+                    // Menu button top padding
+                    .padding(.top, 6)
+                    
+                    Spacer() // Pushes the button to the left
+                }
+                Spacer() // Pushes the button to the top
+            }
+
             if showCopyMessage { Text("Copied to Clipboard").padding(.horizontal, 16).padding(.vertical, 10).background(.ultraThickMaterial).cornerRadius(12).transition(.opacity.animation(.easeInOut)) }
         }
     }
@@ -398,3 +407,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
