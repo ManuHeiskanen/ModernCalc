@@ -218,7 +218,7 @@ class CalculatorViewModel: ObservableObject {
             .init(symbol: "√", name: "Square Root", insertionText: "√("),
             .init(symbol: "×", name: "Multiply"),
             .init(symbol: "÷", name: "Divide"),
-            .init(symbol: "ˆ", name: "Power")
+            .init(symbol: "^", name: "Power")
         ]
         
         self.greekSymbols = [

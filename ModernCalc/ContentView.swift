@@ -56,7 +56,9 @@ struct ContentView: View {
                 }
                 .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
                     if key.key == .return {
-                        viewModel.commitCalculation()
+                        DispatchQueue.main.async{
+                            viewModel.commitCalculation()
+                        }
                         return .handled
                     }
                     
@@ -142,7 +144,7 @@ struct HistoryView: View {
                         ForEach(history) { calculation in
                             VStack(alignment: .trailing, spacing: 4) {
                                 switch calculation.type {
-                                case .functionDefinition:
+                                case .functionDefinition, .variableAssignment:
                                     HStack {
                                         Text(highlightSIPrefixes(in: calculation.expression))
                                             .font(.system(size: 24, weight: .light, design: .monospaced))
@@ -160,7 +162,7 @@ struct HistoryView: View {
                                     }
                                     .padding(.vertical, 12).padding(.horizontal).frame(maxWidth: .infinity, alignment: .trailing)
                                 
-                                case .evaluation, .variableAssignment:
+                                case .evaluation:
                                     HStack(alignment: .bottom, spacing: 8) {
                                         HStack(spacing: 8) {
                                             if calculation.usedAngleSensitiveFunction {
@@ -218,13 +220,24 @@ struct HistoryView: View {
                             .onHover { isHovering in withAnimation(.easeInOut(duration: 0.15)) { hoveredRowId = isHovering ? calculation.id : nil } }
                             .onAppear {
                                 if calculation.id == lastAddedId {
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { withAnimation(.easeInOut(duration: 0.6)) { lastAddedId = nil } }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                        withAnimation(.easeOut(duration: 0.5)) {
+                                            lastAddedId = nil
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                .onChange(of: history) { _ in if let lastEntry = history.last { lastAddedId = lastEntry.id; withAnimation { scrollViewProxy.scrollTo(lastEntry.id, anchor: .bottom) } } }
+                .onChange(of: history) {
+                    if let lastEntry = history.last {
+                        lastAddedId = lastEntry.id
+                        withAnimation {
+                            scrollViewProxy.scrollTo(lastEntry.id, anchor: .bottom)
+                        }
+                    }
+                }
             }
             .frame(maxHeight: .infinity)
             
@@ -367,3 +380,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
