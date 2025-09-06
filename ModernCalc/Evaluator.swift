@@ -252,7 +252,19 @@ struct Evaluator {
         "vol_cone": { a, b in
             guard case .scalar(let r) = a, case .scalar(let h) = b else { throw MathError.typeMismatch(expected: "Two Scalars (radius, height)", found: "\(a.typeName), \(b.typeName)") }
             return .scalar((1.0/3.0) * Double.pi * r * r * h)
-        }
+        },
+        "root": { a, b in
+                guard case .scalar(let x) = a, case .scalar(let n) = b else {
+                    throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
+                }
+                if x < 0 && n.truncatingRemainder(dividingBy: 2) == 0 {
+                    // Case for even root of a negative number, e.g., root(-81, 4)
+                    let real = pow(abs(x), 1/n)
+                    let imag = 0.0
+                    return .complex(Complex(real: 0, imaginary: real))
+                }
+                return .scalar(pow(x, 1/n))
+            }
     ]
     
     func evaluate(node: ExpressionNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {

@@ -114,6 +114,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "atan", signature: "atan(value)", description: "Calculates the inverse tangent (arctan)."),
         // General
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
+        .init(name: "root", signature: "root(number, degree)", description: "Calculates the nth root of a number."),
         .init(name: "abs", signature: "abs(value)", description: "Calculates the absolute value or magnitude."),
         .init(name: "log", signature: "log(number)", description: "Calculates the common (base-10) logarithm."),
         .init(name: "lg", signature: "lg(number)", description: "Alias for the common (base-10) logarithm."),
