@@ -307,10 +307,7 @@ struct Evaluator {
         case let numberNode as NumberNode:
             return (.scalar(numberNode.value), usedAngle)
         
-        // --- REMOVED: complexNode case is no longer needed ---
-
         case let constantNode as ConstantNode:
-            // --- NEW: Handle 'i' as a constant ---
             if constantNode.name == "i" {
                 return (.complex(Complex.i), usedAngle)
             }
@@ -554,6 +551,11 @@ struct Evaluator {
         case (.scalar(let l), .complex(let r)):
             return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
 
+        case (.vector(let v), .scalar(let s)):
+            return .vector(try performVectorScalarOp(op.rawValue, v, s))
+        case (.scalar(let s), .vector(let v)):
+            return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
+
         case (.matrix(let m), .scalar(let s)):
             return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
         case (.scalar(let s), .matrix(let m)):
@@ -593,6 +595,30 @@ struct Evaluator {
     }
     
     // --- OPERATOR IMPLEMENTATIONS ---
+    
+    private func performVectorScalarOp(_ op: String, _ v: Vector, _ s: Double, reversed: Bool = false) throws -> Vector {
+        if reversed {
+            switch op {
+            case "+": return s + v
+            case "*": return s * v
+            case "-": return s - v
+            case "/":
+                if v.values.contains(0) { throw MathError.divisionByZero }
+                return s / v
+            default: throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Vector")
+            }
+        } else {
+            switch op {
+            case "+": return v + s
+            case "*": return v * s
+            case "-": return v - s
+            case "/":
+                guard s != 0 else { throw MathError.divisionByZero }
+                return v / s
+            default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Scalar")
+            }
+        }
+    }
     
     private func performScalarScalarOp(_ op: String, _ l: Double, _ r: Double) throws -> Double {
         switch op {

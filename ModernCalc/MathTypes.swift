@@ -63,12 +63,10 @@ struct Complex: Equatable, Codable {
         return Complex(real: real, imaginary: imag)
     }
     
-    // NEW: Helper for complex conjugate
     func conjugate() -> Complex {
         return Complex(real: self.real, imaginary: -self.imaginary)
     }
 
-    // NEW: Helper for the argument (phase) in radians
     func argument() -> Double {
         return atan2(self.imaginary, self.real)
     }
@@ -106,6 +104,32 @@ struct Vector: Equatable, Codable {
             u[0] * v[1] - u[1] * v[0]
         ]
         return Vector(values: newValues)
+    }
+    
+    // --- Scalar-Vector Operators ---
+    static func + (lhs: Vector, rhs: Double) -> Vector {
+        Vector(values: lhs.values.map { $0 + rhs })
+    }
+    static func + (lhs: Double, rhs: Vector) -> Vector {
+        rhs + lhs
+    }
+    static func - (lhs: Vector, rhs: Double) -> Vector {
+        Vector(values: lhs.values.map { $0 - rhs })
+    }
+    static func - (lhs: Double, rhs: Vector) -> Vector {
+        Vector(values: rhs.values.map { lhs - $0 })
+    }
+    static func * (lhs: Vector, rhs: Double) -> Vector {
+        Vector(values: lhs.values.map { $0 * rhs })
+    }
+    static func * (lhs: Double, rhs: Vector) -> Vector {
+        rhs * lhs
+    }
+    static func / (lhs: Vector, rhs: Double) -> Vector {
+        Vector(values: lhs.values.map { $0 / rhs })
+    }
+    static func / (lhs: Double, rhs: Vector) -> Vector {
+        Vector(values: rhs.values.map { lhs / $0 })
     }
     
     // --- Statistical Helpers ---
@@ -216,7 +240,6 @@ func factorial(_ n: Double) throws -> Double {
     return (1...Int(n)).map(Double.init).reduce(1, *)
 }
 
-// NEW: Standalone combinatorics functions
 func permutations(n: Double, k: Double) throws -> Double {
     guard n >= k && k >= 0 else {
         throw MathError.unsupportedOperation(op: "nPr", typeA: "n < k or k < 0", typeB: nil)
