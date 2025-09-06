@@ -80,6 +80,9 @@ class CalculatorViewModel: ObservableObject {
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
     
+    // --- NEW: A property to track if the expression is multi-row ---
+    @Published var isMultiRowExpression: Bool = false
+    
     @Published var angleMode: AngleMode = .degrees {
         didSet {
             saveState()
@@ -255,6 +258,13 @@ class CalculatorViewModel: ObservableObject {
         cancellable = $rawExpression
             .sink { [weak self] newExpression in
                 guard let self = self else { return }
+                
+                // --- NEW: Check for multi-row expressions and update the flag ---
+                let isMultiRow = (newExpression.contains("vector(") || newExpression.contains("matrix(")) && newExpression.contains(";")
+                if self.isMultiRowExpression != isMultiRow {
+                    self.isMultiRowExpression = isMultiRow
+                }
+                
                 DispatchQueue.main.async {
                     self.calculate(expression: newExpression)
                 }
@@ -294,10 +304,8 @@ class CalculatorViewModel: ObservableObject {
                 if case .functionDefinition = value {
                     self.liveLaTeXPreview = expressionLaTeX
                 } else {
-                    // --- NEW: Use live rounding settings if enabled ---
                     let resultLaTeX: String
                     if self.settings.enableLiveRounding {
-                        // Create a temporary, one-off settings object configured for fixed-decimal formatting.
                         let liveSettings = UserSettings()
                         liveSettings.displayMode = .fixed
                         liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
@@ -305,21 +313,17 @@ class CalculatorViewModel: ObservableObject {
                         
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
                     } else {
-                        // Otherwise, use the user's standard formatting settings.
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
                     }
                     self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
                 }
                 
-                // Clear any previous error messages on success.
                 self.liveResult = ""
             }
         } catch let error {
             DispatchQueue.main.async {
                 self.lastSuccessfulValue = nil
-                // On error, clear the LaTeX preview.
                 self.liveLaTeXPreview = ""
-                // Use liveResult to display the error message.
                 if let displayError = error as? CustomStringConvertible {
                     self.liveResult = displayError.description
                 } else {

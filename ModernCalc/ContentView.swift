@@ -37,7 +37,9 @@ struct ContentView: View {
                 result: viewModel.liveResult,
                 greekSymbols: viewModel.greekSymbols
             )
-            .frame(height: 60) // --- REVERTED: Use a fixed height for the container ---
+            // --- NEW: Set height dynamically and add animation ---
+            .frame(height: viewModel.isMultiRowExpression ? 100 : 60)
+            .animation(.easeInOut(duration: 0.25), value: viewModel.isMultiRowExpression)
             Divider()
 
             CalculatorInputView(

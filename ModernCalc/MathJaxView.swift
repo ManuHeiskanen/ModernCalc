@@ -22,7 +22,7 @@ private class EquationRenderer {
     // The SVG output processor options - align the rendered equation to the left.
     private let outputOptions = SVGOutputProcessorOptions(displayAlign: SVGOutputProcessorOptions.DisplayAlignments.left)
     
-    // --- FIX: Set the 'em' size to control the base font size of the rendered output ---
+    // The conversion options - render the equation as a block element with a specific font size.
     private let convOptions = ConversionOptions(display: true, em: 14)
     
     private init() throws {
@@ -78,7 +78,8 @@ struct MathJaxView: View {
                 Color.clear
             }
         }
-        .foregroundColor(colorScheme == .dark ? .white : .black)
+        // --- CHANGE: Use custom colors for light and dark modes ---
+        .foregroundColor(colorScheme == .dark ? Color(red: 222/255, green: 222/255, blue: 221/255) /* #dededd */ : Color(red: 36/255, green: 36/255, blue: 35/255) /* #242423 */)
         .task(id: latex) {
             // This task automatically cancels and restarts whenever the `latex` input changes.
             guard !latex.isEmpty else {
