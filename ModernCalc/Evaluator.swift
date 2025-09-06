@@ -443,28 +443,29 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "Scalar for integration bounds", found: "Non-scalar")
             }
 
-            let n = 1000 // Number of intervals for Simpson's rule, must be even
-            let step = (b - a) / Double(n)
-            var sum = 0.0
-
-            let f_a = try evaluateWithTempVar(node: integralNode.body, varName: integralNode.variable.name, varValue: a, variables: &variables, functions: &functions, angleMode: angleMode)
-            let f_b = try evaluateWithTempVar(node: integralNode.body, varName: integralNode.variable.name, varValue: b, variables: &variables, functions: &functions, angleMode: angleMode)
-            guard case .scalar(let scalar_a) = f_a, case .scalar(let scalar_b) = f_b else {
-                throw MathError.typeMismatch(expected: "Scalar expression for integration", found: "Non-scalar")
+            // Create a closure that represents the mathematical function f(x)
+            // This captures the necessary context to evaluate the expression body at any x.
+            let f: (Double) throws -> Double = { x in
+                let value = try self.evaluateWithTempVar(
+                    node: integralNode.body,
+                    varName: integralNode.variable.name,
+                    varValue: x,
+                    variables: &variables,
+                    functions: &functions,
+                    angleMode: angleMode
+                )
+                guard case .scalar(let scalarValue) = value else {
+                    throw MathError.typeMismatch(expected: "Scalar expression for integration", found: value.typeName)
+                }
+                return scalarValue
             }
-            sum += scalar_a + scalar_b
-
-            for i in 1..<n {
-                let x = a + Double(i) * step
-                let f_x = try evaluateWithTempVar(node: integralNode.body, varName: integralNode.variable.name, varValue: x, variables: &variables, functions: &functions, angleMode: angleMode)
-                guard case .scalar(let scalar_x) = f_x else { throw MathError.typeMismatch(expected: "Scalar expression for integration", found: "Non-scalar") }
                 
-                if i % 2 == 1 { sum += 4 * scalar_x }
-                else { sum += 2 * scalar_x }
-            }
-            
-            let result = (step / 3.0) * sum
+            // Define a tolerance for the adaptive algorithm
+            let tolerance = 1e-7
+            let result = try adaptiveSimpson(f: f, a: a, b: b, tolerance: tolerance)
+                    
             return (.scalar(result), lowerUsedAngle || upperUsedAngle)
+
 
         case let primeNode as PrimeDerivativeNode:
             guard let userFunction = functions[primeNode.functionName] else {
@@ -718,6 +719,35 @@ struct Evaluator {
         default: return (left, right)
         }
     }
+    
+    private func adaptiveSimpson(f: (Double) throws -> Double, a: Double, b: Double, tolerance: Double) throws -> Double {
+            let c = (a + b) / 2.0
+            let h = b - a
+            let fa = try f(a)
+            let fb = try f(b)
+            let fc = try f(c)
+            let s = (h / 6.0) * (fa + 4.0 * fc + fb)
+            return try _adaptiveSimpsonRecursive(f: f, a: a, b: b, fa: fa, fb: fb, fc: fc, whole: s, tolerance: tolerance)
+        }
+
+        private func _adaptiveSimpsonRecursive(f: (Double) throws -> Double, a: Double, b: Double, fa: Double, fb: Double, fc: Double, whole: Double, tolerance: Double) throws -> Double {
+            let c = (a + b) / 2.0
+            let d = (a + c) / 2.0
+            let e = (c + b) / 2.0
+            let fd = try f(d)
+            let fe = try f(e)
+            let left = (c - a) / 6.0 * (fa + 4.0 * fd + fc)
+            let right = (b - c) / 6.0 * (fc + 4.0 * fe + fb)
+
+            if abs(left + right - whole) <= 15.0 * tolerance {
+                return left + right + (left + right - whole) / 15.0
+            }
+
+            let leftHalf = try _adaptiveSimpsonRecursive(f: f, a: a, b: c, fa: fa, fb: fc, fc: fd, whole: left, tolerance: tolerance / 2.0)
+            let rightHalf = try _adaptiveSimpsonRecursive(f: f, a: c, b: b, fa: fc, fb: fb, fc: fe, whole: right, tolerance: tolerance / 2.0)
+            
+            return leftHalf + rightHalf
+        }
 }
 
 private func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
