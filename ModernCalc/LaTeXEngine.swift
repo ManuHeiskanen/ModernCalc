@@ -114,16 +114,13 @@ struct LaTeXEngine {
             }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
-        // --- ADDED: LaTeX formatting for PostfixOpNode on ComplexVectorNode ---
         case let postfixNode as PostfixOpNode:
             if postfixNode.op.rawValue == "'", let cVectorNode = postfixNode.child as? ComplexVectorNode {
-                // For a complex vector transpose, output a column vector with a dagger
                 let elements = cVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
                 return "\\left(\\begin{bmatrix} \(elements) \\end{bmatrix}\\right)^\\dagger"
             }
             let childLaTeX = formatNode(postfixNode.child, evaluator: evaluator, settings: settings)
             if postfixNode.op.rawValue == "'" {
-                // For a real matrix transpose, use a simple T
                 return "{\(childLaTeX)}^T"
             }
             return "\(childLaTeX)\(postfixNode.op.rawValue)"
@@ -133,12 +130,28 @@ struct LaTeXEngine {
             return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
 
         case let cMatrixNode as ComplexMatrixNode:
-            // This is the problematic part. We need to format the expression nodes, not a MathValue.
             let rows = cMatrixNode.rows.map { row in
                 row.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
+        case let derivativeNode as DerivativeNode:
+            let body = formatNode(derivativeNode.body, evaluator: evaluator, settings: settings)
+            let variable = derivativeNode.variable.name
+            let point = formatNode(derivativeNode.point, evaluator: evaluator, settings: settings)
+            return "\\frac{d}{d\(variable)}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+
+        case let integralNode as IntegralNode:
+            let body = formatNode(integralNode.body, evaluator: evaluator, settings: settings)
+            let variable = integralNode.variable.name
+            let lower = formatNode(integralNode.lowerBound, evaluator: evaluator, settings: settings)
+            let upper = formatNode(integralNode.upperBound, evaluator: evaluator, settings: settings)
+            return "\\int_{\(lower)}^{\(upper)} \(body) \\,d\(variable)"
+
+        case let primeNode as PrimeDerivativeNode:
+            let argument = formatNode(primeNode.argument, evaluator: evaluator, settings: settings)
+            return "\\text{\(primeNode.functionName)}'(\(argument))"
+
         case is TupleNode:
             return ""
 
@@ -147,9 +160,6 @@ struct LaTeXEngine {
         }
     }
     
-    // --- Value Formatting ---
-    
-    // --- CHANGE: Removed 'private' to make it accessible from the ViewModel ---
     static func formatMathValue(_ value: MathValue, angleMode: AngleMode, settings: UserSettings) -> String {
         switch value {
         case .scalar(let doubleValue):
@@ -177,7 +187,7 @@ struct LaTeXEngine {
         case .polar(let complexValue):
             let magnitude = formatScalar(complexValue.abs(), settings: settings)
             let angle = complexValue.argument()
-            let angleString = angleMode == .degrees ? "\(String(format: "%.2f", angle * (180.0 / .pi)))^{circ}" : formatScalar(angle, settings: settings)
+            let angleString = angleMode == .degrees ? "\(formatScalar(angle * (180.0 / .pi), settings: settings))^{\\circ}" : formatScalar(angle, settings: settings)
             return "\(magnitude) \\angle \(angleString)"
         case .functionDefinition(let name):
             return "\\text{Function defined: } \(name)"
@@ -193,8 +203,6 @@ struct LaTeXEngine {
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         }
     }
-
-    // --- Helper Methods ---
 
     private static func operatorPrecedence(for op: String) -> Int {
         switch op {
@@ -217,7 +225,11 @@ struct LaTeXEngine {
                 else {
                     let tempFormatted = String(format: "%.10f", value)
                     if let regex = try? NSRegularExpression(pattern: "\\.?0+$") {
-                        formattedString = regex.stringByReplacingMatches(in: tempFormatted, options: [], range: NSRange(location: 0, length: tempFormatted.utf16.count), withTemplate: "")
+                        let nsString = tempFormatted as NSString
+                        let range = NSRange(location: 0, length: nsString.length)
+                        let modString = regex.stringByReplacingMatches(in: tempFormatted, options: [], range: range, withTemplate: "")
+                        let finalString = modString.isEmpty ? "0" : modString
+                        formattedString = finalString.hasSuffix(".") ? String(finalString.dropLast()) : finalString
                     } else { formattedString = tempFormatted }
                 }
             }
@@ -227,7 +239,6 @@ struct LaTeXEngine {
             formattedString = String(format: "%.\(settings.fixedDecimalPlaces)f", value)
         }
         
-        // Use {,} for LaTeX commas to avoid ambiguity.
         if settings.decimalSeparator == .comma {
             return formattedString.replacingOccurrences(of: ".", with: "{,}")
         }

@@ -39,6 +39,8 @@ enum MathError: Error, CustomStringConvertible {
 
 struct Evaluator {
 
+    private let h = 1e-7 // A small step size for numerical differentiation
+
     private let constants: [String: Double] = [
         "pi": Double.pi, "e": M_E, "c": 299792458, "μ0": 1.25663706212e-6, "ε0": 8.8541878128e-12,
         "g": 9.80665, "G": 6.67430e-11, "h": 6.62607015e-34, "ħ": 1.054571817e-34, "me": 9.1093837015e-31,
@@ -258,14 +260,19 @@ struct Evaluator {
                     throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
                 }
                 if x < 0 && n.truncatingRemainder(dividingBy: 2) == 0 {
-                    // Case for even root of a negative number, e.g., root(-81, 4)
                     let real = pow(abs(x), 1/n)
-                    let imag = 0.0
                     return .complex(Complex(real: 0, imaginary: real))
                 }
                 return .scalar(pow(x, 1/n))
             }
     ]
+
+    private func evaluateWithTempVar(node: ExpressionNode, varName: String, varValue: Double, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
+        var tempVars = variables
+        tempVars[varName] = .scalar(varValue)
+        let (result, _) = try _evaluateSingle(node: node, variables: &tempVars, functions: &functions, angleMode: angleMode)
+        return result
+    }
     
     func evaluate(node: ExpressionNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         let (results, usedAngle) = try evaluateAndExpand(node: node, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -397,6 +404,77 @@ struct Evaluator {
             let result = try evaluateBinaryOperation(op: binaryNode.op, left: leftValue, right: rightValue)
             return (result, leftUsedAngle || rightUsedAngle)
 
+        case let derivativeNode as DerivativeNode:
+            let (pointValue, pointUsedAngle) = try _evaluateSingle(node: derivativeNode.point, variables: &variables, functions: &functions, angleMode: angleMode)
+            guard case .scalar(let point) = pointValue else {
+                throw MathError.typeMismatch(expected: "Scalar for differentiation point", found: pointValue.typeName)
+            }
+
+            let valPlus = try evaluateWithTempVar(node: derivativeNode.body, varName: derivativeNode.variable.name, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let valMinus = try evaluateWithTempVar(node: derivativeNode.body, varName: derivativeNode.variable.name, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
+
+            guard case .scalar(let scalarPlus) = valPlus, case .scalar(let scalarMinus) = valMinus else {
+                throw MathError.typeMismatch(expected: "Scalar expression for differentiation", found: "Non-scalar")
+            }
+
+            let derivative = (scalarPlus - scalarMinus) / (2 * h)
+            return (.scalar(derivative), pointUsedAngle)
+
+        case let integralNode as IntegralNode:
+            let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (upperValue, upperUsedAngle) = try _evaluateSingle(node: integralNode.upperBound, variables: &variables, functions: &functions, angleMode: angleMode)
+
+            guard case .scalar(let a) = lowerValue, case .scalar(let b) = upperValue else {
+                throw MathError.typeMismatch(expected: "Scalar for integration bounds", found: "Non-scalar")
+            }
+
+            let n = 1000 // Number of intervals for Simpson's rule, must be even
+            let step = (b - a) / Double(n)
+            var sum = 0.0
+
+            let f_a = try evaluateWithTempVar(node: integralNode.body, varName: integralNode.variable.name, varValue: a, variables: &variables, functions: &functions, angleMode: angleMode)
+            let f_b = try evaluateWithTempVar(node: integralNode.body, varName: integralNode.variable.name, varValue: b, variables: &variables, functions: &functions, angleMode: angleMode)
+            guard case .scalar(let scalar_a) = f_a, case .scalar(let scalar_b) = f_b else {
+                throw MathError.typeMismatch(expected: "Scalar expression for integration", found: "Non-scalar")
+            }
+            sum += scalar_a + scalar_b
+
+            for i in 1..<n {
+                let x = a + Double(i) * step
+                let f_x = try evaluateWithTempVar(node: integralNode.body, varName: integralNode.variable.name, varValue: x, variables: &variables, functions: &functions, angleMode: angleMode)
+                guard case .scalar(let scalar_x) = f_x else { throw MathError.typeMismatch(expected: "Scalar expression for integration", found: "Non-scalar") }
+                
+                if i % 2 == 1 { sum += 4 * scalar_x }
+                else { sum += 2 * scalar_x }
+            }
+            
+            let result = (step / 3.0) * sum
+            return (.scalar(result), lowerUsedAngle || upperUsedAngle)
+
+        case let primeNode as PrimeDerivativeNode:
+            guard let userFunction = functions[primeNode.functionName] else {
+                throw MathError.unknownFunction(name: primeNode.functionName)
+            }
+            guard userFunction.parameterNames.count == 1 else {
+                throw MathError.incorrectArgumentCount(function: "\(primeNode.functionName)'", expected: 1, found: userFunction.parameterNames.count)
+            }
+            let varName = userFunction.parameterNames[0]
+
+            let (pointValue, pointUsedAngle) = try _evaluateSingle(node: primeNode.argument, variables: &variables, functions: &functions, angleMode: angleMode)
+            guard case .scalar(let point) = pointValue else {
+                throw MathError.typeMismatch(expected: "Scalar for differentiation point", found: pointValue.typeName)
+            }
+
+            let valPlus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let valMinus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
+            
+            guard case .scalar(let scalarPlus) = valPlus, case .scalar(let scalarMinus) = valMinus else {
+                throw MathError.typeMismatch(expected: "Scalar function for differentiation", found: "Non-scalar")
+            }
+
+            let derivative = (scalarPlus - scalarMinus) / (2 * h)
+            return (.scalar(derivative), pointUsedAngle)
+
         default:
             throw MathError.invalidNode
         }
@@ -405,7 +483,6 @@ struct Evaluator {
     private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         var usedAngle = false
         
-        // Special case for angle() to pass tuple of args
         if node.name == "angle" {
             guard node.arguments.count == 2 else {
                 throw MathError.incorrectArgumentCount(function: "angle", expected: 2, found: node.arguments.count)
@@ -476,7 +553,7 @@ struct Evaluator {
             case .complexMatrix(let cm): return .complexMatrix(ComplexMatrix(values: cm.values.map { $0 * -1.0 }, rows: cm.rows, columns: cm.columns))
             default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
             }
-        case "'": // Transpose operator
+        case "'":
             switch value {
             case .matrix(let m): return .matrix(m.transpose())
             case .complexMatrix(let cm): return .complexMatrix(cm.conjugateTranspose())
@@ -492,38 +569,28 @@ struct Evaluator {
         if case .tuple = right { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         
         switch (left, right) {
-        // Scalar-Scalar
         case (.scalar(let l), .scalar(let r)): return .scalar(try performScalarScalarOp(op.rawValue, l, r))
-        // Complex Ops
         case (.complex(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, r))
         case (.complex(let l), .scalar(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
         case (.scalar(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
-        // Vector-Scalar
         case (.vector(let v), .scalar(let s)): return .vector(try performVectorScalarOp(op.rawValue, v, s))
         case (.scalar(let s), .vector(let v)): return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
-        // Vector-Vector
         case (.vector(let l), .vector(let r)): return .vector(try performVectorVectorOp(op.rawValue, l, r))
-        // Matrix-Scalar
         case (.matrix(let m), .scalar(let s)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
         case (.scalar(let s), .matrix(let m)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s, reversed: true))
-        // Matrix-Matrix
         case (.matrix(let l), .matrix(let r)): return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
-        // Matrix-Vector
         case (.matrix(let m), .vector(let v)):
              if op.rawValue == "*" { return .vector(try m * v) }
              else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
-        // ComplexVector Ops
         case (.complexVector(let cv), .complex(let c)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c))
         case (.complex(let c), .complexVector(let cv)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c, reversed: true))
         case (.complexVector(let l), .complexVector(let r)): return .complexVector(try performCVectorCVectorOp(op.rawValue, l, r))
-        // ComplexMatrix Ops
         case (.complexMatrix(let cm), .complex(let c)): return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, cm, c))
         case (.complex(let c), .complexMatrix(let cm)): return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, cm, c, reversed: true))
         case (.complexMatrix(let l), .complexMatrix(let r)): return .complexMatrix(try performCMatrixCMatrixOp(op.rawValue, l, r))
         case (.complexMatrix(let m), .complexVector(let v)):
             if op.rawValue == "*" { return .complexVector(try m * v) }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
-        // Promotions
         case (.matrix, .complex), (.complex, .matrix), (.vector, .complex), (.complex, .vector), (.complexMatrix, .scalar), (.scalar, .complexMatrix), (.complexVector, .scalar), (.scalar, .complexVector):
             let (promotedL, promotedR) = try promote(left, right)
             return try evaluateBinaryOperation(op: op, left: promotedL, right: promotedR)
@@ -532,7 +599,6 @@ struct Evaluator {
         }
     }
     
-    // --- OPERATOR IMPLEMENTATIONS ---
     private func performScalarScalarOp(_ op: String, _ l: Double, _ r: Double) throws -> Double {
         switch op {
         case "+": return l + r; case "-": return l - r; case "*": return l * r
@@ -582,11 +648,8 @@ struct Evaluator {
     }
     private func performMatrixMatrixOp(_ op: String, _ l: Matrix, _ r: Matrix) throws -> Matrix {
         switch op {
-        case "+": return try l + r
-        case "-": return try l - r
-        case "*": return try l * r
-        case ".*": return try l.hadamard(with: r)
-        case "./": return try l.hadamardDivision(with: r)
+        case "+": return try l + r; case "-": return try l - r; case "*": return try l * r
+        case ".*": return try l.hadamard(with: r); case "./": return try l.hadamardDivision(with: r)
         default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Matrix")
         }
     }

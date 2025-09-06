@@ -112,6 +112,9 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "asin", signature: "asin(value)", description: "Calculates the inverse sine (arcsin)."),
         .init(name: "acos", signature: "acos(value)", description: "Calculates the inverse cosine (arccos)."),
         .init(name: "atan", signature: "atan(value)", description: "Calculates the inverse tangent (arctan)."),
+        // Calculus
+        .init(name: "derivative", signature: "derivative(expr, var, point)", description: "Calculates the numerical derivative of an expression."),
+        .init(name: "integral", signature: "integral(expr, var, from, to)", description: "Calculates the numerical definite integral of an expression."),
         // General
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
         .init(name: "root", signature: "root(number, degree)", description: "Calculates the nth root of a number."),
@@ -234,7 +237,6 @@ class CalculatorViewModel: ObservableObject {
             let expressionTree = try parser.parse()
             let expressionLaTeX = LaTeXEngine.formatNode(expressionTree, evaluator: self.evaluator, settings: self.settings)
             
-            // Check if the expression is a simple variable definition (e.g., x := 5 or x := -5)
             let isSimpleVariableDefinition: Bool
             if let assignmentNode = expressionTree as? AssignmentNode {
                 if assignmentNode.expression is NumberNode {
@@ -258,7 +260,6 @@ class CalculatorViewModel: ObservableObject {
                 if case .functionDefinition = value {
                     self.liveLaTeXPreview = expressionLaTeX
                 } else if isSimpleVariableDefinition {
-                    // For simple definitions, don't show the result in the live preview
                     self.liveLaTeXPreview = expressionLaTeX
                 } else {
                     let resultLaTeX: String
@@ -274,7 +275,6 @@ class CalculatorViewModel: ObservableObject {
                 self.liveResult = ""
             }
         } catch let error {
-            // New logic to handle missing parenthesis
             if expression.hasSuffix("(") {
                 handlePartialFunctionCall(expression)
             } else {
@@ -286,7 +286,6 @@ class CalculatorViewModel: ObservableObject {
         }
     }
     
-    // New helper method to provide function hints
     private func handlePartialFunctionCall(_ expression: String) {
         let trimmed = expression.dropLast().trimmingCharacters(in: .whitespaces)
         
@@ -300,7 +299,6 @@ class CalculatorViewModel: ObservableObject {
             }
         }
 
-        // Fallback for unknown function or other syntax errors
         DispatchQueue.main.async {
             self.liveLaTeXPreview = ""
             self.liveResult = "Error: Expected a number or function name."
@@ -513,3 +511,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+

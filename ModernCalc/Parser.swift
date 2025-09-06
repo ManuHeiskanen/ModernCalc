@@ -52,10 +52,22 @@ struct UnaryOpNode: ExpressionNode {
     let op: Token, child: ExpressionNode
     var description: String { "(\(op.rawValue)\(child.description))" }
 }
-// Added new node for postfix operators like transpose (')
 struct PostfixOpNode: ExpressionNode {
     let op: Token, child: ExpressionNode
     var description: String { "(\(child.description)\(op.rawValue))" }
+}
+// --- NEW NODES FOR CALCULUS ---
+struct DerivativeNode: ExpressionNode {
+    let body: ExpressionNode, variable: ConstantNode, point: ExpressionNode
+    var description: String { "derivative(\(body.description), at: \(variable.description)=\(point.description))" }
+}
+struct IntegralNode: ExpressionNode {
+    let body: ExpressionNode, variable: ConstantNode, lowerBound: ExpressionNode, upperBound: ExpressionNode
+    var description: String { "integral(\(body.description) d\(variable.description) from \(lowerBound.description) to \(upperBound.description))" }
+}
+struct PrimeDerivativeNode: ExpressionNode {
+    let functionName: String, argument: ExpressionNode
+    var description: String { "\(functionName)'(\(argument.description))" }
 }
 
 
@@ -66,6 +78,7 @@ enum ParserError: Error, CustomStringConvertible {
     case matrixRowMismatch(expected: Int, found: Int)
     case invalidParameterSyntax
     case invalidAssignmentTarget
+    case incorrectArgumentCount(function: String, expected: Int, found: Int)
 
     var description: String {
         switch self {
@@ -80,6 +93,8 @@ enum ParserError: Error, CustomStringConvertible {
             return "Error: Function parameters must be simple identifiers."
         case .invalidAssignmentTarget:
             return "Error: Invalid target for assignment."
+        case .incorrectArgumentCount(let function, let expected, let found):
+            return "Error: Function '\(function)' expects \(expected) arguments, got \(found)."
         }
     }
 }
@@ -121,7 +136,7 @@ class Parser {
     }
 
     private func parseExpression(currentPrecedence: Int = 0) throws -> ExpressionNode {
-        var left = try parsePrimary() // Changed from parsePrefix
+        var left = try parsePrimary()
         
         while !isAtEnd() {
             var operatorPrecedence: Int?
@@ -174,14 +189,27 @@ class Parser {
         case .unitVector(let char): return ConstantNode(name: "\(char)'")
         case .identifier(let name):
             if let nextToken = peek(), case .paren("(") = nextToken.type {
+                // This is a standard function call
                 switch name {
                 case "matrix": return try parseMatrix()
                 case "vector": return try parseVector()
                 case "cmatrix": return try parseComplexMatrix()
                 case "cvector": return try parseComplexVector()
+                case "derivative": return try parseDerivative()
+                case "integral": return try parseIntegral()
                 default: return try parseFunctionCall(name: name)
                 }
-            } else { return ConstantNode(name: name) }
+            } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
+                // This is an f'(x) style call
+                try advance() // consume '
+                try advance() // consume (
+                
+                let argument = try parseExpression()
+                try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "closing ')' for derivative call"))
+                return PrimeDerivativeNode(functionName: name, argument: argument)
+            } else {
+                return ConstantNode(name: name)
+            }
         case .op(let opString) where opString == "-" || opString == "+":
             let child = try parseExpression(currentPrecedence: unaryOperatorPrecedence())
             return UnaryOpNode(op: token, child: child)
@@ -210,6 +238,47 @@ class Parser {
         
         try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for function call"))
         return FunctionCallNode(name: name, arguments: arguments)
+    }
+
+    private func parseDerivative() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for derivative"))
+        
+        let body = try parseExpression()
+        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after expression"))
+        
+        let variableToken = try advance()
+        guard case .identifier(let varName) = variableToken.type else {
+            throw ParserError.unexpectedToken(token: variableToken, expected: "variable name")
+        }
+        let variableNode = ConstantNode(name: varName)
+        
+        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after variable"))
+        let point = try parseExpression()
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')'"))
+        return DerivativeNode(body: body, variable: variableNode, point: point)
+    }
+
+    private func parseIntegral() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for integral"))
+        
+        let body = try parseExpression()
+        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after expression"))
+
+        let variableToken = try advance()
+        guard case .identifier(let varName) = variableToken.type else {
+            throw ParserError.unexpectedToken(token: variableToken, expected: "variable name")
+        }
+        let variableNode = ConstantNode(name: varName)
+        
+        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after variable"))
+        let lowerBound = try parseExpression()
+        
+        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after lower bound"))
+        let upperBound = try parseExpression()
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')'"))
+        return IntegralNode(body: body, variable: variableNode, lowerBound: lowerBound, upperBound: upperBound)
     }
     
     private func parseVector() throws -> ExpressionNode {
@@ -319,7 +388,7 @@ class Parser {
             switch opString {
             case "±": return 1
             case "+", "-": return 2
-            case "*", "/", "∠", ".*", "./": return 3 // Added element-wise ops
+            case "*", "/", "∠", ".*", "./": return 3
             case "%": return 4
             case "^": return 5
             default: return nil
@@ -333,7 +402,7 @@ class Parser {
 
         let wasValue = {
             switch lastType {
-            case .number, .identifier, .unitVector, .paren(")"), .op("'"): return true // Added '
+            case .number, .identifier, .unitVector, .paren(")"), .op("'"): return true
             default: return false
             }
         }()
