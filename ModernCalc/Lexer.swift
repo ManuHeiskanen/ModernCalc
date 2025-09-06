@@ -9,9 +9,7 @@ import Foundation
 
 enum TokenType: Equatable {
     case number(Double)
-    // --- REMOVED: No longer needed ---
-    // case complexLiteral(Double)
-    case op(Character)
+    case op(String) // Changed from Character to String
     case paren(Character)
     case bracket(Character)
     case assignment
@@ -28,13 +26,10 @@ struct Token: Equatable {
 }
 
 class Lexer {
-    // NOTE: The DecimalSeparator enum has been moved to UserSettings.swift to be shared globally.
-    
     private let input: String
     private var currentIndex: String.Index
     private let decimalSeparator: DecimalSeparator
 
-    // The init now uses the global DecimalSeparator type.
     init(input: String, decimalSeparator: DecimalSeparator = .period) {
         self.input = input
         self.currentIndex = input.startIndex
@@ -50,14 +45,14 @@ class Lexer {
                 advance()
                 continue
             }
-
-            if char.isNumber {
+            
+            // Handle numbers that might start with a decimal separator, e.g., .5
+            if char.isNumber || (char == decimalSeparator.character && (peekNext()?.isNumber ?? false)) {
                 tokens.append(lexNumber())
                 continue
             }
             
             if char.isLetter || greekLetters.contains(char) || char == "_" {
-                // --- SIMPLIFIED: `i` is now handled like any other identifier ---
                 if char == "j" && peekNext() == "'" {
                     advance(); advance()
                     tokens.append(Token(type: .unitVector("j"), rawValue: "j'"))
@@ -71,9 +66,15 @@ class Lexer {
             }
 
             switch char {
-            case "+", "-", "*", "/", "%", "^", "=":
+            case "+", "-", "%", "^", "=":
                 advance()
-                tokens.append(Token(type: .op(char), rawValue: String(char)))
+                tokens.append(Token(type: .op(String(char)), rawValue: String(char)))
+            case "*":
+                advance()
+                tokens.append(Token(type: .op("*"), rawValue: "*"))
+            case "/":
+                advance()
+                tokens.append(Token(type: .op("/"), rawValue: "/"))
             case "×":
                 advance()
                 tokens.append(Token(type: .op("*"), rawValue: "×"))
@@ -89,6 +90,19 @@ class Lexer {
             case "∠":
                 advance()
                 tokens.append(Token(type: .op("∠"), rawValue: "∠"))
+            case "'": // Transpose operator
+                advance()
+                tokens.append(Token(type: .op("'"), rawValue: "'"))
+            case ".": // Element-wise operators
+                if peekNext() == "*" {
+                    advance(); advance()
+                    tokens.append(Token(type: .op(".*"), rawValue: ".*"))
+                } else if peekNext() == "/" {
+                    advance(); advance()
+                    tokens.append(Token(type: .op("./"), rawValue: "./"))
+                } else {
+                    tokens.append(Token(type: .unknown(advance()!), rawValue: "."))
+                }
             case "°":
                 advance()
                 continue
@@ -117,8 +131,13 @@ class Lexer {
         let startIndex = currentIndex
         var hasDecimal = false
 
+        // Handle case where number starts with decimal separator
+        if let char = peek(), char == decimalSeparator.character {
+            hasDecimal = true
+            advance()
+        }
+        
         while let char = peek() {
-            // Use the character property of the global enum.
             if char.isNumber {
                 advance()
             } else if char == decimalSeparator.character && !hasDecimal {
@@ -128,8 +147,6 @@ class Lexer {
                 break
             }
         }
-        
-        // --- REMOVED: Logic to detect trailing 'i' is no longer needed ---
         
         let numberString = String(input[startIndex..<currentIndex])
         let sanitizedString = numberString.replacingOccurrences(of: ",", with: ".")
@@ -144,12 +161,11 @@ class Lexer {
     private func lexIdentifier() -> Token {
         let startIndex = currentIndex
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
-        while let char = peek(), char.isLetter || greekLetters.contains(char) || char == "_" || (char == "'" && startIndex != currentIndex) {
+        // Removed ' from the valid characters
+        while let char = peek(), char.isLetter || greekLetters.contains(char) || char == "_" {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
-        
-        // --- REMOVED: Special case for 'i' is gone ---
         
         if identifierString == "π" {
             return Token(type: .identifier("pi"), rawValue: "π")

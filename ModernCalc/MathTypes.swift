@@ -106,31 +106,52 @@ struct Vector: Equatable, Codable {
         return Vector(values: newValues)
     }
     
+    func hadamard(with other: Vector) throws -> Vector {
+        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimensions for element-wise multiplication.") }
+        return Vector(values: zip(self.values, other.values).map(*))
+    }
+
+    func hadamardDivision(with other: Vector) throws -> Vector {
+        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimensions for element-wise division.") }
+        guard !other.values.contains(0) else { throw MathError.divisionByZero }
+        return Vector(values: zip(self.values, other.values).map(/))
+    }
+    
+    func unit() -> Vector {
+        let mag = self.magnitude()
+        guard mag != 0 else { return self }
+        return self / mag
+    }
+
+    func angle(with other: Vector) throws -> Double {
+        let dotProduct = try self.dot(with: other)
+        let mag1 = self.magnitude()
+        let mag2 = other.magnitude()
+        guard mag1 != 0, mag2 != 0 else { return 0 }
+        let cosTheta = dotProduct / (mag1 * mag2)
+        // Clamp the value to avoid domain errors from floating point inaccuracies
+        return acos(Swift.min(Swift.max(cosTheta, -1.0), 1.0))
+    }
+
+    // --- Vector-Vector Operators ---
+    static func + (lhs: Vector, rhs: Vector) throws -> Vector {
+        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimensions for addition.") }
+        return Vector(values: zip(lhs.values, rhs.values).map(+))
+    }
+    static func - (lhs: Vector, rhs: Vector) throws -> Vector {
+        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimensions for subtraction.") }
+        return Vector(values: zip(lhs.values, rhs.values).map(-))
+    }
+
     // --- Scalar-Vector Operators ---
-    static func + (lhs: Vector, rhs: Double) -> Vector {
-        Vector(values: lhs.values.map { $0 + rhs })
-    }
-    static func + (lhs: Double, rhs: Vector) -> Vector {
-        rhs + lhs
-    }
-    static func - (lhs: Vector, rhs: Double) -> Vector {
-        Vector(values: lhs.values.map { $0 - rhs })
-    }
-    static func - (lhs: Double, rhs: Vector) -> Vector {
-        Vector(values: rhs.values.map { lhs - $0 })
-    }
-    static func * (lhs: Vector, rhs: Double) -> Vector {
-        Vector(values: lhs.values.map { $0 * rhs })
-    }
-    static func * (lhs: Double, rhs: Vector) -> Vector {
-        rhs * lhs
-    }
-    static func / (lhs: Vector, rhs: Double) -> Vector {
-        Vector(values: lhs.values.map { $0 / rhs })
-    }
-    static func / (lhs: Double, rhs: Vector) -> Vector {
-        Vector(values: rhs.values.map { lhs / $0 })
-    }
+    static func + (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 + rhs }) }
+    static func + (lhs: Double, rhs: Vector) -> Vector { rhs + lhs }
+    static func - (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 - rhs }) }
+    static func - (lhs: Double, rhs: Vector) -> Vector { Vector(values: rhs.values.map { lhs - $0 }) }
+    static func * (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 * rhs }) }
+    static func * (lhs: Double, rhs: Vector) -> Vector { rhs * lhs }
+    static func / (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 / rhs }) }
+    static func / (lhs: Double, rhs: Vector) -> Vector { Vector(values: rhs.values.map { lhs / $0 }) }
     
     // --- Statistical Helpers ---
     func sum() -> Double { return values.reduce(0, +) }
@@ -143,11 +164,8 @@ struct Vector: Equatable, Codable {
     func median() -> Double? {
         guard !values.isEmpty else { return nil }
         let sorted = values.sorted()
-        if dimension % 2 == 0 {
-            return (sorted[dimension / 2 - 1] + sorted[dimension / 2]) / 2
-        } else {
-            return sorted[dimension / 2]
-        }
+        if dimension % 2 == 0 { return (sorted[dimension / 2 - 1] + sorted[dimension / 2]) / 2 }
+        else { return sorted[dimension / 2] }
     }
     func stddev() -> Double? {
         guard dimension > 1 else { return nil }
@@ -217,76 +235,135 @@ struct Matrix: Equatable, Codable {
         }
         
         let cofactorMatrix = Matrix(values: cofactors, rows: rows, columns: columns)
-        var adjugateValues = [Double](repeating: 0.0, count: values.count)
+        let adjugateMatrix = cofactorMatrix.transpose()
+        
+        let inverseValues = adjugateMatrix.values.map { $0 / det }
+        return Matrix(values: inverseValues, rows: rows, columns: columns)
+    }
+
+    func transpose() -> Matrix {
+        var newValues = [Double](repeating: 0, count: values.count)
         for r in 0..<rows {
             for c in 0..<columns {
-                adjugateValues[c * rows + r] = cofactorMatrix[r, c]
+                newValues[c * rows + r] = self[r, c]
             }
         }
-        
-        let inverseValues = adjugateValues.map { $0 / det }
-        return Matrix(values: inverseValues, rows: rows, columns: columns)
+        return Matrix(values: newValues, rows: columns, columns: rows)
+    }
+    
+    func trace() throws -> Double {
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square for trace.") }
+        var sum = 0.0
+        for i in 0..<rows {
+            sum += self[i, i]
+        }
+        return sum
+    }
+    
+    func hadamard(with other: Matrix) throws -> Matrix {
+        guard self.rows == other.rows && self.columns == other.columns else { throw MathError.dimensionMismatch(reason: "Matrices must have same dimensions for element-wise multiplication.") }
+        return Matrix(values: zip(self.values, other.values).map(*), rows: self.rows, columns: self.columns)
+    }
+    
+    func hadamardDivision(with other: Matrix) throws -> Matrix {
+        guard self.rows == other.rows && self.columns == other.columns else { throw MathError.dimensionMismatch(reason: "Matrices must have same dimensions for element-wise division.") }
+        guard !other.values.contains(0) else { throw MathError.divisionByZero }
+        return Matrix(values: zip(self.values, other.values).map(/), rows: self.rows, columns: self.columns)
+    }
+    
+    // --- Matrix-Matrix Operators ---
+    static func + (lhs: Matrix, rhs: Matrix) throws -> Matrix {
+        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else {
+            throw MathError.dimensionMismatch(reason: "Matrices must have same dimensions for +/-.")
+        }
+        return Matrix(values: zip(lhs.values, rhs.values).map(+), rows: lhs.rows, columns: lhs.columns)
+    }
+
+    static func - (lhs: Matrix, rhs: Matrix) throws -> Matrix {
+        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else {
+            throw MathError.dimensionMismatch(reason: "Matrices must have same dimensions for +/-.")
+        }
+        return Matrix(values: zip(lhs.values, rhs.values).map(-), rows: lhs.rows, columns: lhs.columns)
+    }
+
+    static func * (lhs: Matrix, rhs: Matrix) throws -> Matrix {
+        guard lhs.columns == rhs.rows else {
+            throw MathError.dimensionMismatch(reason: "For A*B, columns of A must equal rows of B.")
+        }
+        var newValues = [Double](repeating: 0, count: lhs.rows * rhs.columns)
+        for i in 0..<lhs.rows {
+            for j in 0..<rhs.columns {
+                var sum = 0.0
+                for k in 0..<lhs.columns {
+                    sum += lhs[i, k] * rhs[k, j]
+                }
+                newValues[i * rhs.columns + j] = sum
+            }
+        }
+        return Matrix(values: newValues, rows: lhs.rows, columns: rhs.columns)
+    }
+
+    // --- Matrix-Vector Multiplication ---
+    static func * (lhs: Matrix, rhs: Vector) throws -> Vector {
+        guard lhs.columns == rhs.dimension else {
+            throw MathError.dimensionMismatch(reason: "For M*v, columns of M must equal dimension of v.")
+        }
+        var newValues = [Double](repeating: 0, count: lhs.rows)
+        for i in 0..<lhs.rows {
+            var sum = 0.0
+            for j in 0..<lhs.columns {
+                sum += lhs[i, j] * rhs[j]
+            }
+            newValues[i] = sum
+        }
+        return Vector(values: newValues)
     }
 }
 
 // --- Standalone Math Functions ---
-
 func factorial(_ n: Double) throws -> Double {
-    guard n >= 0 && n.truncatingRemainder(dividingBy: 1) == 0 else {
-        throw MathError.typeMismatch(expected: "non-negative integer", found: "number")
-    }
+    guard n >= 0 && n.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "non-negative integer", found: "number") }
     if n == 0 { return 1 }
-    // Avoid recursion for large numbers to prevent stack overflow
     return (1...Int(n)).map(Double.init).reduce(1, *)
 }
 
 func permutations(n: Double, k: Double) throws -> Double {
-    guard n >= k && k >= 0 else {
-        throw MathError.unsupportedOperation(op: "nPr", typeA: "n < k or k < 0", typeB: nil)
-    }
-    let nFact = try factorial(n)
-    let nMinusKFact = try factorial(n - k)
-    return nFact / nMinusKFact
+    guard n >= k && k >= 0 else { throw MathError.unsupportedOperation(op: "nPr", typeA: "n < k or k < 0", typeB: nil) }
+    return try factorial(n) / factorial(n - k)
 }
 
 func combinations(n: Double, k: Double) throws -> Double {
-    guard n >= k && k >= 0 else {
-        throw MathError.unsupportedOperation(op: "nCr", typeA: "n < k or k < 0", typeB: nil)
-    }
-    let nPr = try permutations(n: n, k: k)
-    let kFact = try factorial(k)
-    return nPr / kFact
+    guard n >= k && k >= 0 else { throw MathError.unsupportedOperation(op: "nCr", typeA: "n < k or k < 0", typeB: nil) }
+    return try permutations(n: n, k: k) / factorial(k)
 }
-
 
 struct ComplexVector: Equatable, Codable {
     let values: [Complex]
     var dimension: Int { values.count }
     
-    init(values: [Complex]) {
-        self.values = values
+    init(values: [Complex]) { self.values = values }
+    init(from realVector: Vector) { self.values = realVector.values.map { Complex(real: $0, imaginary: 0) } }
+    
+    subscript(index: Int) -> Complex { return values[index] }
+    
+    func dot(with other: ComplexVector) throws -> Complex {
+        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Complex vectors must have same dimensions for dot product.") }
+        return zip(self.values, other.values).map { $0 * $1.conjugate() }.reduce(.zero, +)
     }
     
-    init(from realVector: Vector) {
-        self.values = realVector.values.map { Complex(real: $0, imaginary: 0) }
+    static func + (lhs: ComplexVector, rhs: ComplexVector) throws -> ComplexVector {
+        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Complex vectors must have same dimensions for addition.") }
+        return ComplexVector(values: zip(lhs.values, rhs.values).map(+))
+    }
+    static func - (lhs: ComplexVector, rhs: ComplexVector) throws -> ComplexVector {
+        guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Complex vectors must have same dimensions for subtraction.") }
+        return ComplexVector(values: zip(lhs.values, rhs.values).map(-))
     }
     
-    subscript(index: Int) -> Complex {
-        return values[index]
-    }
-    
-    static func + (lhs: ComplexVector, rhs: Complex) -> ComplexVector {
-        return ComplexVector(values: lhs.values.map { $0 + rhs })
-    }
-    static func - (lhs: ComplexVector, rhs: Complex) -> ComplexVector {
-        return ComplexVector(values: lhs.values.map { $0 - rhs })
-    }
-    static func * (lhs: ComplexVector, rhs: Complex) -> ComplexVector {
-        return ComplexVector(values: lhs.values.map { $0 * rhs })
-    }
-    static func / (lhs: ComplexVector, rhs: Complex) throws -> ComplexVector {
-        return try ComplexVector(values: lhs.values.map { try $0 / rhs })
-    }
+    static func + (lhs: ComplexVector, rhs: Complex) -> ComplexVector { return ComplexVector(values: lhs.values.map { $0 + rhs }) }
+    static func - (lhs: ComplexVector, rhs: Complex) -> ComplexVector { return ComplexVector(values: lhs.values.map { $0 - rhs }) }
+    static func * (lhs: ComplexVector, rhs: Complex) -> ComplexVector { return ComplexVector(values: lhs.values.map { $0 * rhs }) }
+    static func / (lhs: ComplexVector, rhs: Complex) throws -> ComplexVector { return try ComplexVector(values: lhs.values.map { try $0 / rhs }) }
 }
 
 struct ComplexMatrix: Equatable, Codable {
@@ -294,102 +371,89 @@ struct ComplexMatrix: Equatable, Codable {
     let rows: Int
     let columns: Int
     
-    init(values: [Complex], rows: Int, columns: Int) {
-        self.values = values
-        self.rows = rows
-        self.columns = columns
+    init(values: [Complex], rows: Int, columns: Int) { self.values = values; self.rows = rows; self.columns = columns }
+    init(from realMatrix: Matrix) { self.values = realMatrix.values.map { Complex(real: $0, imaginary: 0) }; self.rows = realMatrix.rows; self.columns = realMatrix.columns }
+    
+    subscript(row: Int, col: Int) -> Complex { return values[row * columns + col] }
+    
+    func transpose() -> ComplexMatrix {
+        var newValues = [Complex](repeating: .zero, count: values.count)
+        for r in 0..<rows {
+            for c in 0..<columns {
+                newValues[c * rows + r] = self[r, c]
+            }
+        }
+        return ComplexMatrix(values: newValues, rows: columns, columns: rows)
     }
 
-    init(from realMatrix: Matrix) {
-        self.values = realMatrix.values.map { Complex(real: $0, imaginary: 0) }
-        self.rows = realMatrix.rows
-        self.columns = realMatrix.columns
+    func conjugateTranspose() -> ComplexMatrix {
+        let transposed = self.transpose()
+        return ComplexMatrix(values: transposed.values.map { $0.conjugate() }, rows: transposed.rows, columns: transposed.columns)
     }
     
-    subscript(row: Int, col: Int) -> Complex {
-        return values[row * columns + col]
+    static func + (lhs: ComplexMatrix, rhs: ComplexMatrix) throws -> ComplexMatrix {
+        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else { throw MathError.dimensionMismatch(reason: "Complex matrices must have same dimensions for addition.") }
+        return ComplexMatrix(values: zip(lhs.values, rhs.values).map(+), rows: lhs.rows, columns: lhs.columns)
+    }
+    static func - (lhs: ComplexMatrix, rhs: ComplexMatrix) throws -> ComplexMatrix {
+        guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else { throw MathError.dimensionMismatch(reason: "Complex matrices must have same dimensions for subtraction.") }
+        return ComplexMatrix(values: zip(lhs.values, rhs.values).map(-), rows: lhs.rows, columns: lhs.columns)
+    }
+    static func * (lhs: ComplexMatrix, rhs: ComplexMatrix) throws -> ComplexMatrix {
+        guard lhs.columns == rhs.rows else { throw MathError.dimensionMismatch(reason: "For A*B, columns of A must equal rows of B.") }
+        var newValues = [Complex](repeating: .zero, count: lhs.rows * rhs.columns)
+        for i in 0..<lhs.rows {
+            for j in 0..<rhs.columns {
+                var sum = Complex.zero
+                for k in 0..<lhs.columns { sum = sum + (lhs[i, k] * rhs[k, j]) }
+                newValues[i * rhs.columns + j] = sum
+            }
+        }
+        return ComplexMatrix(values: newValues, rows: lhs.rows, columns: rhs.columns)
+    }
+    static func * (lhs: ComplexMatrix, rhs: ComplexVector) throws -> ComplexVector {
+        guard lhs.columns == rhs.dimension else { throw MathError.dimensionMismatch(reason: "For M*v, columns of M must equal dimension of v.") }
+        var newValues = [Complex](repeating: .zero, count: lhs.rows)
+        for i in 0..<lhs.rows {
+            var sum = Complex.zero
+            for j in 0..<lhs.columns { sum = sum + (lhs[i, j] * rhs[j]) }
+            newValues[i] = sum
+        }
+        return ComplexVector(values: newValues)
     }
     
-    static func + (lhs: ComplexMatrix, rhs: Complex) -> ComplexMatrix {
-        return ComplexMatrix(values: lhs.values.map { $0 + rhs }, rows: lhs.rows, columns: lhs.columns)
-    }
-    static func - (lhs: ComplexMatrix, rhs: Complex) -> ComplexMatrix {
-        return ComplexMatrix(values: lhs.values.map { $0 - rhs }, rows: lhs.rows, columns: lhs.columns)
-    }
-    static func * (lhs: ComplexMatrix, rhs: Complex) -> ComplexMatrix {
-        return ComplexMatrix(values: lhs.values.map { $0 * rhs }, rows: lhs.rows, columns: lhs.columns)
-    }
-    static func / (lhs: ComplexMatrix, rhs: Complex) throws -> ComplexMatrix {
-        return try ComplexMatrix(values: lhs.values.map { try $0 / rhs }, rows: lhs.rows, columns: lhs.columns)
-    }
+    static func + (lhs: ComplexMatrix, rhs: Complex) -> ComplexMatrix { return ComplexMatrix(values: lhs.values.map { $0 + rhs }, rows: lhs.rows, columns: lhs.columns) }
+    static func - (lhs: ComplexMatrix, rhs: Complex) -> ComplexMatrix { return ComplexMatrix(values: lhs.values.map { $0 - rhs }, rows: lhs.rows, columns: lhs.columns) }
+    static func * (lhs: ComplexMatrix, rhs: Complex) -> ComplexMatrix { return ComplexMatrix(values: lhs.values.map { $0 * rhs }, rows: lhs.rows, columns: lhs.columns) }
+    static func / (lhs: ComplexMatrix, rhs: Complex) throws -> ComplexMatrix { return try ComplexMatrix(values: lhs.values.map { try $0 / rhs }, rows: lhs.rows, columns: lhs.columns) }
 }
 
 enum MathValue: Equatable, Codable {
-    case scalar(Double)
-    case complex(Complex)
-    case vector(Vector)
-    case matrix(Matrix)
-    case tuple([MathValue])
-    case functionDefinition(String)
-    case complexVector(ComplexVector)
-    case complexMatrix(ComplexMatrix)
-    case polar(Complex)
+    case scalar(Double); case complex(Complex); case vector(Vector); case matrix(Matrix); case tuple([MathValue]); case functionDefinition(String); case complexVector(ComplexVector); case complexMatrix(ComplexMatrix); case polar(Complex)
 
     var typeName: String {
         switch self {
-        case .scalar: return "Scalar"
-        case .complex: return "Complex"
-        case .vector: return "Vector"
-        case .matrix: return "Matrix"
-        case .tuple: return "Tuple"
-        case .functionDefinition: return "FunctionDefinition"
-        case .complexVector: return "ComplexVector"
-        case .complexMatrix: return "ComplexMatrix"
-        case .polar: return "Polar"
+        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"
         }
     }
     
-    // MARK: - Codable Implementation
-    
-    enum CodingKeys: String, CodingKey {
-        case type, value
-    }
+    enum CodingKeys: String, CodingKey { case type, value }
 
-    // Custom Encoder
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .scalar(let double):
-            try container.encode("scalar", forKey: .type)
-            try container.encode(double, forKey: .value)
-        case .complex(let complex):
-            try container.encode("complex", forKey: .type)
-            try container.encode(complex, forKey: .value)
-        case .vector(let vector):
-            try container.encode("vector", forKey: .type)
-            try container.encode(vector, forKey: .value)
-        case .matrix(let matrix):
-            try container.encode("matrix", forKey: .type)
-            try container.encode(matrix, forKey: .value)
-        case .tuple(let values):
-            try container.encode("tuple", forKey: .type)
-            try container.encode(values, forKey: .value)
-        case .functionDefinition(let name):
-            try container.encode("functionDefinition", forKey: .type)
-            try container.encode(name, forKey: .value)
-        case .complexVector(let cVector):
-            try container.encode("complexVector", forKey: .type)
-            try container.encode(cVector, forKey: .value)
-        case .complexMatrix(let cMatrix):
-            try container.encode("complexMatrix", forKey: .type)
-            try container.encode(cMatrix, forKey: .value)
-        case .polar(let complex):
-            try container.encode("polar", forKey: .type)
-            try container.encode(complex, forKey: .value)
+        case .scalar(let d): try container.encode("scalar", forKey: .type); try container.encode(d, forKey: .value)
+        case .complex(let c): try container.encode("complex", forKey: .type); try container.encode(c, forKey: .value)
+        case .vector(let v): try container.encode("vector", forKey: .type); try container.encode(v, forKey: .value)
+        case .matrix(let m): try container.encode("matrix", forKey: .type); try container.encode(m, forKey: .value)
+        case .tuple(let t): try container.encode("tuple", forKey: .type); try container.encode(t, forKey: .value)
+        case .functionDefinition(let f): try container.encode("functionDefinition", forKey: .type); try container.encode(f, forKey: .value)
+        case .complexVector(let cv): try container.encode("complexVector", forKey: .type); try container.encode(cv, forKey: .value)
+        case .complexMatrix(let cm): try container.encode("complexMatrix", forKey: .type); try container.encode(cm, forKey: .value)
+        case .polar(let p): try container.encode("polar", forKey: .type); try container.encode(p, forKey: .value)
         }
     }
 
-    // Custom Decoder
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(String.self, forKey: .type)
@@ -403,8 +467,8 @@ enum MathValue: Equatable, Codable {
         case "complexVector": self = .complexVector(try container.decode(ComplexVector.self, forKey: .value))
         case "complexMatrix": self = .complexMatrix(try container.decode(ComplexMatrix.self, forKey: .value))
         case "polar": self = .polar(try container.decode(Complex.self, forKey: .value))
-        default:
-            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
+        default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
         }
     }
 }
+

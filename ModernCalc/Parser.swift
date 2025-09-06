@@ -1,13 +1,9 @@
 import Foundation
 
 // --- ABSTRACT SYNTAX TREE NODES ---
-// (No changes needed in this section)
 protocol ExpressionNode {
     var description: String { get }
 }
-// --- REMOVED: The special ComplexNode is no longer needed ---
-// struct ComplexNode: ExpressionNode { ... }
-
 struct FunctionDefinitionNode: ExpressionNode {
     let name: String, parameterNames: [String], body: ExpressionNode
     var description: String { "\(name)(\(parameterNames.joined(separator: ", "))) := \(body.description)" }
@@ -55,6 +51,11 @@ struct BinaryOpNode: ExpressionNode {
 struct UnaryOpNode: ExpressionNode {
     let op: Token, child: ExpressionNode
     var description: String { "(\(op.rawValue)\(child.description))" }
+}
+// Added new node for postfix operators like transpose (')
+struct PostfixOpNode: ExpressionNode {
+    let op: Token, child: ExpressionNode
+    var description: String { "(\(child.description)\(op.rawValue))" }
 }
 
 
@@ -120,7 +121,7 @@ class Parser {
     }
 
     private func parseExpression(currentPrecedence: Int = 0) throws -> ExpressionNode {
-        var left = try parsePrefix()
+        var left = try parsePrimary() // Changed from parsePrefix
         
         while !isAtEnd() {
             var operatorPrecedence: Int?
@@ -152,11 +153,24 @@ class Parser {
         return left
     }
 
+    private func parsePrimary() throws -> ExpressionNode {
+        let prefixNode = try parsePrefix()
+        return try parsePostfix(left: prefixNode)
+    }
+
+    private func parsePostfix(left: ExpressionNode) throws -> ExpressionNode {
+        var result = left
+        while let token = peek(), case .op(let opString) = token.type, opString == "'" {
+            try advance()
+            result = PostfixOpNode(op: token, child: result)
+        }
+        return result
+    }
+
     private func parsePrefix() throws -> ExpressionNode {
         let token = try advance()
         switch token.type {
         case .number(let value): return NumberNode(value: value)
-        // --- REMOVED: complexLiteral case is no longer needed ---
         case .unitVector(let char): return ConstantNode(name: "\(char)'")
         case .identifier(let name):
             if let nextToken = peek(), case .paren("(") = nextToken.type {
@@ -305,7 +319,7 @@ class Parser {
             switch opString {
             case "±": return 1
             case "+", "-": return 2
-            case "*", "/", "∠": return 3
+            case "*", "/", "∠", ".*", "./": return 3 // Added element-wise ops
             case "%": return 4
             case "^": return 5
             default: return nil
@@ -319,7 +333,7 @@ class Parser {
 
         let wasValue = {
             switch lastType {
-            case .number, .identifier, .unitVector, .paren(")"): return true
+            case .number, .identifier, .unitVector, .paren(")"), .op("'"): return true // Added '
             default: return false
             }
         }()

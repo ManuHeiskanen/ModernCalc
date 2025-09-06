@@ -40,46 +40,20 @@ enum MathError: Error, CustomStringConvertible {
 struct Evaluator {
 
     private let constants: [String: Double] = [
-        "pi": Double.pi,
-        "e": M_E,
-        
-        // Physics
-        "c": 299792458,      // Speed of light (m/s)
-        "μ0": 1.25663706212e-6, // Vacuum permeability (H/m)
-        "ε0": 8.8541878128e-12, // Vacuum permittivity (F/m)
-        "g": 9.80665,        // Standard gravity (m/s^2)
-        "G": 6.67430e-11,    // Gravitational constant (m^3 kg^-1 s^-2)
-        "h": 6.62607015e-34, // Planck constant (J·s)
-        "ħ": 1.054571817e-34,// Reduced Planck constant (J·s)
-        
-        // Atomic & Chemistry
-        "me": 9.1093837015e-31, // Electron mass (kg)
-        "mp": 1.67262192369e-27, // Proton mass (kg)
-        "mn": 1.67492749804e-27, // Neutron mass (kg)
-        "e0": 1.602176634e-19,  // Elementary charge (C)
-        "NA": 6.02214076e23,     // Avogadro constant (mol^-1)
-        "R": 8.314462618,       // Gas constant (J/(mol·K))
-        "kB": 1.380649e-23,       // Boltzmann constant (J/K)
-        "F": 96485.33212,      // Faraday constant (C/mol)
-        "Rinf": 10973731.568160, // Rydberg constant (m^-1)
-
-        // Thermodynamics & Engineering
-        "σ": 5.670374419e-8,   // Stefan-Boltzmann constant (W·m⁻²·K⁻⁴)
-        "b": 2.897771955e-3,   // Wien's displacement law constant (m·K)
-        "atm": 101325,         // Standard atmosphere (Pa)
-        "Vm": 22.41396954e-3    // Molar volume of ideal gas at STP (m³/mol)
+        "pi": Double.pi, "e": M_E, "c": 299792458, "μ0": 1.25663706212e-6, "ε0": 8.8541878128e-12,
+        "g": 9.80665, "G": 6.67430e-11, "h": 6.62607015e-34, "ħ": 1.054571817e-34, "me": 9.1093837015e-31,
+        "mp": 1.67262192369e-27, "mn": 1.67492749804e-27, "e0": 1.602176634e-19, "NA": 6.02214076e23,
+        "R": 8.314462618, "kB": 1.380649e-23, "F": 96485.33212, "Rinf": 10973731.568160, "σ": 5.670374419e-8,
+        "b": 2.897771955e-3, "atm": 101325, "Vm": 22.41396954e-3
     ]
     
     private let siPrefixes: [String: Double] = [
-        "yotta": 1e24, "zetta": 1e21, "exa": 1e18, "peta": 1e15, "tera": 1e12,
-        "giga": 1e9, "mega": 1e6, "kilo": 1e3, "hecto": 1e2, "deca": 1e1,
-        "deci": 1e-1, "centi": 1e-2, "milli": 1e-3, "micro": 1e-6, "nano": 1e-9,
-        "pico": 1e-12, "femto": 1e-15, "atto": 1e-18, "zepto": 1e-21, "yocto": 1e-24
+        "yotta": 1e24, "zetta": 1e21, "exa": 1e18, "peta": 1e15, "tera": 1e12, "giga": 1e9, "mega": 1e6,
+        "kilo": 1e3, "hecto": 1e2, "deca": 1e1, "deci": 1e-1, "centi": 1e-2, "milli": 1e-3, "micro": 1e-6,
+        "nano": 1e-9, "pico": 1e-12, "femto": 1e-15, "atto": 1e-18, "zepto": 1e-21, "yocto": 1e-24
     ]
     
-    private let scalarFunctions: [String: (Double) -> Double] = [
-        "ln": log, "lg": log10, "log": log10
-    ]
+    private let scalarFunctions: [String: (Double) -> Double] = ["ln": log, "lg": log10, "log": log10]
     
     private let variadicFunctions: [String: ([MathValue]) throws -> MathValue] = [
         "sum": { args in try performStatisticalOperation(args: args, on: { $0.sum() }) },
@@ -110,9 +84,7 @@ struct Evaluator {
                 return .scalar(sqrt(s))
             } else if case .complex(let c) = arg {
                 return .complex(c.sqrt())
-            } else {
-                throw MathError.typeMismatch(expected: "Scalar or Complex", found: arg.typeName)
-            }
+            } else { throw MathError.typeMismatch(expected: "Scalar or Complex", found: arg.typeName) }
         },
         "round": { arg in
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
@@ -165,24 +137,36 @@ struct Evaluator {
         "vol_cube": { arg in
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
             return .scalar(pow(s, 3))
+        },
+        "unit": { arg in
+            guard case .vector(let v) = arg else { throw MathError.typeMismatch(expected: "Vector", found: arg.typeName) }
+            return .vector(v.unit())
+        },
+        "transpose": { arg in
+            switch arg {
+            case .matrix(let m): return .matrix(m.transpose())
+            case .complexMatrix(let cm): return .complexMatrix(cm.transpose())
+            default: throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName)
+            }
+        },
+        "trace": { arg in
+            guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
+            return .scalar(try m.trace())
         }
     ]
     
     private let angleAwareFunctions: [String: (MathValue, AngleMode) throws -> MathValue] = [
         "sin": { arg, mode in
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
-            let angle = mode == .degrees ? s * .pi / 180 : s
-            return .scalar(sin(angle))
+            return .scalar(sin(mode == .degrees ? s * .pi / 180 : s))
         },
         "cos": { arg, mode in
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
-            let angle = mode == .degrees ? s * .pi / 180 : s
-            return .scalar(cos(angle))
+            return .scalar(cos(mode == .degrees ? s * .pi / 180 : s))
         },
         "tan": { arg, mode in
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
-            let angle = mode == .degrees ? s * .pi / 180 : s
-            return .scalar(tan(angle))
+            return .scalar(tan(mode == .degrees ? s * .pi / 180 : s))
         },
         "asin": { arg, mode in
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
@@ -203,71 +187,61 @@ struct Evaluator {
             guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
             let angle = c.argument()
             return .scalar(mode == .degrees ? angle * 180 / .pi : angle)
+        },
+        "angle": { arg, mode in
+             guard case .tuple(let values) = arg, values.count == 2,
+                  case .vector(let v1) = values[0], case .vector(let v2) = values[1] else {
+                throw MathError.typeMismatch(expected: "Two Vectors", found: "other")
+            }
+            let angleRad = try v1.angle(with: v2)
+            return .scalar(mode == .degrees ? angleRad * 180 / .pi : angleRad)
         }
     ]
     
     private let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
         "dot": { a, b in
-            guard case .vector(let v1) = a, case .vector(let v2) = b else {
-                throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)")
+            if case .vector(let v1) = a, case .vector(let v2) = b {
+                return .scalar(try v1.dot(with: v2))
+            } else if case .complexVector(let v1) = a, case .complexVector(let v2) = b {
+                return .complex(try v1.dot(with: v2))
             }
-            return .scalar(try v1.dot(with: v2))
+            throw MathError.typeMismatch(expected: "Two Vectors or Two ComplexVectors", found: "\(a.typeName), \(b.typeName)")
         },
         "cross": { a, b in
-            guard case .vector(let v1) = a, case .vector(let v2) = b else {
-                throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)") }
             return .vector(try v1.cross(with: v2))
         },
         "nPr": { a, b in
-            guard case .scalar(let n) = a, case .scalar(let k) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .scalar(let n) = a, case .scalar(let k) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }
             return .scalar(try permutations(n: n, k: k))
         },
         "nCr": { a, b in
-            guard case .scalar(let n) = a, case .scalar(let k) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .scalar(let n) = a, case .scalar(let k) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }
             return .scalar(try combinations(n: n, k: k))
         },
         "hypot": { a, b in
-            guard case .scalar(let s1) = a, case .scalar(let s2) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .scalar(let s1) = a, case .scalar(let s2) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }
             return .scalar(Foundation.sqrt(s1*s1 + s2*s2))
         },
         "side": { a, b in
-            guard case .scalar(let c) = a, case .scalar(let s) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars (hyp, side)", found: "\(a.typeName), \(b.typeName)")
-            }
-            guard c >= s else {
-                throw MathError.unsupportedOperation(op: "side", typeA: "hyp < side", typeB: nil)
-            }
+            guard case .scalar(let c) = a, case .scalar(let s) = b else { throw MathError.typeMismatch(expected: "Two Scalars (hyp, side)", found: "\(a.typeName), \(b.typeName)") }
+            guard c >= s else { throw MathError.unsupportedOperation(op: "side", typeA: "hyp < side", typeB: nil) }
             return .scalar(Foundation.sqrt(c*c - s*s))
         },
         "area_rect": { a, b in
-            guard case .scalar(let w) = a, case .scalar(let h) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars (width, height)", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .scalar(let w) = a, case .scalar(let h) = b else { throw MathError.typeMismatch(expected: "Two Scalars (width, height)", found: "\(a.typeName), \(b.typeName)") }
             return .scalar(w * h)
         },
         "area_tri": { a, b in
-            guard case .scalar(let base) = a, case .scalar(let h) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars (base, height)", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .scalar(let base) = a, case .scalar(let h) = b else { throw MathError.typeMismatch(expected: "Two Scalars (base, height)", found: "\(a.typeName), \(b.typeName)") }
             return .scalar(0.5 * base * h)
         },
         "vol_cylinder": { a, b in
-            guard case .scalar(let r) = a, case .scalar(let h) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars (radius, height)", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .scalar(let r) = a, case .scalar(let h) = b else { throw MathError.typeMismatch(expected: "Two Scalars (radius, height)", found: "\(a.typeName), \(b.typeName)") }
             return .scalar(Double.pi * r * r * h)
         },
         "vol_cone": { a, b in
-            guard case .scalar(let r) = a, case .scalar(let h) = b else {
-                throw MathError.typeMismatch(expected: "Two Scalars (radius, height)", found: "\(a.typeName), \(b.typeName)")
-            }
+            guard case .scalar(let r) = a, case .scalar(let h) = b else { throw MathError.typeMismatch(expected: "Two Scalars (radius, height)", found: "\(a.typeName), \(b.typeName)") }
             return .scalar((1.0/3.0) * Double.pi * r * r * h)
         }
     ]
@@ -308,19 +282,11 @@ struct Evaluator {
             return (.scalar(numberNode.value), usedAngle)
         
         case let constantNode as ConstantNode:
-            if constantNode.name == "i" {
-                return (.complex(Complex.i), usedAngle)
-            }
-            
-            if let value = variables[constantNode.name] {
-                return (value, usedAngle)
-            } else if let value = siPrefixes[constantNode.name] {
-                return (.scalar(value), usedAngle)
-            } else if let value = constants[constantNode.name] {
-                return (.scalar(value), usedAngle)
-            } else {
-                throw MathError.unknownConstant(name: constantNode.name)
-            }
+            if constantNode.name == "i" { return (.complex(Complex.i), usedAngle) }
+            if let value = variables[constantNode.name] { return (value, usedAngle) }
+            else if let value = siPrefixes[constantNode.name] { return (.scalar(value), usedAngle) }
+            else if let value = constants[constantNode.name] { return (.scalar(value), usedAngle) }
+            else { throw MathError.unknownConstant(name: constantNode.name) }
             
         case let assignmentNode as AssignmentNode:
             let (value, valueUsedAngle) = try evaluate(node: assignmentNode.expression, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -339,24 +305,19 @@ struct Evaluator {
             for elementNode in vectorNode.elements {
                 let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = usedAngle || elementUsedAngle
-                guard case .scalar(let scalarElement) = evaluatedElement else {
-                    throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in vector definition")
-                }
+                guard case .scalar(let scalarElement) = evaluatedElement else { throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in vector definition") }
                 elements.append(scalarElement)
             }
             return (.vector(Vector(values: elements)), usedAngle)
             
         case let matrixNode as MatrixNode:
             var values: [Double] = []
-            let rows = matrixNode.rows.count
-            let columns = matrixNode.rows.first?.count ?? 0
+            let rows = matrixNode.rows.count; let columns = matrixNode.rows.first?.count ?? 0
             for row in matrixNode.rows {
                 for elementNode in row {
                     let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                     usedAngle = usedAngle || elementUsedAngle
-                    guard case .scalar(let scalarElement) = evaluatedElement else {
-                        throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in matrix definition")
-                    }
+                    guard case .scalar(let scalarElement) = evaluatedElement else { throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in matrix definition") }
                     values.append(scalarElement)
                 }
             }
@@ -368,31 +329,23 @@ struct Evaluator {
                 let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = usedAngle || elementUsedAngle
                 switch evaluatedElement {
-                case .complex(let c):
-                    elements.append(c)
-                case .scalar(let s):
-                    elements.append(Complex(real: s, imaginary: 0))
-                default:
-                    throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
+                case .complex(let c): elements.append(c)
+                case .scalar(let s): elements.append(Complex(real: s, imaginary: 0))
+                default: throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
                 }
             }
             return (.complexVector(ComplexVector(values: elements)), usedAngle)
 
         case let cMatrixNode as ComplexMatrixNode:
-            var values: [Complex] = []
-            let rows = cMatrixNode.rows.count
-            let columns = cMatrixNode.rows.first?.count ?? 0
+            var values: [Complex] = []; let rows = cMatrixNode.rows.count; let columns = cMatrixNode.rows.first?.count ?? 0
             for row in cMatrixNode.rows {
                 for elementNode in row {
                     let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                     usedAngle = usedAngle || elementUsedAngle
                     switch evaluatedElement {
-                    case .complex(let c):
-                        values.append(c)
-                    case .scalar(let s):
-                        values.append(Complex(real: s, imaginary: 0))
-                    default:
-                        throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
+                    case .complex(let c): values.append(c)
+                    case .scalar(let s): values.append(Complex(real: s, imaginary: 0))
+                    default: throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
                     }
                 }
             }
@@ -402,15 +355,18 @@ struct Evaluator {
             let (childValue, childUsedAngle) = try _evaluateSingle(node: unaryNode.child, variables: &variables, functions: &functions, angleMode: angleMode)
             let result = try evaluateUnaryOperation(op: unaryNode.op, value: childValue)
             return (result, childUsedAngle)
+            
+        case let postfixNode as PostfixOpNode:
+             let (childValue, childUsedAngle) = try _evaluateSingle(node: postfixNode.child, variables: &variables, functions: &functions, angleMode: angleMode)
+             let result = try evaluateUnaryOperation(op: postfixNode.op, value: childValue)
+             return (result, childUsedAngle)
 
         case let binaryNode as BinaryOpNode:
             if binaryNode.op.rawValue == "∠" {
                 let (rValue, rUsedAngle) = try _evaluateSingle(node: binaryNode.left, variables: &variables, functions: &functions, angleMode: angleMode)
                 let (thetaValue, thetaUsedAngle) = try _evaluateSingle(node: binaryNode.right, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = rUsedAngle || thetaUsedAngle
-                guard case .scalar(let r) = rValue, case .scalar(let theta) = thetaValue else {
-                    throw MathError.typeMismatch(expected: "Scalar ∠ Scalar", found: "\(rValue.typeName) ∠ \(thetaValue.typeName)")
-                }
+                guard case .scalar(let r) = rValue, case .scalar(let theta) = thetaValue else { throw MathError.typeMismatch(expected: "Scalar ∠ Scalar", found: "\(rValue.typeName) ∠ \(thetaValue.typeName)") }
                 let thetaRad = angleMode == .degrees ? theta * .pi / 180.0 : theta
                 return (.complex(Complex(real: r * cos(thetaRad), imaginary: r * sin(thetaRad))), true)
             }
@@ -428,63 +384,58 @@ struct Evaluator {
     private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         var usedAngle = false
         
+        // Special case for angle() to pass tuple of args
+        if node.name == "angle" {
+            guard node.arguments.count == 2 else {
+                throw MathError.incorrectArgumentCount(function: "angle", expected: 2, found: node.arguments.count)
+            }
+            let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
+            let (arg2, arg2UsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
+            let result = try angleAwareFunctions["angle"]?(.tuple([arg1, arg2]), angleMode)
+            return (result!, true || arg1UsedAngle || arg2UsedAngle)
+        }
+
         if let variadicFunc = variadicFunctions[node.name] {
-            var args: [MathValue] = []
-            for argNode in node.arguments {
+            var args: [MathValue] = []; for argNode in node.arguments {
                 let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
-                usedAngle = usedAngle || argUsedAngle
-                args.append(arg)
+                usedAngle = usedAngle || argUsedAngle; args.append(arg)
             }
             return (try variadicFunc(args), usedAngle)
         }
         
         if let singleArgFunc = singleArgumentFunctions[node.name] {
-            guard node.arguments.count == 1 else {
-                throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
-            }
+            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             return (try singleArgFunc(arg), argUsedAngle)
         }
         
         if let twoArgFunc = twoArgumentFunctions[node.name] {
-            guard node.arguments.count == 2 else {
-                throw MathError.incorrectArgumentCount(function: node.name, expected: 2, found: node.arguments.count)
-            }
+            guard node.arguments.count == 2 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 2, found: node.arguments.count) }
             let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             let (arg2, arg2UsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
             return (try twoArgFunc(arg1, arg2), arg1UsedAngle || arg2UsedAngle)
         }
         
         if let angleFunc = angleAwareFunctions[node.name] {
-            guard node.arguments.count == 1 else {
-                throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
-            }
+            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             return (try angleFunc(arg, angleMode), true || argUsedAngle)
         }
 
         if let scalarFunc = scalarFunctions[node.name] {
-            guard node.arguments.count == 1 else {
-                throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count)
-            }
+            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
-            guard case .scalar(let s) = arg else {
-                throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName)
-            }
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
             return (.scalar(scalarFunc(s)), argUsedAngle)
         }
         
         if let userFunction = functions[node.name] {
-            guard node.arguments.count == userFunction.parameterNames.count else {
-                throw MathError.incorrectArgumentCount(function: node.name, expected: userFunction.parameterNames.count, found: node.arguments.count)
-            }
-            
+            guard node.arguments.count == userFunction.parameterNames.count else { throw MathError.incorrectArgumentCount(function: node.name, expected: userFunction.parameterNames.count, found: node.arguments.count) }
             var localVariables = variables
             for (paramName, argNode) in zip(userFunction.parameterNames, node.arguments) {
                 let (argValue, _) = try evaluate(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 localVariables[paramName] = argValue
             }
-            
             return try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions, angleMode: angleMode)
         }
         
@@ -492,288 +443,201 @@ struct Evaluator {
     }
 
     private func evaluateUnaryOperation(op: Token, value: MathValue) throws -> MathValue {
-        guard op.rawValue == "-" || op.rawValue == "+" else {
-            throw MathError.unknownOperator(op: op.rawValue)
-        }
-        
-        let opSign = (op.rawValue == "-") ? -1.0 : 1.0
-        
-        switch value {
-        case .scalar(let s):
-            return .scalar(s * opSign)
-        case .complex(let c):
-            return .complex(c * opSign)
-        case .vector(let v):
-            let newValues = v.values.map { $0 * opSign }
-            return .vector(Vector(values: newValues))
-        case .matrix(let m):
-            let newValues = m.values.map { $0 * opSign }
-            return .matrix(Matrix(values: newValues, rows: m.rows, columns: m.columns))
-        case .complexVector(let cv):
-            let newValues = cv.values.map { $0 * opSign }
-            return .complexVector(ComplexVector(values: newValues))
-        case .complexMatrix(let cm):
-            let newValues = cm.values.map { $0 * opSign }
-            return .complexMatrix(ComplexMatrix(values: newValues, rows: cm.rows, columns: cm.columns))
-        default:
-            throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
+        switch op.rawValue {
+        case "+": return value
+        case "-":
+            switch value {
+            case .scalar(let s): return .scalar(-s)
+            case .complex(let c): return .complex(c * -1.0)
+            case .vector(let v): return .vector(Vector(values: v.values.map { -$0 }))
+            case .matrix(let m): return .matrix(Matrix(values: m.values.map { -$0 }, rows: m.rows, columns: m.columns))
+            case .complexVector(let cv): return .complexVector(ComplexVector(values: cv.values.map { $0 * -1.0 }))
+            case .complexMatrix(let cm): return .complexMatrix(ComplexMatrix(values: cm.values.map { $0 * -1.0 }, rows: cm.rows, columns: cm.columns))
+            default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
+            }
+        case "'": // Transpose operator
+            switch value {
+            case .matrix(let m): return .matrix(m.transpose())
+            case .complexMatrix(let cm): return .complexMatrix(cm.conjugateTranspose())
+            default: throw MathError.unsupportedOperation(op: "'", typeA: value.typeName, typeB: nil)
+            }
+        default: throw MathError.unknownOperator(op: op.rawValue)
         }
     }
 
     private func evaluateBinaryOperation(op: Token, left: MathValue, right: MathValue) throws -> MathValue {
-        if case .tuple(let leftValues) = left {
-            if case .tuple(let rightValues) = right {
-                guard leftValues.count == rightValues.count else {
-                    throw MathError.dimensionMismatch(reason: "Cannot perform operations on tuples of different sizes.")
-                }
-                let results = try zip(leftValues, rightValues).map { (l, r) in
-                    try evaluateBinaryOperation(op: op, left: l, right: r)
-                }
-                return .tuple(results)
-            }
-            let results = try leftValues.map { try evaluateBinaryOperation(op: op, left: $0, right: right) }
-            return .tuple(results)
-        }
-        
-        if case .tuple(let rightValues) = right {
-            let results = try rightValues.map { try evaluateBinaryOperation(op: op, left: left, right: $0) }
-            return .tuple(results)
-        }
+        if case .tuple = left { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
+        if case .tuple = right { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         
         switch (left, right) {
-        case (.scalar(let l), .scalar(let r)):
-            return .scalar(try performScalarScalarOp(op.rawValue, l, r))
+        // Scalar-Scalar
+        case (.scalar(let l), .scalar(let r)): return .scalar(try performScalarScalarOp(op.rawValue, l, r))
+        // Complex Ops
+        case (.complex(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, r))
+        case (.complex(let l), .scalar(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
+        case (.scalar(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
+        // Vector-Scalar
+        case (.vector(let v), .scalar(let s)): return .vector(try performVectorScalarOp(op.rawValue, v, s))
+        case (.scalar(let s), .vector(let v)): return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
+        // Vector-Vector
+        case (.vector(let l), .vector(let r)): return .vector(try performVectorVectorOp(op.rawValue, l, r))
+        // Matrix-Scalar
+        case (.matrix(let m), .scalar(let s)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
+        case (.scalar(let s), .matrix(let m)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s, reversed: true))
+        // Matrix-Matrix
+        case (.matrix(let l), .matrix(let r)): return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
+        // Matrix-Vector
+        case (.matrix(let m), .vector(let v)):
+             if op.rawValue == "*" { return .vector(try m * v) }
+             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
+        // ComplexVector Ops
+        case (.complexVector(let cv), .complex(let c)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c))
+        case (.complex(let c), .complexVector(let cv)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c, reversed: true))
+        case (.complexVector(let l), .complexVector(let r)): return .complexVector(try performCVectorCVectorOp(op.rawValue, l, r))
+        // ComplexMatrix Ops
+        case (.complexMatrix(let cm), .complex(let c)): return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, cm, c))
+        case (.complex(let c), .complexMatrix(let cm)): return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, cm, c, reversed: true))
+        case (.complexMatrix(let l), .complexMatrix(let r)): return .complexMatrix(try performCMatrixCMatrixOp(op.rawValue, l, r))
+        case (.complexMatrix(let m), .complexVector(let v)):
+            if op.rawValue == "*" { return .complexVector(try m * v) }
+            else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
+        // Promotions
+        case (.matrix, .complex), (.complex, .matrix), (.vector, .complex), (.complex, .vector), (.complexMatrix, .scalar), (.scalar, .complexMatrix), (.complexVector, .scalar), (.scalar, .complexVector):
+            let (promotedL, promotedR) = try promote(left, right)
+            return try evaluateBinaryOperation(op: op, left: promotedL, right: promotedR)
             
-        case (.complex(let l), .complex(let r)):
-            return .complex(try performComplexComplexOp(op.rawValue, l, r))
-        case (.complex(let l), .scalar(let r)):
-            return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
-        case (.scalar(let l), .complex(let r)):
-            return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
-
-        case (.vector(let v), .scalar(let s)):
-            return .vector(try performVectorScalarOp(op.rawValue, v, s))
-        case (.scalar(let s), .vector(let v)):
-            return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
-
-        case (.matrix(let m), .scalar(let s)):
-            return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
-        case (.scalar(let s), .matrix(let m)):
-            return .matrix(try performMatrixScalarOp(op.rawValue, m, s, reversed: true))
-        case (.matrix(let l), .matrix(let r)):
-            return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
-            
-        case (.matrix(let l), .complex(let r)):
-            let promotedMatrix = ComplexMatrix(from: l)
-            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, promotedMatrix, r))
-        case (.complex(let l), .matrix(let r)):
-            let promotedMatrix = ComplexMatrix(from: r)
-            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, promotedMatrix, l, reversed: true))
-        case (.vector(let l), .complex(let r)):
-            let promotedVector = ComplexVector(from: l)
-            return .complexVector(try performComplexVectorComplexOp(op.rawValue, promotedVector, r))
-        case (.complex(let l), .vector(let r)):
-            let promotedVector = ComplexVector(from: r)
-            return .complexVector(try performComplexVectorComplexOp(op.rawValue, promotedVector, l, reversed: true))
-            
-        case (.complexMatrix(let l), .scalar(let r)):
-            let complexScalar = Complex(real: r, imaginary: 0)
-            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, l, complexScalar))
-        case (.scalar(let l), .complexMatrix(let r)):
-            let complexScalar = Complex(real: l, imaginary: 0)
-            return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, r, complexScalar, reversed: true))
-        case (.complexVector(let l), .scalar(let r)):
-            let complexScalar = Complex(real: r, imaginary: 0)
-            return .complexVector(try performComplexVectorComplexOp(op.rawValue, l, complexScalar))
-        case (.scalar(let l), .complexVector(let r)):
-            let complexScalar = Complex(real: l, imaginary: 0)
-            return .complexVector(try performComplexVectorComplexOp(op.rawValue, r, complexScalar, reversed: true))
-
-        default:
-            throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName)
+        default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName)
         }
     }
     
     // --- OPERATOR IMPLEMENTATIONS ---
-    
-    private func performVectorScalarOp(_ op: String, _ v: Vector, _ s: Double, reversed: Bool = false) throws -> Vector {
-        if reversed {
-            switch op {
-            case "+": return s + v
-            case "*": return s * v
-            case "-": return s - v
-            case "/":
-                if v.values.contains(0) { throw MathError.divisionByZero }
-                return s / v
-            default: throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Vector")
-            }
-        } else {
-            switch op {
-            case "+": return v + s
-            case "*": return v * s
-            case "-": return v - s
-            case "/":
-                guard s != 0 else { throw MathError.divisionByZero }
-                return v / s
-            default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Scalar")
-            }
-        }
-    }
-    
     private func performScalarScalarOp(_ op: String, _ l: Double, _ r: Double) throws -> Double {
         switch op {
-        case "+": return l + r
-        case "-": return l - r
-        case "*": return l * r
-        case "/":
-            guard r != 0 else { throw MathError.divisionByZero }
-            return l / r
-        case "%":
-            guard r != 0 else { throw MathError.divisionByZero }
-            return l.truncatingRemainder(dividingBy: r)
+        case "+": return l + r; case "-": return l - r; case "*": return l * r
+        case "/": guard r != 0 else { throw MathError.divisionByZero }; return l / r
+        case "%": guard r != 0 else { throw MathError.divisionByZero }; return l.truncatingRemainder(dividingBy: r)
         case "^": return pow(l, r)
         default: throw MathError.unknownOperator(op: op)
         }
     }
-
     private func performComplexComplexOp(_ op: String, _ l: Complex, _ r: Complex) throws -> Complex {
         switch op {
-        case "+": return l + r
-        case "-": return l - r
-        case "*": return l * r
-        case "/": return try l / r
-        case "^": return try l.pow(r)
+        case "+": return l + r; case "-": return l - r; case "*": return l * r
+        case "/": return try l / r; case "^": return try l.pow(r)
         default: throw MathError.unknownOperator(op: op)
         }
     }
-    
-    private func performMatrixScalarOp(_ op: String, _ m: Matrix, _ s: Double, reversed: Bool = false) throws -> Matrix {
-        let newValues: [Double]
+    private func performVectorScalarOp(_ op: String, _ v: Vector, _ s: Double, reversed: Bool = false) throws -> Vector {
+        if reversed {
+            switch op { case "+": return s + v; case "*": return s * v; case "-": return s - v
+            case "/": guard !v.values.contains(0) else { throw MathError.divisionByZero }; return s / v
+            default: throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Vector")
+            }
+        } else {
+            switch op { case "+": return v + s; case "*": return v * s; case "-": return v - s
+            case "/": guard s != 0 else { throw MathError.divisionByZero }; return v / s
+            default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Scalar")
+            }
+        }
+    }
+    private func performVectorVectorOp(_ op: String, _ l: Vector, _ r: Vector) throws -> Vector {
         switch op {
-        case "+": newValues = m.values.map { $0 + s }
-        case "*": newValues = m.values.map { $0 * s }
+        case "+": return try l + r; case "-": return try l - r
+        case ".*": return try l.hadamard(with: r); case "./": return try l.hadamardDivision(with: r)
+        default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Vector")
+        }
+    }
+    private func performMatrixScalarOp(_ op: String, _ m: Matrix, _ s: Double, reversed: Bool = false) throws -> Matrix {
+        let newValues: [Double]; switch op {
+        case "+": newValues = m.values.map { $0 + s }; case "*": newValues = m.values.map { $0 * s }
         case "-": newValues = reversed ? m.values.map { s - $0 } : m.values.map { $0 - s }
         case "/":
-            if reversed {
-                throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix")
-            }
-            guard s != 0 else { throw MathError.divisionByZero }
-            newValues = m.values.map { $0 / s }
+            if reversed { throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix") }
+            guard s != 0 else { throw MathError.divisionByZero }; newValues = m.values.map { $0 / s }
         default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Scalar")
         }
         return Matrix(values: newValues, rows: m.rows, columns: m.columns)
     }
-    
     private func performMatrixMatrixOp(_ op: String, _ l: Matrix, _ r: Matrix) throws -> Matrix {
         switch op {
-        case "+", "-":
-            guard l.rows == r.rows && l.columns == r.columns else {
-                throw MathError.dimensionMismatch(reason: "Matrices must have same dimensions for +/-.")
-            }
-            var newValues = [Double](repeating: 0, count: l.values.count)
-            for i in 0..<l.values.count {
-                newValues[i] = (op == "+") ? l.values[i] + r.values[i] : l.values[i] - r.values[i]
-            }
-            return Matrix(values: newValues, rows: l.rows, columns: l.columns)
-
-        case "*": // Dot Product
-            guard l.columns == r.rows else {
-                throw MathError.dimensionMismatch(reason: "For A*B, columns of A must equal rows of B.")
-            }
-            var newValues = [Double](repeating: 0, count: l.rows * r.columns)
-            for i in 0..<l.rows {
-                for j in 0..<r.columns {
-                    var sum = 0.0
-                    for k in 0..<l.columns {
-                        sum += l[i, k] * r[k, j]
-                    }
-                    newValues[i * r.columns + j] = sum
-                }
-            }
-            return Matrix(values: newValues, rows: l.rows, columns: r.columns)
-        default:
-            throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Matrix")
+        case "+": return try l + r
+        case "-": return try l - r
+        case "*": return try l * r
+        case ".*": return try l.hadamard(with: r)
+        case "./": return try l.hadamardDivision(with: r)
+        default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Matrix")
         }
     }
-    
     private func performComplexVectorComplexOp(_ op: String, _ v: ComplexVector, _ c: Complex, reversed: Bool = false) throws -> ComplexVector {
         if reversed {
             switch op {
-            case "+": return ComplexVector(values: v.values.map { c + $0 })
-            case "*": return ComplexVector(values: v.values.map { c * $0 })
-            case "-": return ComplexVector(values: v.values.map { c - $0 })
-            case "/": throw MathError.unsupportedOperation(op: op, typeA: "Complex", typeB: "ComplexVector")
+            case "+": return ComplexVector(values: v.values.map { c + $0 }); case "*": return ComplexVector(values: v.values.map { c * $0 })
+            case "-": return ComplexVector(values: v.values.map { c - $0 }); case "/": throw MathError.unsupportedOperation(op: op, typeA: "Complex", typeB: "ComplexVector")
             default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex")
             }
         } else {
-            switch op {
-            case "+": return v + c
-            case "*": return v * c
-            case "-": return v - c
-            case "/": return try v / c
+            switch op { case "+": return v + c; case "*": return v * c; case "-": return v - c; case "/": return try v / c
             default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex")
             }
         }
     }
-    
+    private func performCVectorCVectorOp(_ op: String, _ l: ComplexVector, _ r: ComplexVector) throws -> ComplexVector {
+        switch op { case "+": return try l + r; case "-": return try l - r
+        default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "ComplexVector")
+        }
+    }
     private func performComplexMatrixComplexOp(_ op: String, _ m: ComplexMatrix, _ c: Complex, reversed: Bool = false) throws -> ComplexMatrix {
          if reversed {
-            switch op {
-            case "+": return ComplexMatrix(values: m.values.map { c + $0 }, rows: m.rows, columns: m.columns)
+            switch op { case "+": return ComplexMatrix(values: m.values.map { c + $0 }, rows: m.rows, columns: m.columns)
             case "*": return ComplexMatrix(values: m.values.map { c * $0 }, rows: m.rows, columns: m.columns)
             case "-": return ComplexMatrix(values: m.values.map { c - $0 }, rows: m.rows, columns: m.columns)
             case "/": throw MathError.unsupportedOperation(op: op, typeA: "Complex", typeB: "ComplexMatrix")
             default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "Complex")
             }
         } else {
-            switch op {
-            case "+": return m + c
-            case "*": return m * c
-            case "-": return m - c
-            case "/": return try m / c
+            switch op { case "+": return m + c; case "*": return m * c; case "-": return m - c; case "/": return try m / c
             default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "Complex")
             }
         }
     }
-    
-    private func transpose(_ m: Matrix) -> Matrix {
-        var newValues = [Double](repeating: 0, count: m.values.count)
-        for r in 0..<m.rows {
-            for c in 0..<m.columns {
-                newValues[c * m.rows + r] = m[r, c]
-            }
+    private func performCMatrixCMatrixOp(_ op: String, _ l: ComplexMatrix, _ r: ComplexMatrix) throws -> ComplexMatrix {
+        switch op { case "+": return try l + r; case "-": return try l - r; case "*": return try l * r
+        default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "ComplexMatrix")
         }
-        return Matrix(values: newValues, rows: m.columns, columns: m.rows)
+    }
+    private func promote(_ left: MathValue, _ right: MathValue) throws -> (MathValue, MathValue) {
+        switch (left, right) {
+        case (.matrix(let m), .complex(let c)): return (.complexMatrix(ComplexMatrix(from: m)), .complex(c))
+        case (.complex(let c), .matrix(let m)): return (.complex(c), .complexMatrix(ComplexMatrix(from: m)))
+        case (.vector(let v), .complex(let c)): return (.complexVector(ComplexVector(from: v)), .complex(c))
+        case (.complex(let c), .vector(let v)): return (.complex(c), .complexVector(ComplexVector(from: v)))
+        case (.complexMatrix(let cm), .scalar(let s)): return (.complexMatrix(cm), .complex(Complex(real: s, imaginary: 0)))
+        case (.scalar(let s), .complexMatrix(let cm)): return (.complex(Complex(real: s, imaginary: 0)), .complexMatrix(cm))
+        case (.complexVector(let cv), .scalar(let s)): return (.complexVector(cv), .complex(Complex(real: s, imaginary: 0)))
+        case (.scalar(let s), .complexVector(let cv)): return (.complex(Complex(real: s, imaginary: 0)), .complexVector(cv))
+        default: return (left, right)
+        }
     }
 }
 
 private func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
     if args.count == 1, case .vector(let v) = args[0] {
-        guard let result = operation(v) else {
-            throw MathError.unsupportedOperation(op: "Statistical", typeA: "Vector with zero or one elements", typeB: nil)
-        }
+        guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Vector with zero or one elements", typeB: nil) }
         return .scalar(result)
     } else if args.count == 1, case .matrix(let m) = args[0] {
         let v = Vector(values: m.values)
-        guard let result = operation(v) else {
-            throw MathError.unsupportedOperation(op: "Statistical", typeA: "Matrix with zero or one elements", typeB: nil)
-        }
+        guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Matrix with zero or one elements", typeB: nil) }
         return .scalar(result)
     } else {
         var scalars: [Double] = []
         for arg in args {
-            guard case .scalar(let s) = arg else {
-                throw MathError.typeMismatch(expected: "Scalar arguments or a single Vector/Matrix", found: arg.typeName)
-            }
+            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar arguments or a single Vector/Matrix", found: arg.typeName) }
             scalars.append(s)
         }
-        guard !scalars.isEmpty else {
-             throw MathError.requiresAtLeastOneArgument(function: "Statistical function")
-        }
+        guard !scalars.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Statistical function") }
         let v = Vector(values: scalars)
-        guard let result = operation(v) else {
-            throw MathError.unsupportedOperation(op: "Statistical", typeA: "Scalar list", typeB: nil)
-        }
+        guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Scalar list", typeB: nil) }
         return .scalar(result)
     }
 }
+
