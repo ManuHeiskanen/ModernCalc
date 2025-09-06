@@ -183,9 +183,11 @@ class CalculatorViewModel: ObservableObject {
     ]
 
     let helpTopics: [HelpTopic] = [
-        .init(title: "Quick Start", content: "Basic calculations, history navigation, LaTeX export, and the `ans` variable."),
-        .init(title: "Syntax Reference", content: "Variable assignment (`:=`), function definition (`f(x) := ...`), complex numbers (`3+4i`), vectors (`vector(1;2;3)`), matrices (`matrix(1,2;3,4)`), and polar coordinates (`5∠30`)."),
-        .init(title: "Operators", content: "Standard operators `+ - * / ^ %`, transpose `'`, element-wise `.* ./`, and implicit multiplication (`2x`).")
+        .init(title: "Quick Start", content: "Enter a mathematical expression to see a live result. Press **Enter** to add it to your history. Use the `ans` variable to reference the last result. Use the arrow keys to navigate your history and reuse previous equations or results."),
+        .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
+        .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
+        .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
+        .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. For example, `derivative(x^3, x, 2)` finds the slope of x³ at x=2. \nCalculate definite integrals with `integral(expression, variable, from, to)`, for example `integral(x^2, x, 0, 1)`.")
     ]
 
 
@@ -536,4 +538,5 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
 
