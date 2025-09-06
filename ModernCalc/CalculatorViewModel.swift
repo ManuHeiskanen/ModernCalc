@@ -80,8 +80,8 @@ class CalculatorViewModel: ObservableObject {
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
     
-    // --- NEW: A property to track if the expression is multi-row ---
-    @Published var isMultiRowExpression: Bool = false
+    // --- CHANGE: Renamed property for clarity ---
+    @Published var isTallExpression: Bool = false
     
     @Published var angleMode: AngleMode = .degrees {
         didSet {
@@ -259,10 +259,18 @@ class CalculatorViewModel: ObservableObject {
             .sink { [weak self] newExpression in
                 guard let self = self else { return }
                 
-                // --- NEW: Check for multi-row expressions and update the flag ---
+                // --- NEW: Logic to detect if a taller view is needed ---
+                // Condition 1: A multi-row vector or matrix
                 let isMultiRow = (newExpression.contains("vector(") || newExpression.contains("matrix(")) && newExpression.contains(";")
-                if self.isMultiRowExpression != isMultiRow {
-                    self.isMultiRowExpression = isMultiRow
+                
+                // Condition 2: A nested fraction (e.g., a/b/c)
+                let parts = newExpression.components(separatedBy: CharacterSet(charactersIn: "+-()"))
+                let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
+                
+                let isTall = isMultiRow || hasNestedFraction
+                
+                if self.isTallExpression != isTall {
+                    self.isTallExpression = isTall
                 }
                 
                 DispatchQueue.main.async {
