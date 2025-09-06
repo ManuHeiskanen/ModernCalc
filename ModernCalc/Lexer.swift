@@ -9,7 +9,8 @@ import Foundation
 
 enum TokenType: Equatable {
     case number(Double)
-    case complexLiteral(Double)
+    // --- REMOVED: No longer needed ---
+    // case complexLiteral(Double)
     case op(Character)
     case paren(Character)
     case bracket(Character)
@@ -56,21 +57,15 @@ class Lexer {
             }
             
             if char.isLetter || greekLetters.contains(char) || char == "_" {
-                if char == "i" {
-                    if peekNext() == "'" {
-                        advance(); advance()
-                        tokens.append(Token(type: .unitVector("i"), rawValue: "i'"))
-                    } else {
-                        tokens.append(lexIdentifierOrComplex())
-                    }
-                } else if char == "j" && peekNext() == "'" {
+                // --- SIMPLIFIED: `i` is now handled like any other identifier ---
+                if char == "j" && peekNext() == "'" {
                     advance(); advance()
                     tokens.append(Token(type: .unitVector("j"), rawValue: "j'"))
                 } else if char == "k" && peekNext() == "'" {
                     advance(); advance()
                     tokens.append(Token(type: .unitVector("k"), rawValue: "k'"))
                 } else {
-                    tokens.append(lexIdentifierOrComplex())
+                    tokens.append(lexIdentifier())
                 }
                 continue
             }
@@ -134,14 +129,7 @@ class Lexer {
             }
         }
         
-        if let char = peek(), char == "i" {
-            let numberString = String(input[startIndex..<currentIndex])
-            let sanitizedString = numberString.replacingOccurrences(of: ",", with: ".")
-            if let value = Double(sanitizedString) {
-                advance()
-                return Token(type: .complexLiteral(value), rawValue: numberString + "i")
-            }
-        }
+        // --- REMOVED: Logic to detect trailing 'i' is no longer needed ---
         
         let numberString = String(input[startIndex..<currentIndex])
         let sanitizedString = numberString.replacingOccurrences(of: ",", with: ".")
@@ -153,17 +141,15 @@ class Lexer {
         }
     }
     
-    private func lexIdentifierOrComplex() -> Token {
+    private func lexIdentifier() -> Token {
         let startIndex = currentIndex
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
-        while let char = peek(), char.isLetter || greekLetters.contains(char) || char == "_" {
+        while let char = peek(), char.isLetter || greekLetters.contains(char) || char == "_" || (char == "'" && startIndex != currentIndex) {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
         
-        if identifierString == "i" {
-            return Token(type: .complexLiteral(1.0), rawValue: "i")
-        }
+        // --- REMOVED: Special case for 'i' is gone ---
         
         if identifierString == "π" {
             return Token(type: .identifier("pi"), rawValue: "π")

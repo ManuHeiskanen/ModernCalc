@@ -70,7 +70,6 @@ struct Evaluator {
         "Vm": 22.41396954e-3    // Molar volume of ideal gas at STP (m³/mol)
     ]
     
-    // NEW: A dictionary of all standard SI prefixes.
     private let siPrefixes: [String: Double] = [
         "yotta": 1e24, "zetta": 1e21, "exa": 1e18, "peta": 1e15, "tera": 1e12,
         "giga": 1e9, "mega": 1e6, "kilo": 1e3, "hecto": 1e2, "deca": 1e1,
@@ -308,16 +307,14 @@ struct Evaluator {
         case let numberNode as NumberNode:
             return (.scalar(numberNode.value), usedAngle)
         
-        case let complexNode as ComplexNode:
-            let (realPart, realUsedAngle) = try _evaluateSingle(node: complexNode.real, variables: &variables, functions: &functions, angleMode: angleMode)
-            let (imagPart, imagUsedAngle) = try _evaluateSingle(node: complexNode.imaginary, variables: &variables, functions: &functions, angleMode: angleMode)
-            usedAngle = realUsedAngle || imagUsedAngle
-            guard case .scalar(let r) = realPart, case .scalar(let i) = imagPart else {
-                throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in complex definition")
-            }
-            return (.complex(Complex(real: r, imaginary: i)), usedAngle)
+        // --- REMOVED: complexNode case is no longer needed ---
 
         case let constantNode as ConstantNode:
+            // --- NEW: Handle 'i' as a constant ---
+            if constantNode.name == "i" {
+                return (.complex(Complex.i), usedAngle)
+            }
+            
             if let value = variables[constantNode.name] {
                 return (value, usedAngle)
             } else if let value = siPrefixes[constantNode.name] {
@@ -754,5 +751,3 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
-
-

@@ -5,10 +5,9 @@ import Foundation
 protocol ExpressionNode {
     var description: String { get }
 }
-struct ComplexNode: ExpressionNode {
-    let real: ExpressionNode, imaginary: ExpressionNode
-    var description: String { "(\(real.description) + \(imaginary.description)i)" }
-}
+// --- REMOVED: The special ComplexNode is no longer needed ---
+// struct ComplexNode: ExpressionNode { ... }
+
 struct FunctionDefinitionNode: ExpressionNode {
     let name: String, parameterNames: [String], body: ExpressionNode
     var description: String { "\(name)(\(parameterNames.joined(separator: ", "))) := \(body.description)" }
@@ -157,7 +156,7 @@ class Parser {
         let token = try advance()
         switch token.type {
         case .number(let value): return NumberNode(value: value)
-        case .complexLiteral(let value): return ComplexNode(real: NumberNode(value: 0), imaginary: NumberNode(value: value))
+        // --- REMOVED: complexLiteral case is no longer needed ---
         case .unitVector(let char): return ConstantNode(name: "\(char)'")
         case .identifier(let name):
             if let nextToken = peek(), case .paren("(") = nextToken.type {
@@ -320,14 +319,14 @@ class Parser {
 
         let wasValue = {
             switch lastType {
-            case .number, .complexLiteral, .identifier, .unitVector, .paren(")"): return true
+            case .number, .identifier, .unitVector, .paren(")"): return true
             default: return false
             }
         }()
 
         let isValue = {
             switch nextType {
-            case .number, .complexLiteral, .identifier, .unitVector, .paren("("): return true
+            case .number, .identifier, .unitVector, .paren("("): return true
             default: return false
             }
         }()
