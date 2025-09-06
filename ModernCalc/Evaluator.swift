@@ -416,6 +416,11 @@ struct Evaluator {
             }
             let order = Int(orderScalar)
 
+            // Perform a dry run evaluation of the body to check for angle-sensitive functions
+            var tempVars = variables
+            tempVars[derivativeNode.variable.name] = .scalar(0) // Use a dummy value
+            let bodyUsedAngle = (try? _evaluateSingle(node: derivativeNode.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
+
             func calculateNthDerivative(node: ExpressionNode, varName: String, at a: Double, order n: Int) throws -> Double {
                 if n == 1 {
                     let valPlus = try evaluateWithTempVar(node: node, varName: varName, varValue: a + h, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -433,7 +438,7 @@ struct Evaluator {
             }
             
             let result = try calculateNthDerivative(node: derivativeNode.body, varName: derivativeNode.variable.name, at: point, order: order)
-            return (.scalar(result), pointUsedAngle)
+            return (.scalar(result), pointUsedAngle || bodyUsedAngle)
 
         case let integralNode as IntegralNode:
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -442,6 +447,11 @@ struct Evaluator {
             guard case .scalar(let a) = lowerValue, case .scalar(let b) = upperValue else {
                 throw MathError.typeMismatch(expected: "Scalar for integration bounds", found: "Non-scalar")
             }
+
+            // Perform a dry run evaluation of the body to check for angle-sensitive functions
+            var tempVars = variables
+            tempVars[integralNode.variable.name] = .scalar(0) // Use a dummy value
+            let bodyUsedAngle = (try? _evaluateSingle(node: integralNode.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
 
             // Create a closure that represents the mathematical function f(x)
             // This captures the necessary context to evaluate the expression body at any x.
@@ -464,7 +474,7 @@ struct Evaluator {
             let tolerance = 1e-7
             let result = try adaptiveSimpson(f: f, a: a, b: b, tolerance: tolerance)
                     
-            return (.scalar(result), lowerUsedAngle || upperUsedAngle)
+            return (.scalar(result), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
 
 
         case let primeNode as PrimeDerivativeNode:
@@ -481,6 +491,11 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "Scalar for differentiation point", found: pointValue.typeName)
             }
 
+            // Perform a dry run evaluation of the function body
+            var tempVars = variables
+            tempVars[varName] = .scalar(point) // Use the actual point for the dry run
+            let bodyUsedAngle = (try? _evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
+
             let valPlus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
             let valMinus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
             
@@ -489,7 +504,7 @@ struct Evaluator {
             }
 
             let derivative = (scalarPlus - scalarMinus) / (2 * h)
-            return (.scalar(derivative), pointUsedAngle)
+            return (.scalar(derivative), pointUsedAngle || bodyUsedAngle)
 
         default:
             throw MathError.invalidNode
@@ -576,6 +591,9 @@ struct Evaluator {
             case .complexVector(let cv): return .complexMatrix(cv.conjugateTranspose())
             default: throw MathError.unsupportedOperation(op: "'", typeA: value.typeName, typeB: nil)
             }
+        case "!":
+            guard case .scalar(let s) = value else { throw MathError.typeMismatch(expected: "Scalar for factorial", found: value.typeName) }
+            return .scalar(try factorial(s))
         default: throw MathError.unknownOperator(op: op.rawValue)
         }
     }
@@ -770,3 +788,4 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
+

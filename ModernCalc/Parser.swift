@@ -175,7 +175,7 @@ class Parser {
 
     private func parsePostfix(left: ExpressionNode) throws -> ExpressionNode {
         var result = left
-        while let token = peek(), case .op(let opString) = token.type, opString == "'" {
+        while let token = peek(), case .op(let opString) = token.type, ["'", "!"].contains(opString) {
             try advance()
             result = PostfixOpNode(op: token, child: result)
         }
@@ -408,7 +408,7 @@ class Parser {
 
         let wasValue = {
             switch lastType {
-            case .number, .identifier, .unitVector, .paren(")"), .op("'"): return true
+            case .number, .identifier, .unitVector, .paren(")"), .op("'"), .op("!"): return true // Add !
             default: return false
             }
         }()

@@ -194,6 +194,7 @@ class CalculatorViewModel: ObservableObject {
         self.operatorSymbols = [
             .init(symbol: "±", name: "Plus-Minus"), .init(symbol: "∠", name: "Angle"), .init(symbol: "√", name: "Square Root", insertionText: "√("),
             .init(symbol: "×", name: "Multiply"), .init(symbol: "÷", name: "Divide"), .init(symbol: "^", name: "Power"),
+            .init(symbol: "!", name: "Factorial"),
             .init(symbol: "'", name: "Transpose"), .init(symbol: ".*", name: "Element-wise Multiply"), .init(symbol: "./", name: "Element-wise Divide")
         ]
         self.greekSymbols = [
@@ -212,9 +213,9 @@ class CalculatorViewModel: ObservableObject {
         ]
         self.constantSymbols = physicalConstants.map { .init(symbol: $0.symbol, name: $0.name, insertionText: $0.symbol) }
         
-        Publishers.CombineLatest($rawExpression, $cursorPosition)
+        Publishers.CombineLatest3($rawExpression, $cursorPosition, $angleMode)
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
-            .sink { [weak self] (expression, position) in
+            .sink { [weak self] (expression, position, _) in
                 guard let self = self else { return }
                 self.calculate(expression: expression, cursor: position)
             }

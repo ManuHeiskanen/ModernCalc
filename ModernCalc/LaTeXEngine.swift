@@ -51,7 +51,7 @@ struct LaTeXEngine {
         case let unaryNode as UnaryOpNode:
             let childLaTeX = formatNode(unaryNode.child, evaluator: evaluator, settings: settings)
             if unaryNode.child is BinaryOpNode {
-                return "\(unaryNode.op.rawValue)(\\left. \(childLaTeX) \\right.)"
+                return "\(unaryNode.op.rawValue)\\left( \(childLaTeX) \\right)"
             }
             return "\(unaryNode.op.rawValue)\(childLaTeX)"
 
@@ -61,14 +61,14 @@ struct LaTeXEngine {
 
             if let leftBinary = binaryNode.left as? BinaryOpNode {
                 if operatorPrecedence(for: leftBinary.op.rawValue) < operatorPrecedence(for: binaryNode.op.rawValue) {
-                    leftLaTeX = "(\\left. \(leftLaTeX) \\right.)"
+                    leftLaTeX = "\\left( \(leftLaTeX) \\right)"
                 }
             }
             if let rightBinary = binaryNode.right as? BinaryOpNode {
                 let currentPrecedence = operatorPrecedence(for: binaryNode.op.rawValue)
                 let rightPrecedence = operatorPrecedence(for: rightBinary.op.rawValue)
                 if rightPrecedence < currentPrecedence || (currentPrecedence == rightPrecedence && ["-", "/"].contains(binaryNode.op.rawValue)) {
-                     rightLaTeX = "(\\left. \(rightLaTeX) \\right.)"
+                     rightLaTeX = "\\left( \(rightLaTeX) \\right)"
                 }
             }
             
@@ -76,7 +76,27 @@ struct LaTeXEngine {
             case "/", "÷":
                 return "\\frac{\(leftLaTeX)}{\(rightLaTeX)}"
             case "*", "×":
-                 return "\(leftLaTeX) \\cdot \(rightLaTeX)"
+                // Heuristic for rendering implicit multiplication without a dot.
+                if binaryNode.op.rawValue == "*" {
+                    let leftIsNumber = binaryNode.left is NumberNode
+                    let leftIsConstant = binaryNode.left is ConstantNode
+                    
+                    let rightIsConstant = binaryNode.right is ConstantNode
+                    let rightIsFuncCall = binaryNode.right is FunctionCallNode
+                    let rightIsVectorOrMatrix = binaryNode.right is VectorNode || binaryNode.right is MatrixNode || binaryNode.right is ComplexVectorNode || binaryNode.right is ComplexMatrixNode
+                    
+                    // e.g., "2x", "ax", "2sin(x)", "2[1;2]"
+                    if (leftIsNumber || leftIsConstant) && (rightIsConstant || rightIsFuncCall || rightIsVectorOrMatrix) {
+                        return "\(leftLaTeX)\(rightLaTeX)"
+                    }
+                    
+                    let rightIsNumber = binaryNode.right is NumberNode
+                    // e.g., "x2"
+                    if leftIsConstant && rightIsNumber {
+                        return "\(leftLaTeX)\(rightLaTeX)"
+                    }
+                }
+                return "\(leftLaTeX) \\cdot \(rightLaTeX)"
             case "^":
                 return "{\(leftLaTeX)}^{\(rightLaTeX)}"
             case "±":
@@ -89,7 +109,7 @@ struct LaTeXEngine {
 
         case let functionCallNode as FunctionCallNode:
             let args = functionCallNode.arguments.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: ", ")
-            let knownFuncs = ["sin", "cos", "tan", "log", "ln", "det"]
+            let knownFuncs = ["sin", "cos", "tan", "log", "ln", "det", "exp", "min", "max", "lim"]
             if functionCallNode.name == "sqrt" {
                 return "\\sqrt{\(args)}"
             } else if knownFuncs.contains(functionCallNode.name) {
@@ -115,14 +135,23 @@ struct LaTeXEngine {
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
         case let postfixNode as PostfixOpNode:
-            if postfixNode.op.rawValue == "'", let cVectorNode = postfixNode.child as? ComplexVectorNode {
-                let elements = cVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
-                return "\\left(\\begin{bmatrix} \(elements) \\end{bmatrix}\\right)^\\dagger"
-            }
             let childLaTeX = formatNode(postfixNode.child, evaluator: evaluator, settings: settings)
+
             if postfixNode.op.rawValue == "'" {
+                if let cVectorNode = postfixNode.child as? ComplexVectorNode {
+                    let elements = cVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
+                    return "\\left(\\begin{bmatrix} \(elements) \\end{bmatrix}\\right)^\\dagger"
+                }
                 return "{\(childLaTeX)}^T"
             }
+            
+            if postfixNode.op.rawValue == "!" {
+                if postfixNode.child is BinaryOpNode || postfixNode.child is UnaryOpNode {
+                    return "\\left( \(childLaTeX) \\right)!"
+                }
+                return "\(childLaTeX)!"
+            }
+            
             return "\(childLaTeX)\(postfixNode.op.rawValue)"
 
         case let cVectorNode as ComplexVectorNode:
@@ -224,11 +253,17 @@ struct LaTeXEngine {
         let formattedString: String
         switch settings.displayMode {
         case .auto:
-            if value.truncatingRemainder(dividingBy: 1) == 0 { formattedString = String(format: "%.0f", value) }
-            else {
+            if value.truncatingRemainder(dividingBy: 1) == 0 {
+                formattedString = String(format: "%.0f", value)
+            } else {
                 let absValue = abs(value)
-                if absValue > 0 && (absValue < 1e-4 || absValue >= 1e15) { formattedString = String(format: "%.4g", value) }
-                else {
+                if absValue > 0 && (absValue < 1e-4 || absValue >= 1e15) {
+                    let sciString = String(format: "%.4g", value)
+                    if sciString.contains("e") {
+                        return formatScientificNotation(fromString: sciString, using: settings)
+                    }
+                    formattedString = sciString
+                } else {
                     let tempFormatted = String(format: "%.10f", value)
                     if let regex = try? NSRegularExpression(pattern: "\\.?0+$") {
                         let nsString = tempFormatted as NSString
@@ -240,7 +275,8 @@ struct LaTeXEngine {
                 }
             }
         case .scientific:
-            formattedString = String(format: "%.*e", settings.fixedDecimalPlaces, value)
+            let sciString = String(format: "%.*e", settings.fixedDecimalPlaces, value)
+            return formatScientificNotation(fromString: sciString, using: settings)
         case .fixed:
             formattedString = String(format: "%.\(settings.fixedDecimalPlaces)f", value)
         }
@@ -249,6 +285,21 @@ struct LaTeXEngine {
             return formattedString.replacingOccurrences(of: ".", with: "{,}")
         }
         return formattedString
+    }
+
+    private static func formatScientificNotation(fromString scientificString: String, using settings: UserSettings) -> String {
+        let parts = scientificString.lowercased().split(separator: "e")
+        guard parts.count == 2, let exponent = Int(parts[1]) else {
+            return scientificString // Fallback
+        }
+
+        var mantissaString = String(parts[0])
+        
+        if settings.decimalSeparator == .comma {
+            mantissaString = mantissaString.replacingOccurrences(of: ".", with: "{,}")
+        }
+
+        return "\(mantissaString) \\times 10^{\(exponent)}"
     }
 
     private static func fallbackFormatExpression(_ expression: String) -> String {

@@ -90,6 +90,9 @@ class Lexer {
             case "∠":
                 advance()
                 tokens.append(Token(type: .op("∠"), rawValue: "∠"))
+            case "!": // Add factorial operator
+                advance()
+                tokens.append(Token(type: .op("!"), rawValue: "!"))
             case "'": // Transpose operator
                 advance()
                 tokens.append(Token(type: .op("'"), rawValue: "'"))
