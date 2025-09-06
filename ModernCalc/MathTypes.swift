@@ -375,6 +375,53 @@ struct ComplexMatrix: Equatable, Codable {
     init(from realMatrix: Matrix) { self.values = realMatrix.values.map { Complex(real: $0, imaginary: 0) }; self.rows = realMatrix.rows; self.columns = realMatrix.columns }
     
     subscript(row: Int, col: Int) -> Complex { return values[row * columns + col] }
+
+    func submatrix(excludingRow: Int, excludingCol: Int) -> ComplexMatrix {
+        var newValues: [Complex] = []
+        for r in 0..<rows {
+            guard r != excludingRow else { continue }
+            for c in 0..<columns {
+                guard c != excludingCol else { continue }
+                newValues.append(self[r, c])
+            }
+        }
+        return ComplexMatrix(values: newValues, rows: rows - 1, columns: columns - 1)
+    }
+
+    func determinant() throws -> Complex {
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square to calculate determinant.") }
+        if rows == 1 { return self[0, 0] }
+        if rows == 2 { return (self[0, 0] * self[1, 1]) - (self[0, 1] * self[1, 0]) }
+        
+        var det = Complex.zero
+        for c in 0..<columns {
+            let sign: Double = (c % 2 == 0) ? 1.0 : -1.0
+            det = det + (Complex(real: sign, imaginary: 0) * self[0, c] * (try submatrix(excludingRow: 0, excludingCol: c).determinant()))
+        }
+        return det
+    }
+
+    func inverse() throws -> ComplexMatrix {
+        let det = try determinant()
+        guard det != .zero else { throw MathError.unsupportedOperation(op: "inverse", typeA: "Singular Complex Matrix", typeB: nil) }
+        
+        if rows == 1 { return ComplexMatrix(values: [try Complex(real: 1, imaginary: 0) / det], rows: 1, columns: 1) }
+
+        var cofactors: [Complex] = []
+        for r in 0..<rows {
+            for c in 0..<columns {
+                let sign: Double = ((r + c) % 2 == 0) ? 1.0 : -1.0
+                let subDet = try submatrix(excludingRow: r, excludingCol: c).determinant()
+                cofactors.append(Complex(real: sign, imaginary: 0) * subDet)
+            }
+        }
+        
+        let cofactorMatrix = ComplexMatrix(values: cofactors, rows: rows, columns: columns)
+        let adjugateMatrix = cofactorMatrix.transpose()
+        
+        let inverseValues = try adjugateMatrix.values.map { try $0 / det }
+        return ComplexMatrix(values: inverseValues, rows: rows, columns: columns)
+    }
     
     func transpose() -> ComplexMatrix {
         var newValues = [Complex](repeating: .zero, count: values.count)
@@ -389,6 +436,15 @@ struct ComplexMatrix: Equatable, Codable {
     func conjugateTranspose() -> ComplexMatrix {
         let transposed = self.transpose()
         return ComplexMatrix(values: transposed.values.map { $0.conjugate() }, rows: transposed.rows, columns: transposed.columns)
+    }
+    
+    func trace() throws -> Complex {
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square for trace.") }
+        var sum = Complex.zero
+        for i in 0..<rows {
+            sum = sum + self[i, i]
+        }
+        return sum
     }
     
     static func + (lhs: ComplexMatrix, rhs: ComplexMatrix) throws -> ComplexMatrix {
@@ -471,4 +527,3 @@ enum MathValue: Equatable, Codable {
         }
     }
 }
-

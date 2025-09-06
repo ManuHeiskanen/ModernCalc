@@ -103,12 +103,18 @@ struct Evaluator {
             return .scalar(try factorial(s))
         },
         "det": { arg in
-            guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
-            return .scalar(try m.determinant())
+            switch arg {
+            case .matrix(let m): return .scalar(try m.determinant())
+            case .complexMatrix(let cm): return .complex(try cm.determinant())
+            default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
+            }
         },
         "inv": { arg in
-            guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
-            return .matrix(try m.inverse())
+            switch arg {
+            case .matrix(let m): return .matrix(try m.inverse())
+            case .complexMatrix(let cm): return .complexMatrix(try cm.inverse())
+            default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
+            }
         },
         "real": { arg in
             guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }
@@ -150,8 +156,11 @@ struct Evaluator {
             }
         },
         "trace": { arg in
-            guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
-            return .scalar(try m.trace())
+            switch arg {
+            case .matrix(let m): return .scalar(try m.trace())
+            case .complexMatrix(let cm): return .complex(try cm.trace())
+            default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
+            }
         }
     ]
     
@@ -640,4 +649,3 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
-
