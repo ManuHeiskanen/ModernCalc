@@ -20,7 +20,7 @@ Angle Modes: Instantly switch between Degrees (DEG) and Radians (RAD) for trigon
 Built-in Constants & Symbols: Quick-access popovers for physical constants (like π, c, h) and Greek letters.
 
 ## 🚀 Installation
-Navigate to the Releases Page (https://github.com/ManuHeiskanen/ModernCalc/releases/tag/1.0.0).
+Navigate to the Releases Page (https://github.com/ManuHeiskanen/ModernCalc/releases/).
 
 Download the ModernCalc.zip file from the latest release.
 
