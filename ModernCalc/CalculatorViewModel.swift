@@ -123,6 +123,10 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "floor", signature: "floor(number)", description: "Rounds a number down to the nearest integer."),
         .init(name: "ceil", signature: "ceil(number)", description: "Rounds a number up to the nearest integer."),
         .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),
+        .init(name: "matrix", signature: "matrix(a, b ; c, d ; ...)", description: "Forms a matrix of given real numbers."),
+        .init(name: "cmatrix", signature: "cmatrix(a, b ; c, d ; ...)", description: "Forms a complex matrix of given real or imaginary numbers."),
+        .init(name: "vector", signature: "vector(a ; b ; c ; ...)", description: "Forms a vector of given real numbers."),
+        .init(name: "cvector", signature: "cvector(a ; b ; c ; ...)", description: "Forms a complex vector of given real or imaginary numbers."),
         // Stats
         .init(name: "sum", signature: "sum(a, b, ...)", description: "Calculates the sum of a list of numbers or a vector/matrix."),
         .init(name: "avg", signature: "avg(a, b, ...)", description: "Calculates the average of a list of numbers or a vector/matrix."),
@@ -253,10 +257,36 @@ class CalculatorViewModel: ObservableObject {
                 self.liveResult = ""
             }
         } catch let error {
-            DispatchQueue.main.async {
-                self.lastSuccessfulValue = nil; self.liveLaTeXPreview = ""
-                self.liveResult = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
+            // New logic to handle missing parenthesis
+            if expression.hasSuffix("(") {
+                handlePartialFunctionCall(expression)
+            } else {
+                DispatchQueue.main.async {
+                    self.lastSuccessfulValue = nil; self.liveLaTeXPreview = ""
+                    self.liveResult = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
+                }
             }
+        }
+    }
+    
+    // New helper method to provide function hints
+    private func handlePartialFunctionCall(_ expression: String) {
+        let trimmed = expression.dropLast().trimmingCharacters(in: .whitespaces)
+        
+        if let lastWord = trimmed.split(whereSeparator: \.isWhitespace).last {
+            let functionName = String(lastWord)
+            if let functionInfo = builtinFunctions.first(where: { $0.name == functionName }) {
+                DispatchQueue.main.async {
+                    self.liveResult = functionInfo.description+" Syntax: "+functionInfo.signature
+                }
+                return
+            }
+        }
+
+        // Fallback for unknown function or other syntax errors
+        DispatchQueue.main.async {
+            self.liveLaTeXPreview = ""
+            self.liveResult = "Error: Expected a number or function name."
         }
     }
     
