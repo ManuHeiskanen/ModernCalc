@@ -113,17 +113,35 @@ struct LaTeXEngine {
                 row.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+        
+        // --- ADDED: LaTeX formatting for PostfixOpNode on ComplexVectorNode ---
+        case let postfixNode as PostfixOpNode:
+            if postfixNode.op.rawValue == "'", let cVectorNode = postfixNode.child as? ComplexVectorNode {
+                // For a complex vector transpose, output a column vector with a dagger
+                let elements = cVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
+                return "\\left(\\begin{bmatrix} \(elements) \\end{bmatrix}\\right)^\\dagger"
+            }
+            let childLaTeX = formatNode(postfixNode.child, evaluator: evaluator, settings: settings)
+            if postfixNode.op.rawValue == "'" {
+                // For a real matrix transpose, use a simple T
+                return "{\(childLaTeX)}^T"
+            }
+            return "\(childLaTeX)\(postfixNode.op.rawValue)"
 
         case let cVectorNode as ComplexVectorNode:
             let elements = cVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
 
         case let cMatrixNode as ComplexMatrixNode:
+            // This is the problematic part. We need to format the expression nodes, not a MathValue.
             let rows = cMatrixNode.rows.map { row in
                 row.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
+        case is TupleNode:
+            return ""
+
         default:
             return node.description
         }
