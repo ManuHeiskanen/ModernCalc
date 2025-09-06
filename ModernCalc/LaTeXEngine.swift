@@ -23,7 +23,7 @@ struct LaTeXEngine {
         }
     }
     
-    private static func formatExpression(_ expression: String, evaluator: Evaluator, settings: UserSettings) -> String {
+    static func formatExpression(_ expression: String, evaluator: Evaluator, settings: UserSettings) -> String {
         do {
             let lexer = Lexer(input: expression, decimalSeparator: settings.decimalSeparator)
             let tokens = lexer.tokenize()
@@ -31,7 +31,7 @@ struct LaTeXEngine {
             let node = try parser.parse()
             return formatNode(node, evaluator: evaluator, settings: settings)
         } catch {
-            print("LaTeX generation failed to parse, falling back to string replacement. Error: \(error)")
+            // Even on failure, try to do basic string replacement for a better preview.
             return fallbackFormatExpression(expression)
         }
     }
@@ -139,7 +139,13 @@ struct LaTeXEngine {
             let body = formatNode(derivativeNode.body, evaluator: evaluator, settings: settings)
             let variable = derivativeNode.variable.name
             let point = formatNode(derivativeNode.point, evaluator: evaluator, settings: settings)
-            return "\\frac{d}{d\(variable)}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+            let orderLaTeX = formatNode(derivativeNode.order, evaluator: evaluator, settings: settings)
+
+            if let orderNode = derivativeNode.order as? NumberNode, orderNode.value == 1.0 {
+                return "\\frac{d}{d\(variable)}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+            } else {
+                return "\\frac{d^{\(orderLaTeX)}}{d\(variable)^{\(orderLaTeX)}}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+            }
 
         case let integralNode as IntegralNode:
             let body = formatNode(integralNode.body, evaluator: evaluator, settings: settings)
@@ -252,3 +258,4 @@ struct LaTeXEngine {
         return latex
     }
 }
+

@@ -39,7 +39,7 @@ enum MathError: Error, CustomStringConvertible {
 
 struct Evaluator {
 
-    private let h = 1e-7 // A small step size for numerical differentiation
+    private let h = 1e-5 // A small step size for numerical differentiation
 
     private let constants: [String: Double] = [
         "pi": Double.pi, "e": M_E, "c": 299792458, "μ0": 1.25663706212e-6, "ε0": 8.8541878128e-12,
@@ -406,19 +406,34 @@ struct Evaluator {
 
         case let derivativeNode as DerivativeNode:
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: derivativeNode.point, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (orderValue, _) = try _evaluateSingle(node: derivativeNode.order, variables: &variables, functions: &functions, angleMode: angleMode)
+
             guard case .scalar(let point) = pointValue else {
                 throw MathError.typeMismatch(expected: "Scalar for differentiation point", found: pointValue.typeName)
             }
-
-            let valPlus = try evaluateWithTempVar(node: derivativeNode.body, varName: derivativeNode.variable.name, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
-            let valMinus = try evaluateWithTempVar(node: derivativeNode.body, varName: derivativeNode.variable.name, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
-
-            guard case .scalar(let scalarPlus) = valPlus, case .scalar(let scalarMinus) = valMinus else {
-                throw MathError.typeMismatch(expected: "Scalar expression for differentiation", found: "Non-scalar")
+            guard case .scalar(let orderScalar) = orderValue, orderScalar >= 1, orderScalar.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.typeMismatch(expected: "Positive integer for derivative order", found: orderValue.typeName)
             }
+            let order = Int(orderScalar)
 
-            let derivative = (scalarPlus - scalarMinus) / (2 * h)
-            return (.scalar(derivative), pointUsedAngle)
+            func calculateNthDerivative(node: ExpressionNode, varName: String, at a: Double, order n: Int) throws -> Double {
+                if n == 1 {
+                    let valPlus = try evaluateWithTempVar(node: node, varName: varName, varValue: a + h, variables: &variables, functions: &functions, angleMode: angleMode)
+                    let valMinus = try evaluateWithTempVar(node: node, varName: varName, varValue: a - h, variables: &variables, functions: &functions, angleMode: angleMode)
+                    guard case .scalar(let scalarPlus) = valPlus, case .scalar(let scalarMinus) = valMinus else {
+                        throw MathError.typeMismatch(expected: "Scalar expression for differentiation", found: "Non-scalar")
+                    }
+                    return (scalarPlus - scalarMinus) / (2 * h)
+                }
+                
+                let f_prime_at_a_plus_h = try calculateNthDerivative(node: node, varName: varName, at: a + h, order: n - 1)
+                let f_prime_at_a_minus_h = try calculateNthDerivative(node: node, varName: varName, at: a - h, order: n - 1)
+                
+                return (f_prime_at_a_plus_h - f_prime_at_a_minus_h) / (2 * h)
+            }
+            
+            let result = try calculateNthDerivative(node: derivativeNode.body, varName: derivativeNode.variable.name, at: point, order: order)
+            return (.scalar(result), pointUsedAngle)
 
         case let integralNode as IntegralNode:
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)

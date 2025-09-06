@@ -58,8 +58,8 @@ struct PostfixOpNode: ExpressionNode {
 }
 // --- NEW NODES FOR CALCULUS ---
 struct DerivativeNode: ExpressionNode {
-    let body: ExpressionNode, variable: ConstantNode, point: ExpressionNode
-    var description: String { "derivative(\(body.description), at: \(variable.description)=\(point.description))" }
+    let body: ExpressionNode, variable: ConstantNode, point: ExpressionNode, order: ExpressionNode
+    var description: String { "derivative(\(body.description), at: \(variable.description)=\(point.description), order: \(order.description))" }
 }
 struct IntegralNode: ExpressionNode {
     let body: ExpressionNode, variable: ConstantNode, lowerBound: ExpressionNode, upperBound: ExpressionNode
@@ -255,8 +255,14 @@ class Parser {
         try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after variable"))
         let point = try parseExpression()
         
+        var order: ExpressionNode = NumberNode(value: 1) // Default order is 1
+        if let nextToken = peek(), case .separator(",") = nextToken.type {
+            try advance() // consume ','
+            order = try parseExpression()
+        }
+        
         try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')'"))
-        return DerivativeNode(body: body, variable: variableNode, point: point)
+        return DerivativeNode(body: body, variable: variableNode, point: point, order: order)
     }
 
     private func parseIntegral() throws -> ExpressionNode {

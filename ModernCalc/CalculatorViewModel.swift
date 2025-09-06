@@ -91,7 +91,7 @@ class CalculatorViewModel: ObservableObject {
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
     private var lastUsedAngleFlag: Bool = false
-    private var cancellable: AnyCancellable?
+    private var cancellables = Set<AnyCancellable>()
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
@@ -113,8 +113,8 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "acos", signature: "acos(value)", description: "Calculates the inverse cosine (arccos)."),
         .init(name: "atan", signature: "atan(value)", description: "Calculates the inverse tangent (arctan)."),
         // Calculus
-        .init(name: "derivative", signature: "derivative(expr, var, point)", description: "Calculates the numerical derivative of an expression."),
-        .init(name: "integral", signature: "integral(expr, var, from, to)", description: "Calculates the numerical definite integral of an expression."),
+        .init(name: "derivative", signature: "derivative(expr, var, point, [order])", description: "Finds the instantaneous rate of change (slope). Can calculate higher-order derivatives (e.g., order 2 for concavity)."),
+        .init(name: "integral", signature: "integral(expr, var, from, to)", description: "Calculates the total area under a function's curve between two points."),
         // General
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
         .init(name: "root", signature: "root(number, degree)", description: "Calculates the nth root of a number."),
@@ -212,50 +212,90 @@ class CalculatorViewModel: ObservableObject {
         ]
         self.constantSymbols = physicalConstants.map { .init(symbol: $0.symbol, name: $0.name, insertionText: $0.symbol) }
         
-        cancellable = $rawExpression.sink { [weak self] newExpression in
-            guard let self = self else { return }
-            let isMultiRow = (newExpression.contains("vector(") || newExpression.contains("matrix(")) && newExpression.contains(";")
-            let parts = newExpression.components(separatedBy: CharacterSet(charactersIn: "+-()"))
-            let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
-            let isTall = isMultiRow || hasNestedFraction
-            if self.isTallExpression != isTall { self.isTallExpression = isTall }
-            DispatchQueue.main.async { self.calculate(expression: newExpression) }
-        }
+        Publishers.CombineLatest($rawExpression, $cursorPosition)
+            .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
+            .sink { [weak self] (expression, position) in
+                guard let self = self else { return }
+                self.calculate(expression: expression, cursor: position)
+            }
+            .store(in: &cancellables)
+            
         loadState()
     }
 
-    private func calculate(expression: String) {
+    private func getContextualHelp(expression: String, cursor: NSRange) -> String? {
+        guard cursor.location <= expression.utf16.count else { return nil }
+        
+        let startIndex = expression.startIndex
+        let cursorIndex = expression.index(startIndex, offsetBy: cursor.location, limitedBy: expression.endIndex) ?? expression.endIndex
+        let textBeforeCursor = expression[..<cursorIndex]
+
+        var openParenCount = 0
+        var lastOpenParenIndex: String.Index?
+        
+        for index in textBeforeCursor.indices.reversed() {
+            let char = textBeforeCursor[index]
+            if char == ")" {
+                openParenCount += 1
+            } else if char == "(" {
+                if openParenCount == 0 {
+                    lastOpenParenIndex = index
+                    break
+                } else {
+                    openParenCount -= 1
+                }
+            }
+        }
+        
+        guard let parenIndex = lastOpenParenIndex else { return nil }
+        
+        let textBeforeParen = textBeforeCursor[..<parenIndex]
+        
+        let pattern = "\\b([a-zA-Z_][a-zA-Z0-9_]*)$"
+        if let range = textBeforeParen.range(of: pattern, options: .regularExpression),
+           let function = builtinFunctions.first(where: { $0.name == textBeforeParen[range] }) {
+            return "\(function.signature)\n\(function.description)"
+        }
+        
+        return nil
+    }
+
+    private func calculate(expression: String, cursor: NSRange) {
+        let helpText = getContextualHelp(expression: expression, cursor: cursor)
+        
+        let isMultiRow = (expression.contains("vector(") || expression.contains("matrix(")) && expression.contains(";")
+        let parts = expression.components(separatedBy: CharacterSet(charactersIn: "+-()"))
+        let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
+        let isTall = isMultiRow || hasNestedFraction
+        if self.isTallExpression != isTall { self.isTallExpression = isTall }
+
         guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
-            DispatchQueue.main.async { self.liveResult = ""; self.liveLaTeXPreview = ""; self.lastSuccessfulValue = nil }
+            DispatchQueue.main.async {
+                self.liveResult = helpText ?? ""
+                self.liveLaTeXPreview = ""
+                self.lastSuccessfulValue = nil
+            }
             return
         }
 
+        var tempVars = self.variables
+        var tempFuncs = self.functions
         do {
             let lexer = Lexer(input: expression, decimalSeparator: settings.decimalSeparator)
             let tokens = lexer.tokenize()
             let parser = Parser(tokens: tokens)
             let expressionTree = try parser.parse()
             let expressionLaTeX = LaTeXEngine.formatNode(expressionTree, evaluator: self.evaluator, settings: self.settings)
-            
-            let isSimpleVariableDefinition: Bool
-            if let assignmentNode = expressionTree as? AssignmentNode {
-                if assignmentNode.expression is NumberNode {
-                    isSimpleVariableDefinition = true
-                } else if let unaryNode = assignmentNode.expression as? UnaryOpNode, unaryNode.child is NumberNode {
-                    isSimpleVariableDefinition = true
-                } else {
-                    isSimpleVariableDefinition = false
-                }
-            } else {
-                isSimpleVariableDefinition = false
-            }
 
-            var tempVars = self.variables
-            var tempFuncs = self.functions
             let (value, usedAngle) = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             
+            let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
+            
             DispatchQueue.main.async {
-                self.variables = tempVars; self.functions = tempFuncs; self.lastSuccessfulValue = value; self.lastUsedAngleFlag = usedAngle
+                self.variables = tempVars
+                self.functions = tempFuncs
+                self.lastSuccessfulValue = value
+                self.lastUsedAngleFlag = usedAngle
                 
                 if case .functionDefinition = value {
                     self.liveLaTeXPreview = expressionLaTeX
@@ -272,36 +312,20 @@ class CalculatorViewModel: ObservableObject {
                     }
                     self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
                 }
-                self.liveResult = ""
+                
+                self.liveResult = helpText ?? ""
             }
         } catch let error {
-            if expression.hasSuffix("(") {
-                handlePartialFunctionCall(expression)
-            } else {
-                DispatchQueue.main.async {
-                    self.lastSuccessfulValue = nil; self.liveLaTeXPreview = ""
-                    self.liveResult = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
-                }
+            let errorMessage = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
+            let finalMessage = [helpText, errorMessage].compactMap { $0 }.joined(separator: "\n")
+            
+            let partialLaTeX = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
+            
+            DispatchQueue.main.async {
+                self.lastSuccessfulValue = nil
+                self.liveLaTeXPreview = partialLaTeX
+                self.liveResult = finalMessage
             }
-        }
-    }
-    
-    private func handlePartialFunctionCall(_ expression: String) {
-        let trimmed = expression.dropLast().trimmingCharacters(in: .whitespaces)
-        
-        if let lastWord = trimmed.split(whereSeparator: \.isWhitespace).last {
-            let functionName = String(lastWord)
-            if let functionInfo = builtinFunctions.first(where: { $0.name == functionName }) {
-                DispatchQueue.main.async {
-                    self.liveResult = functionInfo.description+" Syntax: "+functionInfo.signature
-                }
-                return
-            }
-        }
-
-        DispatchQueue.main.async {
-            self.liveLaTeXPreview = ""
-            self.liveResult = "Error: Expected a number or function name."
         }
     }
     
