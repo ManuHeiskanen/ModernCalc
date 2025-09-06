@@ -468,6 +468,7 @@ struct Evaluator {
             switch value {
             case .matrix(let m): return .matrix(m.transpose())
             case .complexMatrix(let cm): return .complexMatrix(cm.conjugateTranspose())
+            case .complexVector(let cv): return .complexMatrix(cv.conjugateTranspose())
             default: throw MathError.unsupportedOperation(op: "'", typeA: value.typeName, typeB: nil)
             }
         default: throw MathError.unknownOperator(op: op.rawValue)

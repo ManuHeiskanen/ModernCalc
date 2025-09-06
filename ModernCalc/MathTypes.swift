@@ -351,6 +351,10 @@ struct ComplexVector: Equatable, Codable {
         return zip(self.values, other.values).map { $0 * $1.conjugate() }.reduce(.zero, +)
     }
     
+    func conjugateTranspose() -> ComplexMatrix {
+        return ComplexMatrix(values: self.values.map { $0.conjugate() }, rows: 1, columns: self.dimension)
+    }
+    
     static func + (lhs: ComplexVector, rhs: ComplexVector) throws -> ComplexVector {
         guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Complex vectors must have same dimensions for addition.") }
         return ComplexVector(values: zip(lhs.values, rhs.values).map(+))
