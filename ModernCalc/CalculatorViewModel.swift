@@ -234,6 +234,20 @@ class CalculatorViewModel: ObservableObject {
             let expressionTree = try parser.parse()
             let expressionLaTeX = LaTeXEngine.formatNode(expressionTree, evaluator: self.evaluator, settings: self.settings)
             
+            // Check if the expression is a simple variable definition (e.g., x := 5 or x := -5)
+            let isSimpleVariableDefinition: Bool
+            if let assignmentNode = expressionTree as? AssignmentNode {
+                if assignmentNode.expression is NumberNode {
+                    isSimpleVariableDefinition = true
+                } else if let unaryNode = assignmentNode.expression as? UnaryOpNode, unaryNode.child is NumberNode {
+                    isSimpleVariableDefinition = true
+                } else {
+                    isSimpleVariableDefinition = false
+                }
+            } else {
+                isSimpleVariableDefinition = false
+            }
+
             var tempVars = self.variables
             var tempFuncs = self.functions
             let (value, usedAngle) = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
@@ -242,6 +256,9 @@ class CalculatorViewModel: ObservableObject {
                 self.variables = tempVars; self.functions = tempFuncs; self.lastSuccessfulValue = value; self.lastUsedAngleFlag = usedAngle
                 
                 if case .functionDefinition = value {
+                    self.liveLaTeXPreview = expressionLaTeX
+                } else if isSimpleVariableDefinition {
+                    // For simple definitions, don't show the result in the live preview
                     self.liveLaTeXPreview = expressionLaTeX
                 } else {
                     let resultLaTeX: String
