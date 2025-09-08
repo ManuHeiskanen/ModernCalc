@@ -8,63 +8,57 @@
 import SwiftUI
 import Charts
 
-// Helper View for the vector arrowhead symbol
-struct ArrowheadSymbol: View {
-    let point: DataPoint
-
-    var body: some View {
-        let angle = atan2(point.y, point.x) * 180 / .pi
-        Image(systemName: "triangle.fill")
-            .rotationEffect(.degrees(angle - 90))
-            .font(.system(size: 8))
-    }
-}
-
-// --- START: New ChartContent Struct to Resolve Compiler Error ---
-// This struct encapsulates all the marks needed to draw a single vector.
-// This simplifies the main chart body, preventing the compiler from timing out.
-struct SingleVectorMark: ChartContent {
-    let series: PlotSeries
-
-    var body: some ChartContent {
-        // Loop through the single data point (the endpoint) in the vector series
-        ForEach(series.dataPoints) { point in
-            // Create a temporary array for the line segment data (origin to endpoint)
-            let lineSegmentData = [DataPoint(x: 0, y: 0), point]
-
-            // Plot the line by iterating over its two points. The chart connects
-            // LineMarks that belong to the same series.
-            ForEach(lineSegmentData) { segmentPoint in
-                LineMark(
-                    x: .value("X", segmentPoint.x),
-                    y: .value("Y", segmentPoint.y)
-                )
-            }
-            .foregroundStyle(by: .value("Vector", series.name))
-            
-            // Arrowhead at the vector's endpoint
-            PointMark(
-                x: .value("X", point.x),
-                y: .value("Y", point.y)
-            )
-            .symbol {
-                ArrowheadSymbol(point: point)
-            }
-            .foregroundStyle(by: .value("Vector", series.name))
-        }
-    }
-}
-// --- END: New ChartContent Struct ---
+// Predefined list of colors for the chart to cycle through.
+private let chartColors: [Color] = [.blue, .green, .orange, .red, .purple, .pink, .teal, .indigo]
 
 struct PlotView: View {
     @StateObject var viewModel: PlotViewModel
 
-    // Helper function for creating vector plots, now simplified
+    // Helper function for creating vector plots
     @ChartContentBuilder
     private func vectorPlotContent() -> some ChartContent {
-        ForEach(viewModel.plotData.series) { series in
-            // Use the dedicated struct for each vector
-            SingleVectorMark(series: series)
+        // Add rule marks for the X and Y axes for better context
+        RuleMark(x: .value("Origin", 0))
+            .foregroundStyle(.gray.opacity(0.5))
+            .lineStyle(StrokeStyle(lineWidth: 1))
+        RuleMark(y: .value("Origin", 0))
+            .foregroundStyle(.gray.opacity(0.5))
+            .lineStyle(StrokeStyle(lineWidth: 1))
+            
+        // Enumerate the series to get an index for manual color selection
+        ForEach(Array(viewModel.plotData.series.enumerated()), id: \.element.id) { index, series in
+            // Determine the color for this vector
+            let color = chartColors[index % chartColors.count]
+
+            if let point = series.dataPoints.first {
+                let lineSegmentData = [DataPoint(x: 0, y: 0), point]
+                
+                // 1. Draw the line for the series.
+                ForEach(lineSegmentData) { segmentPoint in
+                    LineMark(
+                        x: .value("X", segmentPoint.x),
+                        y: .value("Y", segmentPoint.y) // FIX: Corrected typo from segment_point
+                    )
+                }
+                // Use foregroundStyle(by:) for the legend and automatic color grouping
+                .foregroundStyle(by: .value("Vector", series.name))
+                // Use a second foregroundStyle to force the specific color
+                .foregroundStyle(color)
+
+                // 2. Draw an invisible point at the end to anchor the arrowhead annotation.
+                PointMark(
+                    x: .value("X", point.x),
+                    y: .value("Y", point.y)
+                )
+                .symbolSize(0)
+                .annotation(position: .overlay) {
+                    let angle = atan2(point.y, point.x) * 180 / .pi
+                    Image(systemName: "play.fill")
+                        .rotationEffect(.degrees(angle))
+                        .font(.system(size: 8))
+                        .foregroundStyle(color) // Apply the same color to the arrowhead
+                }
+            }
         }
     }
 
