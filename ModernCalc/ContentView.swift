@@ -34,8 +34,9 @@ struct ContentView: View {
             
             FormattedExpressionWithButtonsView(
                 viewModel: viewModel,
-                latexPreview: viewModel.liveLaTeXPreview, // Pass the LaTeX string to the view
-                result: viewModel.liveResult,
+                latexPreview: viewModel.liveLaTeXPreview,
+                helpText: viewModel.liveHelpText,
+                errorText: viewModel.liveErrorText,
                 greekSymbols: viewModel.greekSymbols
             )
             // --- CHANGE: Use the new 'isTallExpression' property for dynamic height ---
@@ -322,7 +323,8 @@ struct HistoryView: View {
 struct FormattedExpressionWithButtonsView: View {
     var viewModel: CalculatorViewModel
     var latexPreview: String
-    var result: String
+    var helpText: String
+    var errorText: String
     var greekSymbols: [MathSymbol]
     @State private var isShowingGreekPopover = false
     
@@ -339,16 +341,24 @@ struct FormattedExpressionWithButtonsView: View {
                     GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
                 }
                 
-                // Conditionally show either the error or the LaTeX preview
-                if !result.isEmpty {
-                    // Display the error message, left-aligned
-                    Text(result)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.red)
-                        .padding(.trailing)
-                        .textSelection(.enabled)
+                if !helpText.isEmpty || !errorText.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !helpText.isEmpty {
+                            Text(helpText)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(.primary)
+                                .textSelection(.enabled)
+                        }
+                        if !errorText.isEmpty {
+                            Text(errorText)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundColor(.red)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .padding(.trailing)
                     
-                    Spacer() // Pushes the error message to the left
+                    Spacer()
                 } else {
                     // Display the rendered LaTeX
                     MathJaxView(latex: latexPreview)
@@ -442,5 +452,3 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
-
-

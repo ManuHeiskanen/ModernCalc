@@ -14,7 +14,8 @@ class CalculatorViewModel: ObservableObject {
 
     @Published var rawExpression: String = ""
     @Published var history: [Calculation] = []
-    @Published var liveResult: String = ""
+    @Published var liveHelpText: String = ""
+    @Published var liveErrorText: String = ""
     @Published var liveLaTeXPreview: String = ""
     @Published var previewText: String = ""
     @Published var variables: [String: MathValue] = [:]
@@ -184,7 +185,8 @@ class CalculatorViewModel: ObservableObject {
 
                 guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
                     self.lastSuccessfulValue = nil
-                    self.liveResult = ""
+                    self.liveHelpText = ""
+                    self.liveErrorText = ""
                     self.liveLaTeXPreview = ""
                     return
                 }
@@ -262,7 +264,8 @@ class CalculatorViewModel: ObservableObject {
         var tempVars = self.variables
         var tempFuncs = self.functions
         
-        let finalLiveResult: String
+        var finalLiveHelpText: String = ""
+        var finalLiveErrorText: String = ""
         let finalLiveLaTeXPreview: String
         
         do {
@@ -317,17 +320,19 @@ class CalculatorViewModel: ObservableObject {
                 finalLiveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
             }
             
-            finalLiveResult = helpText ?? ""
+            finalLiveHelpText = helpText ?? ""
 
         } catch let error {
             self.lastSuccessfulValue = nil
             
             let errorMessage = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
-            finalLiveResult = [helpText, errorMessage].compactMap { $0 }.joined(separator: "\n")
+            finalLiveHelpText = helpText ?? ""
+            finalLiveErrorText = errorMessage
             finalLiveLaTeXPreview = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
         }
         
-        self.liveResult = finalLiveResult
+        self.liveHelpText = finalLiveHelpText
+        self.liveErrorText = finalLiveErrorText
         self.liveLaTeXPreview = finalLiveLaTeXPreview
         
         if self.isTallExpression != newIsTallExpression {
@@ -458,7 +463,7 @@ class CalculatorViewModel: ObservableObject {
                 _ = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             } catch { print("Error rebuilding function '\(definitionString)': \(error)") }
         }
-        self.functions = tempFuncs; self.variables = tempVars; self.liveResult = ""
+        self.functions = tempFuncs; self.variables = tempVars; self.liveHelpText = ""; self.liveErrorText = ""
     }
     
     func formatCalculationAsLaTeX(_ calculation: Calculation) -> String {
@@ -659,4 +664,5 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
 
