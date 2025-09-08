@@ -188,12 +188,6 @@ class CalculatorViewModel: ObservableObject {
         loadState()
     }
     
-    // FIX: The errors about missing 'plotID' and 'repository' likely stem from
-    // the compiler finding a different definition for PlotViewModel's initializer.
-    // This can happen if there's a typo in a filename (e.g., PlotVievModel.swift vs. PlotViewModel.swift)
-    // or if an old file is still part of the project.
-    // The code below correctly calls the init method defined in the PlotVievModel.swift you provided.
-    // By renaming that file to PlotViewModel.swift, you should resolve the issue.
     func addPlotViewModel(for plotData: PlotData) {
         // Ensure a view model exists for the given plot data
         if !plotViewModels.contains(where: { $0.plotData.id == plotData.id }) {
@@ -256,8 +250,6 @@ class CalculatorViewModel: ObservableObject {
         let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
         let isTall = callsTallFunction || hasNestedFraction
         
-        // FIX: Publishing changes from within a view update can cause issues.
-        // Dispatching it asynchronously to the main thread breaks the update cycle.
         if self.isTallExpression != isTall {
             DispatchQueue.main.async {
                 self.isTallExpression = isTall
@@ -297,7 +289,7 @@ class CalculatorViewModel: ObservableObject {
                 self.liveLaTeXPreview = expressionLaTeX
             } else {
                 let resultLaTeX: String
-                let maxLivePreviewRows = 50 // A reasonable limit for live preview rendering
+                let maxLivePreviewRows = 50
 
                 var isResultTooLargeForPreview = false
                 if case .vector(let v) = value, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
@@ -346,11 +338,11 @@ class CalculatorViewModel: ObservableObject {
     
     func commitCalculation() -> PlotData? {
         if let selectedItem = history.first(where: { $0.id == navigationManager.selectedHistoryId }) {
-            self.resetNavigation()
+            resetNavigation()
             if selectedItem.type == .plot {
                 if case .plot(let plotData) = selectedItem.result {
                     requestOpenPlotWindow(for: plotData)
-                    return nil // Window opening is requested, not returned
+                    return nil
                 }
             } else if selectedItem.type == .functionDefinition {
                 self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: ""))
@@ -384,8 +376,12 @@ class CalculatorViewModel: ObservableObject {
             else if calcType == .functionDefinition, case .functionDefinition(let name) = valueToCommit { userFunctionDefinitions[name] = rawExpression; saveState() }
             
             let newCalculation = Calculation(expression: rawExpression, result: valueToCommit, type: calcType, usedAngleSensitiveFunction: self.lastUsedAngleFlag, angleMode: self.angleMode)
-            self.history.append(newCalculation)
-            self.rawExpression = ""
+            
+            // FIX: Defer state changes that affect the UI to avoid publishing during a view update.
+            DispatchQueue.main.async {
+                self.history.append(newCalculation)
+                self.rawExpression = ""
+            }
             return plotDataToReturn
         }
         return nil
@@ -393,13 +389,27 @@ class CalculatorViewModel: ObservableObject {
 
     func handleKeyPress(keys: Set<KeyEquivalent>) -> Bool {
         if let selectedText = navigationManager.handleKeyPress(keys: keys, history: history, viewModel: self) {
-            self.previewText = selectedText; return true
+            // FIX: Defer this state change
+            DispatchQueue.main.async {
+                self.previewText = selectedText
+            }
+            return true
         } else {
-            self.previewText = ""; return false
+            // FIX: Defer this state change
+            DispatchQueue.main.async {
+                self.previewText = ""
+            }
+            return false
         }
     }
 
-    func resetNavigation() { navigationManager.resetSelection(); previewText = "" }
+    func resetNavigation() {
+        navigationManager.resetSelection()
+        // FIX: Defer this state change
+        DispatchQueue.main.async {
+            self.previewText = ""
+        }
+    }
 
     var selectedHistoryId: UUID? { navigationManager.selectedHistoryId }
     var selectedHistoryPart: SelectionPart { navigationManager.selectedPart }
@@ -674,3 +684,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
