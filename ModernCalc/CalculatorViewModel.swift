@@ -142,10 +142,9 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
-        .init(title: "Plotting", content: "Create 2D plots using the `plot()` function. \n- **Standard Plot:** `plot(x^2)` will plot the expression against `x`. \n- **Parametric Plot:** `plot(cos(t), sin(t))` will plot x and y as functions of `t`. \nClicking a plot in the history will reopen its window."),
-        .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
-        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data."),
         .init(title: "Plotting", content: "Create 2D plots using the `plot()` function. \n- **Standard Plots:** `plot(x^2)` will plot a single function. You can plot multiple functions at once by separating them with commas: `plot(sin(x), cos(x))`. The variable must be `x`. \n- **Parametric Plot:** `plot(cos(t), sin(t))` will plot x and y as functions of `t`. The variable must be `t`. \nClicking a plot in the history will reopen its window."),
+        .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
+        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data.")
     ]
 
 
@@ -282,8 +281,8 @@ class CalculatorViewModel: ObservableObject {
             
             let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
             
-            if case .plot(let plotData) = value {
-                finalLiveLaTeXPreview = "\\text{Plotting: \(plotData.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
+            if case .plot = value {
+                finalLiveLaTeXPreview = expressionLaTeX
             } else if case .functionDefinition = value {
                 finalLiveLaTeXPreview = expressionLaTeX
             } else if isSimpleVariableDefinition {
@@ -660,3 +659,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
