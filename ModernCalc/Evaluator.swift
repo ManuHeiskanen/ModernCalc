@@ -403,6 +403,64 @@ struct Evaluator {
             let (rightValue, rightUsedAngle) = try _evaluateSingle(node: binaryNode.right, variables: &variables, functions: &functions, angleMode: angleMode)
             let result = try evaluateBinaryOperation(op: binaryNode.op, left: leftValue, right: rightValue)
             return (result, leftUsedAngle || rightUsedAngle)
+        
+        case let modifyNode as ElementWiseModifyNode:
+            let (vectorValue, vecUsedAngle) = try _evaluateSingle(node: modifyNode.vector, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (indexValue, idxUsedAngle) = try _evaluateSingle(node: modifyNode.index, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (scalarValue, valUsedAngle) = try _evaluateSingle(node: modifyNode.value, variables: &variables, functions: &functions, angleMode: angleMode)
+
+            guard case .scalar(let indexDouble) = indexValue, indexDouble.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.typeMismatch(expected: "Integer for index", found: indexValue.typeName)
+            }
+            let index = Int(indexDouble) - 1 // Use 1-based indexing for user input
+
+            switch vectorValue {
+            case .vector(let v):
+                guard case .scalar(let s) = scalarValue else {
+                    throw MathError.typeMismatch(expected: "Scalar for modification value", found: scalarValue.typeName)
+                }
+                let opFunction: (Double, Double) -> Double
+                switch modifyNode.op.rawValue {
+                    case ".+@": opFunction = (+)
+                    case ".-@": opFunction = (-)
+                    case ".*@": opFunction = (*)
+                    case "./@":
+                        opFunction = { a, b in
+                            guard b != 0 else { return a } // Avoid division by zero, maybe throw instead? For now, no-op.
+                            return a / b
+                        }
+                    case ".=@": opFunction = { _, new in new }
+                    default: throw MathError.unknownOperator(op: modifyNode.op.rawValue)
+                }
+                let resultVector = try v.modifying(at: index, with: s, operation: opFunction)
+                return (.vector(resultVector), vecUsedAngle || idxUsedAngle || valUsedAngle)
+            
+            case .complexVector(let cv):
+                let s: Complex
+                switch scalarValue {
+                case .scalar(let real):
+                    s = Complex(real: real, imaginary: 0)
+                case .complex(let complex):
+                    s = complex
+                default:
+                    throw MathError.typeMismatch(expected: "Scalar or Complex for modification value", found: scalarValue.typeName)
+                }
+
+                let opFunction: (Complex, Complex) throws -> Complex
+                switch modifyNode.op.rawValue {
+                    case ".+@": opFunction = (+)
+                    case ".-@": opFunction = (-)
+                    case ".*@": opFunction = (*)
+                    case "./@": opFunction = { try $0 / $1 }
+                    case ".=@": opFunction = { _, new in new }
+                    default: throw MathError.unknownOperator(op: modifyNode.op.rawValue)
+                }
+                let resultVector = try cv.modifying(at: index, with: s, operation: opFunction)
+                return (.complexVector(resultVector), vecUsedAngle || idxUsedAngle || valUsedAngle)
+
+            default:
+                throw MathError.typeMismatch(expected: "Vector or ComplexVector", found: vectorValue.typeName)
+            }
 
         case let derivativeNode as DerivativeNode:
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: derivativeNode.point, variables: &variables, functions: &functions, angleMode: angleMode)

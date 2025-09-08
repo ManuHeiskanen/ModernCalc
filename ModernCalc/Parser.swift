@@ -56,6 +56,14 @@ struct PostfixOpNode: ExpressionNode {
     let op: Token, child: ExpressionNode
     var description: String { "(\(child.description)\(op.rawValue))" }
 }
+// --- NEW NODE FOR ELEMENT MODIFICATION ---
+struct ElementWiseModifyNode: ExpressionNode {
+    let op: Token
+    let vector: ExpressionNode
+    let index: ExpressionNode
+    let value: ExpressionNode
+    var description: String { "modify(\(vector.description), at: \(index.description), op: \(op.rawValue), with: \(value.description))" }
+}
 // --- NEW NODES FOR CALCULUS ---
 struct DerivativeNode: ExpressionNode {
     let body: ExpressionNode, variable: ConstantNode, point: ExpressionNode, order: ExpressionNode
@@ -158,9 +166,18 @@ class Parser {
                     try advance()
                 }
                 
-                let nextPrecedence = (op.rawValue == "^") ? precedence - 1 : precedence
-                let right = try parseExpression(currentPrecedence: nextPrecedence)
-                left = BinaryOpNode(op: op, left: left, right: right)
+                if [".+@", ".-@", ".*@", "./@", ".=@"].contains(op.rawValue) {
+                    try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for element modification"))
+                    let index = try parseExpression()
+                    try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' separating index and value"))
+                    let value = try parseExpression()
+                    try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close element modification"))
+                    left = ElementWiseModifyNode(op: op, vector: left, index: index, value: value)
+                } else {
+                    let nextPrecedence = (op.rawValue == "^") ? precedence - 1 : precedence
+                    let right = try parseExpression(currentPrecedence: nextPrecedence)
+                    left = BinaryOpNode(op: op, left: left, right: right)
+                }
             } else {
                 break
             }
@@ -397,6 +414,7 @@ class Parser {
             case "*", "/", "∠", ".*", "./": return 3
             case "%": return 4
             case "^": return 5
+            case ".+@", ".-@", ".*@", "./@", ".=@": return 7 // Increased precedence
             default: return nil
             }
         }
@@ -442,3 +460,4 @@ class Parser {
         try advance()
     }
 }
+

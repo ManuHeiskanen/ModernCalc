@@ -187,6 +187,23 @@ struct LaTeXEngine {
             let argument = formatNode(primeNode.argument, evaluator: evaluator, settings: settings)
             return "\\text{\(primeNode.functionName)}'(\(argument))"
 
+        case let modifyNode as ElementWiseModifyNode:
+            let vector = formatNode(modifyNode.vector, evaluator: evaluator, settings: settings)
+            let index = formatNode(modifyNode.index, evaluator: evaluator, settings: settings)
+            let value = formatNode(modifyNode.value, evaluator: evaluator, settings: settings)
+
+            let opSymbol: String
+            switch modifyNode.op.rawValue {
+            case ".+@": opSymbol = "\\text{+=}"
+            case ".-@": opSymbol = "\\text{-=}"
+            case ".*@": opSymbol = "\\text{\\cdot=}"
+            case "./@": opSymbol = "\\text{/=}"
+            case ".=@": opSymbol = "\\leftarrow"
+            default: opSymbol = "\\text{\(modifyNode.op.rawValue.replacingOccurrences(of: "_", with: "\\_"))}"
+            }
+            
+            return "\(vector) \\underset{\\text{at index } \(index)}{\(opSymbol)} \(value)"
+
         case is TupleNode:
             return ""
 

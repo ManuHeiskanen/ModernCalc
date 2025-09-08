@@ -47,16 +47,16 @@ class Lexer {
             }
             
             // Handle numbers that might start with a decimal separator, e.g., .5
-            if char.isNumber || (char == decimalSeparator.character && (peekNext()?.isNumber ?? false)) {
+            if char.isNumber || (char == decimalSeparator.character && (peek(offset: 1)?.isNumber ?? false)) {
                 tokens.append(lexNumber())
                 continue
             }
             
             if char.isLetter || greekLetters.contains(char) || char == "_" {
-                if char == "j" && peekNext() == "'" {
+                if char == "j" && peek(offset: 1) == "'" {
                     advance(); advance()
                     tokens.append(Token(type: .unitVector("j"), rawValue: "j'"))
-                } else if char == "k" && peekNext() == "'" {
+                } else if char == "k" && peek(offset: 1) == "'" {
                     advance(); advance()
                     tokens.append(Token(type: .unitVector("k"), rawValue: "k'"))
                 } else {
@@ -96,11 +96,26 @@ class Lexer {
             case "'": // Transpose operator
                 advance()
                 tokens.append(Token(type: .op("'"), rawValue: "'"))
-            case ".": // Element-wise operators
-                if peekNext() == "*" {
+            case ".": // Element-wise and indexed operators
+                if peek(offset: 1) == "=" && peek(offset: 2) == "@" {
+                    advance(); advance(); advance()
+                    tokens.append(Token(type: .op(".=@"), rawValue: ".=@"))
+                } else if peek(offset: 1) == "+" && peek(offset: 2) == "@" {
+                    advance(); advance(); advance()
+                    tokens.append(Token(type: .op(".+@"), rawValue: ".+@"))
+                } else if peek(offset: 1) == "-" && peek(offset: 2) == "@" {
+                    advance(); advance(); advance()
+                    tokens.append(Token(type: .op(".-@"), rawValue: ".-@"))
+                } else if peek(offset: 1) == "*" && peek(offset: 2) == "@" {
+                    advance(); advance(); advance()
+                    tokens.append(Token(type: .op(".*@"), rawValue: ".*@"))
+                } else if peek(offset: 1) == "/" && peek(offset: 2) == "@" {
+                    advance(); advance(); advance()
+                    tokens.append(Token(type: .op("./@"), rawValue: "./@"))
+                } else if peek(offset: 1) == "*" {
                     advance(); advance()
                     tokens.append(Token(type: .op(".*"), rawValue: ".*"))
-                } else if peekNext() == "/" {
+                } else if peek(offset: 1) == "/" {
                     advance(); advance()
                     tokens.append(Token(type: .op("./"), rawValue: "./"))
                 } else {
@@ -114,7 +129,7 @@ class Lexer {
             case "[": tokens.append(Token(type: .bracket("["), rawValue: String(advance()!)))
             case "]": tokens.append(Token(type: .bracket("]"), rawValue: String(advance()!)))
             case ":":
-                if peekNext() == "=" {
+                if peek(offset: 1) == "=" {
                     advance(); advance()
                     tokens.append(Token(type: .assignment, rawValue: ":="))
                 } else {
@@ -177,15 +192,12 @@ class Lexer {
         return Token(type: .identifier(identifierString), rawValue: identifierString)
     }
 
-    private func peek() -> Character? {
-        guard currentIndex < input.endIndex else { return nil }
-        return input[currentIndex]
-    }
-
-    private func peekNext() -> Character? {
-        guard let nextIndex = input.index(currentIndex, offsetBy: 1, limitedBy: input.endIndex) else { return nil }
-        guard nextIndex < input.endIndex else { return nil }
-        return input[nextIndex]
+    private func peek(offset: Int = 0) -> Character? {
+        guard let targetIndex = input.index(currentIndex, offsetBy: offset, limitedBy: input.endIndex),
+              targetIndex < input.endIndex else {
+            return nil
+        }
+        return input[targetIndex]
     }
 
     @discardableResult
@@ -195,3 +207,4 @@ class Lexer {
         return char
     }
 }
+

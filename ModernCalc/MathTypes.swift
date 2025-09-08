@@ -132,6 +132,15 @@ struct Vector: Equatable, Codable {
         // Clamp the value to avoid domain errors from floating point inaccuracies
         return acos(Swift.min(Swift.max(cosTheta, -1.0), 1.0))
     }
+    
+    func modifying(at index: Int, with scalar: Double, operation: (Double, Double) -> Double) throws -> Vector {
+        guard index >= 0 && index < self.dimension else {
+            throw MathError.dimensionMismatch(reason: "Index \(index + 1) is out of bounds for vector of dimension \(self.dimension).")
+        }
+        var newValues = self.values
+        newValues[index] = operation(newValues[index], scalar)
+        return Vector(values: newValues)
+    }
 
     // --- Vector-Vector Operators ---
     static func + (lhs: Vector, rhs: Vector) throws -> Vector {
@@ -353,6 +362,15 @@ struct ComplexVector: Equatable, Codable {
     
     func conjugateTranspose() -> ComplexMatrix {
         return ComplexMatrix(values: self.values.map { $0.conjugate() }, rows: 1, columns: self.dimension)
+    }
+    
+    func modifying(at index: Int, with scalar: Complex, operation: (Complex, Complex) throws -> Complex) throws -> ComplexVector {
+        guard index >= 0 && index < self.dimension else {
+            throw MathError.dimensionMismatch(reason: "Index \(index + 1) is out of bounds for vector of dimension \(self.dimension).")
+        }
+        var newValues = self.values
+        newValues[index] = try operation(newValues[index], scalar)
+        return ComplexVector(values: newValues)
     }
     
     static func + (lhs: ComplexVector, rhs: ComplexVector) throws -> ComplexVector {
