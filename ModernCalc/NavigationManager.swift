@@ -15,6 +15,7 @@ enum SelectionPart: Equatable {
     case result(index: Int)
 }
 
+@MainActor
 class NavigationManager: ObservableObject {
     @Published var selectedHistoryId: UUID? = nil
     @Published var selectedPart: SelectionPart = .result(index: 0)

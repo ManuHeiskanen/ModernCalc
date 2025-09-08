@@ -13,12 +13,15 @@ struct LaTeXEngine {
     // The main public method now accepts a settings object.
     static func format(calculation: Calculation, evaluator: Evaluator, angleMode: AngleMode, settings: UserSettings) -> String {
         let expressionLaTeX = formatExpression(calculation.expression, evaluator: evaluator, settings: settings)
-        let resultLaTeX = formatMathValue(calculation.result, angleMode: angleMode, settings: settings)
         
         switch calculation.type {
         case .evaluation, .variableAssignment:
+            let resultLaTeX = formatMathValue(calculation.result, angleMode: angleMode, settings: settings)
             return "\(expressionLaTeX) = \(resultLaTeX)"
         case .functionDefinition:
+            return expressionLaTeX
+        case .plot:
+            // For a plot, we just show the expression that was plotted.
             return expressionLaTeX
         }
     }
@@ -61,7 +64,8 @@ struct LaTeXEngine {
                 let targetLaTeX = formatNode(binaryNode.left, evaluator: evaluator, settings: settings)
                 let indexLaTeX = formatNode(indexedOpNode.index, evaluator: evaluator, settings: settings)
                 let scalarLaTeX = formatNode(indexedOpNode.scalar, evaluator: evaluator, settings: settings)
-                return "\(targetLaTeX)_{ \(indexLaTeX) } \\(opString) \(scalarLaTeX)"
+                let opString = binaryNode.op.rawValue.dropLast() // remove the @
+                return "\(targetLaTeX)_{ \(indexLaTeX) } \(opString) \(scalarLaTeX)"
             }
             
             var leftLaTeX = formatNode(binaryNode.left, evaluator: evaluator, settings: settings)
@@ -218,6 +222,10 @@ struct LaTeXEngine {
             let argument = formatNode(primeNode.argument, evaluator: evaluator, settings: settings)
             return "\\text{\(primeNode.functionName)}'(\(argument))"
 
+        case let plotNode as PlotNode:
+            let expressions = plotNode.expressions.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: ", ")
+            return "\\text{plot}(\(expressions))"
+
         case is TupleNode:
             return ""
             
@@ -274,6 +282,9 @@ struct LaTeXEngine {
             let m = formatScalar(slope, settings: settings)
             let b = formatScalar(intercept, settings: settings)
             return "\\text{m = } \(m), \\text{ b = } \(b)"
+        case .plot(let plotData):
+            let expression = plotData.expression.replacingOccurrences(of: "*", with: "\\cdot")
+            return "\\text{Plot: \(expression)}"
         }
     }
 
@@ -348,4 +359,3 @@ struct LaTeXEngine {
         return latex
     }
 }
-

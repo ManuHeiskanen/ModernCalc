@@ -74,6 +74,12 @@ struct IndexedOperationNode: ExpressionNode {
     let scalar: ExpressionNode
     var description: String { "@(\(index.description), \(scalar.description))" }
 }
+// --- NEW NODE FOR PLOTTING ---
+struct PlotNode: ExpressionNode {
+    let expressions: [ExpressionNode]
+    // We can add range parameters here later
+    var description: String { "plot(\(expressions.map { $0.description }.joined(separator: ", ")))" }
+}
 
 
 // --- PARSER ---
@@ -211,6 +217,7 @@ class Parser {
                 case "cvector": return try parseComplexVector()
                 case "derivative": return try parseDerivative()
                 case "integral": return try parseIntegral()
+                case "plot": return try parsePlot()
                 default: return try parseFunctionCall(name: name)
                 }
             } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
@@ -252,6 +259,26 @@ class Parser {
         
         try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for function call"))
         return FunctionCallNode(name: name, arguments: arguments)
+    }
+    
+    private func parsePlot() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for plot call"))
+        var expressions: [ExpressionNode] = []
+        if let nextToken = peek(), case .paren(")") = nextToken.type {
+            try advance()
+            // plot() is not valid, must have at least one expression.
+            throw ParserError.incorrectArgumentCount(function: "plot", expected: "at least 1", found: 0)
+        }
+        
+        repeat {
+            expressions.append(try parseExpression())
+            if let nextToken = peek(), case .separator(",") = nextToken.type {
+                try advance()
+            } else { break }
+        } while true
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for plot call"))
+        return PlotNode(expressions: expressions)
     }
 
     private func parseDerivative() throws -> ExpressionNode {
@@ -467,4 +494,3 @@ class Parser {
         try advance()
     }
 }
-

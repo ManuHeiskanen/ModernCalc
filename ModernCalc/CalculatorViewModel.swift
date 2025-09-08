@@ -9,67 +9,7 @@ import Foundation
 import Combine
 import SwiftUI
 
-enum AngleMode: String, Codable {
-    case degrees, radians
-}
-
-enum CalculationType {
-    case evaluation
-    case variableAssignment
-    case functionDefinition
-}
-
-struct Calculation: Identifiable, Hashable {
-    let id = UUID()
-    let expression: String
-    let result: MathValue
-    let type: CalculationType
-    let usedAngleSensitiveFunction: Bool
-    let angleMode: AngleMode
-
-    static func == (lhs: Calculation, rhs: Calculation) -> Bool {
-        return lhs.id == rhs.id
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-}
-
-struct BuiltinFunction: Identifiable, Hashable {
-    let id = UUID()
-    let name: String
-    let signature: String
-    let description: String
-}
-
-struct PhysicalConstant: Identifiable, Hashable {
-    let id = UUID()
-    let symbol: String
-    let name: String
-    let value: Double
-}
-
-struct MathSymbol: Identifiable {
-    let id = UUID()
-    let symbol: String
-    let name: String
-    let insertionText: String?
-
-    init(symbol: String, name: String, insertionText: String? = nil) {
-        self.symbol = symbol
-        self.name = name
-        self.insertionText = insertionText
-    }
-}
-
-struct HelpTopic: Identifiable, Hashable {
-    let id = UUID()
-    let title: String
-    let content: String
-}
-
-
+@MainActor
 class CalculatorViewModel: ObservableObject {
 
     @Published var rawExpression: String = ""
@@ -86,6 +26,10 @@ class CalculatorViewModel: ObservableObject {
     }
     @Published var userFunctionDefinitions: [String: String] = [:]
     @Published var cursorPosition = NSRange()
+    
+    // For managing plot windows state
+    @Published var plotViewModels: [PlotViewModel] = []
+    @Published var plotToShow: PlotData.ID? = nil
     
     private var settings: UserSettings
     private let evaluator = Evaluator()
@@ -143,6 +87,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "min", signature: "min(a, b, ...)", description: "Finds the minimum value in a list of numbers or a vector/matrix."),
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
+        .init(name: "plot", signature: "plot(y(x)) or plot(x(t), y(t))", description: "Plots a function. Supports standard and parametric plots."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
         .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
         .init(name: "range", signature: "range(start, end, [step])", description: "Creates a vector from 'start' to 'end' with an optional 'step' (default is 1)."),
@@ -197,6 +142,7 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
+        .init(title: "Plotting", content: "Create 2D plots using the `plot()` function. \n- **Standard Plot:** `plot(x^2)` will plot the expression against `x`. \n- **Parametric Plot:** `plot(cos(t), sin(t))` will plot x and y as functions of `t`. \nClicking a plot in the history will reopen its window."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
         .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data.")
     ]
@@ -240,6 +186,23 @@ class CalculatorViewModel: ObservableObject {
             .store(in: &cancellables)
             
         loadState()
+    }
+    
+    func addPlotViewModel(for plotData: PlotData) {
+        // Ensure a view model exists for the given plot data
+        if !plotViewModels.contains(where: { $0.plotData.id == plotData.id }) {
+            let newPlotViewModel = PlotViewModel(plotData: plotData)
+            plotViewModels.append(newPlotViewModel)
+        }
+    }
+
+    func requestOpenPlotWindow(for plotData: PlotData) {
+        addPlotViewModel(for: plotData) // Ensure the VM is created
+        plotToShow = plotData.id // Signal the View to open the window
+    }
+
+    func closePlotWindow(id: PlotData.ID?) {
+        plotViewModels.removeAll { $0.plotData.id == id }
     }
 
     private func getContextualHelp(expression: String, cursor: NSRange) -> String? {
@@ -289,11 +252,9 @@ class CalculatorViewModel: ObservableObject {
         if self.isTallExpression != isTall { self.isTallExpression = isTall }
 
         guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
-            DispatchQueue.main.async {
-                self.liveResult = helpText ?? ""
-                self.liveLaTeXPreview = ""
-                self.lastSuccessfulValue = nil
-            }
+            self.liveResult = helpText ?? ""
+            self.liveLaTeXPreview = ""
+            self.lastSuccessfulValue = nil
             return
         }
 
@@ -310,99 +271,118 @@ class CalculatorViewModel: ObservableObject {
             
             let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
             
-            DispatchQueue.main.async {
-                self.variables = tempVars
-                self.functions = tempFuncs
-                self.lastSuccessfulValue = value
-                self.lastUsedAngleFlag = usedAngle
-                
-                if case .functionDefinition = value {
-                    self.liveLaTeXPreview = expressionLaTeX
-                } else if isSimpleVariableDefinition {
-                    self.liveLaTeXPreview = expressionLaTeX
-                } else {
-                    let resultLaTeX: String
-                    let maxLivePreviewRows = 50 // A reasonable limit for live preview rendering
+            self.variables = tempVars
+            self.functions = tempFuncs
+            self.lastSuccessfulValue = value
+            self.lastUsedAngleFlag = usedAngle
+            
+            if case .plot(let plotData) = value {
+                self.liveLaTeXPreview = "\\text{Plotting: \(plotData.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
+            } else if case .functionDefinition = value {
+                self.liveLaTeXPreview = expressionLaTeX
+            } else if isSimpleVariableDefinition {
+                self.liveLaTeXPreview = expressionLaTeX
+            } else {
+                let resultLaTeX: String
+                let maxLivePreviewRows = 50 // A reasonable limit for live preview rendering
 
-                    var isResultTooLargeForPreview = false
-                    if case .vector(let v) = value, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                    else if case .matrix(let m) = value, m.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                    else if case .complexVector(let cv) = value, cv.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                    else if case .complexMatrix(let cm) = value, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                var isResultTooLargeForPreview = false
+                if case .vector(let v) = value, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .matrix(let m) = value, m.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .complexVector(let cv) = value, cv.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .complexMatrix(let cm) = value, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
 
-                    if isResultTooLargeForPreview {
-                        switch value {
-                        case .vector(let v):
-                            resultLaTeX = "\\text{\(v.dimension)-element Vector}"
-                        case .matrix(let m):
-                            resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
-                        case .complexVector(let cv):
-                            resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
-                        case .complexMatrix(let cm):
-                            resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
-                        default:
-                            resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
-                        }
-                    } else {
-                        if self.settings.enableLiveRounding {
-                            let liveSettings = UserSettings(); liveSettings.displayMode = .fixed
-                            liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces; liveSettings.decimalSeparator = self.settings.decimalSeparator
-                            resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
-                        } else {
-                            resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
-                        }
+                if isResultTooLargeForPreview {
+                    switch value {
+                    case .vector(let v):
+                        resultLaTeX = "\\text{\(v.dimension)-element Vector}"
+                    case .matrix(let m):
+                        resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
+                    case .complexVector(let cv):
+                        resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
+                    case .complexMatrix(let cm):
+                        resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
+                    default:
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
                     }
-                    self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
+                } else {
+                    if self.settings.enableLiveRounding {
+                        let liveSettings = UserSettings(); liveSettings.displayMode = .fixed
+                        liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces; liveSettings.decimalSeparator = self.settings.decimalSeparator
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
+                    } else {
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                    }
                 }
-                
-                self.liveResult = helpText ?? ""
+                self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
             }
+            
+            self.liveResult = helpText ?? ""
+
         } catch let error {
             let errorMessage = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
             let finalMessage = [helpText, errorMessage].compactMap { $0 }.joined(separator: "\n")
             
             let partialLaTeX = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
             
-            DispatchQueue.main.async {
-                self.lastSuccessfulValue = nil
-                self.liveLaTeXPreview = partialLaTeX
-                self.liveResult = finalMessage
-            }
+            self.lastSuccessfulValue = nil
+            self.liveLaTeXPreview = partialLaTeX
+            self.liveResult = finalMessage
         }
     }
     
-    func commitCalculation() {
+    func commitCalculation() -> PlotData? {
         if let selectedItem = history.first(where: { $0.id == navigationManager.selectedHistoryId }) {
-            DispatchQueue.main.async {
-                if selectedItem.type == .functionDefinition { self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: "")) }
-                else {
-                    if self.navigationManager.selectedPart == .equation { self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: "")) }
-                    else { self.insertTextAtCursor(self.formatForParsing(selectedItem.result)) }
+            self.resetNavigation()
+            if selectedItem.type == .plot {
+                if case .plot(let plotData) = selectedItem.result {
+                    requestOpenPlotWindow(for: plotData)
+                    return nil // Window opening is requested, not returned
                 }
-                self.resetNavigation()
+            } else if selectedItem.type == .functionDefinition {
+                self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: ""))
+            } else {
+                if self.navigationManager.selectedPart == .equation {
+                    self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: ""))
+                } else {
+                    self.insertTextAtCursor(self.formatForParsing(selectedItem.result))
+                }
             }
         } else {
-            guard !rawExpression.isEmpty, let valueToCommit = lastSuccessfulValue else { return }
+            guard !rawExpression.isEmpty, let valueToCommit = lastSuccessfulValue else { return nil }
             
+            var plotDataToReturn: PlotData?
             let calcType: CalculationType
-            if valueToCommit.typeName == "FunctionDefinition" { calcType = .functionDefinition }
-            else if rawExpression.contains(":=") { calcType = .variableAssignment }
-            else { calcType = .evaluation }
+            
+            if case .plot(let plotData) = valueToCommit {
+                calcType = .plot
+                addPlotViewModel(for: plotData)
+                plotDataToReturn = plotData
+            } else if valueToCommit.typeName == "FunctionDefinition" {
+                calcType = .functionDefinition
+            } else if rawExpression.contains(":=") {
+                calcType = .variableAssignment
+            } else {
+                calcType = .evaluation
+            }
 
-            if calcType != .functionDefinition { DispatchQueue.main.async { self.variables[self.ansVariable] = valueToCommit } }
+            if calcType != .functionDefinition { self.variables[self.ansVariable] = valueToCommit }
             if calcType == .variableAssignment { saveState() }
             else if calcType == .functionDefinition, case .functionDefinition(let name) = valueToCommit { userFunctionDefinitions[name] = rawExpression; saveState() }
             
             let newCalculation = Calculation(expression: rawExpression, result: valueToCommit, type: calcType, usedAngleSensitiveFunction: self.lastUsedAngleFlag, angleMode: self.angleMode)
-            DispatchQueue.main.async { self.history.append(newCalculation); self.rawExpression = "" }
+            self.history.append(newCalculation)
+            self.rawExpression = ""
+            return plotDataToReturn
         }
+        return nil
     }
 
     func handleKeyPress(keys: Set<KeyEquivalent>) -> Bool {
         if let selectedText = navigationManager.handleKeyPress(keys: keys, history: history, viewModel: self) {
-            DispatchQueue.main.async { self.previewText = selectedText }; return true
+            self.previewText = selectedText; return true
         } else {
-            DispatchQueue.main.async { self.previewText = "" }; return false
+            self.previewText = ""; return false
         }
     }
 
@@ -460,7 +440,7 @@ class CalculatorViewModel: ObservableObject {
                 _ = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             } catch { print("Error rebuilding function '\(definitionString)': \(error)") }
         }
-        DispatchQueue.main.async { self.functions = tempFuncs; self.variables = tempVars; self.liveResult = "" }
+        self.functions = tempFuncs; self.variables = tempVars; self.liveResult = ""
     }
     
     func formatCalculationAsLaTeX(_ calculation: Calculation) -> String {
@@ -473,6 +453,7 @@ class CalculatorViewModel: ObservableObject {
         case .matrix(let m): return formatMatrixForDisplay(m); case .tuple(let t): return t.map { formatForHistory($0) }.joined(separator: " OR ")
         case .complexVector(let cv): return formatComplexVectorForDisplay(cv); case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm)
         case .functionDefinition: return ""; case .polar(let p): return formatPolarForDisplay(p); case .regressionResult(let s, let i): return "m = \(formatScalarForDisplay(s)), b = \(formatScalarForDisplay(i))"
+        case .plot(let plotData): return "Plot: \(plotData.expression)"
         }
     }
     
@@ -485,6 +466,7 @@ class CalculatorViewModel: ObservableObject {
         case .complexVector(let cv): return "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: ",") }.joined(separator: ";")))"
         case .functionDefinition: return ""; case .polar(let p): return formatPolarForParsing(p); case .regressionResult: return ""
+        case .plot(let plotData): return "plot(\(plotData.expression))"
         }
     }
 

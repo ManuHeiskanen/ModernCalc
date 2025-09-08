@@ -8,15 +8,16 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var settings: UserSettings
-    @StateObject private var viewModel: CalculatorViewModel
+    @StateObject var viewModel: CalculatorViewModel
     
     @FocusState private var isInputFocused: Bool
-    // This state remains to control the sheet, but the button itself is moved.
+    // This state remains to control the sheet, a new environment variable handles windows.
     @State private var isShowingSheet = false
+    @Environment(\.openWindow) private var openWindow
     
-    init(settings: UserSettings) {
+    init(settings: UserSettings, viewModel: CalculatorViewModel) {
         self.settings = settings
-        _viewModel = StateObject(wrappedValue: CalculatorViewModel(settings: settings))
+        _viewModel = StateObject(wrappedValue: viewModel)
     }
 
     var body: some View {
@@ -55,10 +56,16 @@ struct ContentView: View {
             .onAppear {
                 isInputFocused = true
             }
+            .onChange(of: viewModel.plotToShow) { oldID, newID in
+                if let id = newID {
+                    openWindow(value: id)
+                    viewModel.plotToShow = nil // Reset after opening
+                }
+            }
             .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
                 if key.key == .return {
-                    DispatchQueue.main.async{
-                        viewModel.commitCalculation()
+                    if let plotData = viewModel.commitCalculation() {
+                        openWindow(value: plotData.id)
                     }
                     return .handled
                 }
@@ -146,6 +153,31 @@ struct HistoryView: View {
                                         }
                                         .padding(.vertical, 8).padding(.horizontal)
                                         .frame(maxWidth: .infinity, alignment: .trailing)
+                                    case .plot:
+                                        HStack {
+                                            Image(systemName: "chart.xyaxis.line")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(.accentColor)
+                                            Text(calculation.expression)
+                                                 .font(.system(size: 24, weight: .light, design: .monospaced))
+                                                 .foregroundColor(.primary)
+                                                 .padding(.horizontal, 2)
+                                                 .padding(.vertical, 2)
+                                                 .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                                 .onHover { isHovering in
+                                                     withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                                                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                                 }
+                                                 .onTapGesture {
+                                                    if case .plot(let plotData) = calculation.result {
+                                                        viewModel.requestOpenPlotWindow(for: plotData)
+                                                    }
+                                                 }
+                                            Spacer()
+                                            Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
+                                        }
+                                        .padding(.vertical, 8).padding(.horizontal)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                         
                                     case .evaluation:
                                         HStack(alignment: .bottom, spacing: 8) {
@@ -411,3 +443,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+

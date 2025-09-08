@@ -11,6 +11,7 @@ enum MathError: Error, CustomStringConvertible {
     case dimensionMismatch(reason: String)
     case incorrectArgumentCount(function: String, expected: String, found: Int)
     case requiresAtLeastOneArgument(function: String)
+    case plotError(reason: String)
 
     var description: String {
         switch self {
@@ -33,6 +34,7 @@ enum MathError: Error, CustomStringConvertible {
         case .dimensionMismatch(let reason): return "Error: Dimension mismatch. \(reason)."
         case .incorrectArgumentCount(let function, let expected, let found): return "Error: Function '\(function)' expects \(expected) argument(s), but received \(found)."
         case .requiresAtLeastOneArgument(let function): return "Error: Function '\(function)' requires at least one argument."
+        case .plotError(let reason): return "Plot Error: \(reason)."
         }
     }
 }
@@ -641,6 +643,10 @@ struct Evaluator {
 
             let derivative = (scalarPlus - scalarMinus) / (2 * h)
             return (.scalar(derivative), pointUsedAngle || bodyUsedAngle)
+            
+        case let plotNode as PlotNode:
+            return try (evaluatePlot(plotNode, variables: &variables, functions: &functions, angleMode: angleMode), false)
+
 
         default:
             throw MathError.invalidNode
@@ -1060,6 +1066,70 @@ struct Evaluator {
             
             return leftHalf + rightHalf
         }
+    
+    private func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
+        
+        let numPoints = 200
+        let defaultRange = -10.0...10.0
+        
+        // TODO: Parse 'from', 'to', 'variable' arguments later.
+        
+        switch node.expressions.count {
+        case 1: // Standard plot: plot(y(x))
+            let body = node.expressions[0]
+            let varName = "x" // Default variable
+            
+            var dataPoints: [DataPoint] = []
+            let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+            
+            for i in 0..<numPoints {
+                let x = defaultRange.lowerBound + Double(i) * step
+                do {
+                    let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &variables, functions: &functions, angleMode: angleMode)
+                    if case .scalar(let y) = yValue {
+                        dataPoints.append(DataPoint(x: x, y: y))
+                    }
+                } catch {
+                    // Skip points where the function is undefined (e.g., division by zero)
+                }
+            }
+            
+            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression.")}
+            
+            let plotData = PlotData(expression: node.description, dataPoints: dataPoints, plotType: .line)
+            return .plot(plotData)
+            
+        case 2: // Parametric plot: plot(x(t), y(t))
+            let xBody = node.expressions[0]
+            let yBody = node.expressions[1]
+            let varName = "t" // Default parameter
+            
+            var dataPoints: [DataPoint] = []
+            let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+            
+            for i in 0..<numPoints {
+                let t = defaultRange.lowerBound + Double(i) * step
+                do {
+                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: angleMode)
+                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: angleMode)
+                    
+                    if case .scalar(let x) = xValue, case .scalar(let y) = yValue {
+                        dataPoints.append(DataPoint(x: x, y: y))
+                    }
+                } catch {
+                    // Skip points
+                }
+            }
+            
+            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+            
+            let plotData = PlotData(expression: node.description, dataPoints: dataPoints, plotType: .parametric)
+            return .plot(plotData)
+
+        default:
+            throw MathError.incorrectArgumentCount(function: "plot", expected: "1 or 2", found: node.expressions.count)
+        }
+    }
 }
 
 private func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
@@ -1082,4 +1152,3 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
-
