@@ -781,7 +781,7 @@ struct Evaluator {
         
         var partialDerivatives: [Double] = []
         
-        for (i, varName) in varNames.enumerated() {
+        for (i, _) in varNames.enumerated() {
             // To calculate the partial derivative with respect to varName, all other variables
             // must be fixed to their values from the pointVector.
             let pointForThisVar = pointVector.values[i]

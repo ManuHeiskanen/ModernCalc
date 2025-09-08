@@ -52,4 +52,3 @@ class PlotViewModel: ObservableObject {
         viewDomainY = (minY - yPadding)...(maxY + yPadding)
     }
 }
-

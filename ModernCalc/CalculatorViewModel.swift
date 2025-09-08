@@ -188,6 +188,12 @@ class CalculatorViewModel: ObservableObject {
         loadState()
     }
     
+    // FIX: The errors about missing 'plotID' and 'repository' likely stem from
+    // the compiler finding a different definition for PlotViewModel's initializer.
+    // This can happen if there's a typo in a filename (e.g., PlotVievModel.swift vs. PlotViewModel.swift)
+    // or if an old file is still part of the project.
+    // The code below correctly calls the init method defined in the PlotVievModel.swift you provided.
+    // By renaming that file to PlotViewModel.swift, you should resolve the issue.
     func addPlotViewModel(for plotData: PlotData) {
         // Ensure a view model exists for the given plot data
         if !plotViewModels.contains(where: { $0.plotData.id == plotData.id }) {
@@ -249,7 +255,14 @@ class CalculatorViewModel: ObservableObject {
         let parts = expression.components(separatedBy: CharacterSet(charactersIn: "+-()"))
         let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
         let isTall = callsTallFunction || hasNestedFraction
-        if self.isTallExpression != isTall { self.isTallExpression = isTall }
+        
+        // FIX: Publishing changes from within a view update can cause issues.
+        // Dispatching it asynchronously to the main thread breaks the update cycle.
+        if self.isTallExpression != isTall {
+            DispatchQueue.main.async {
+                self.isTallExpression = isTall
+            }
+        }
 
         guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
             self.liveResult = helpText ?? ""
@@ -661,4 +674,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
