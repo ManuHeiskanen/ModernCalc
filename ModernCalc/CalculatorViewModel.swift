@@ -87,7 +87,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "min", signature: "min(a, b, ...)", description: "Finds the minimum value in a list of numbers or a vector/matrix."),
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
-        .init(name: "plot", signature: "plot(y(x)) or plot(x(t), y(t))", description: "Plots a function. Supports standard and parametric plots."),
+        .init(name: "plot", signature: "plot(y1(x), y2(x), ...) or plot(x(t), y(t))", description: "Plots one or more functions against x, or a single parametric plot against t."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
         .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
         .init(name: "range", signature: "range(start, end, [step])", description: "Creates a vector from 'start' to 'end' with an optional 'step' (default is 1)."),
@@ -144,7 +144,8 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
         .init(title: "Plotting", content: "Create 2D plots using the `plot()` function. \n- **Standard Plot:** `plot(x^2)` will plot the expression against `x`. \n- **Parametric Plot:** `plot(cos(t), sin(t))` will plot x and y as functions of `t`. \nClicking a plot in the history will reopen its window."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
-        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data.")
+        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data."),
+        .init(title: "Plotting", content: "Create 2D plots using the `plot()` function. \n- **Standard Plots:** `plot(x^2)` will plot a single function. You can plot multiple functions at once by separating them with commas: `plot(sin(x), cos(x))`. The variable must be `x`. \n- **Parametric Plot:** `plot(cos(t), sin(t))` will plot x and y as functions of `t`. The variable must be `t`. \nClicking a plot in the history will reopen its window."),
     ]
 
 
