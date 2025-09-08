@@ -173,11 +173,10 @@ struct HistoryView: View {
                                                         viewModel.requestOpenPlotWindow(for: plotData)
                                                     }
                                                  }
-                                            Spacer()
                                             Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
                                         }
                                         .padding(.vertical, 8).padding(.horizontal)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .frame(maxWidth: .infinity, alignment: .trailing)
                                         
                                     case .evaluation:
                                         HStack(alignment: .bottom, spacing: 8) {
@@ -443,4 +442,5 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
 
