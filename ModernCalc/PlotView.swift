@@ -37,7 +37,7 @@ struct PlotView: View {
                 ForEach(lineSegmentData) { segmentPoint in
                     LineMark(
                         x: .value("X", segmentPoint.x),
-                        y: .value("Y", segmentPoint.y) // FIX: Corrected typo from segment_point
+                        y: .value("Y", segmentPoint.y)
                     )
                 }
                 // Use foregroundStyle(by:) for the legend and automatic color grouping
@@ -52,11 +52,23 @@ struct PlotView: View {
                 )
                 .symbolSize(0)
                 .annotation(position: .overlay) {
-                    let angle = atan2(point.y, point.x) * 180 / .pi
-                    Image(systemName: "play.fill")
-                        .rotationEffect(.degrees(angle))
-                        .font(.system(size: 8))
-                        .foregroundStyle(color) // Apply the same color to the arrowhead
+                    // This new approach draws the arrowhead manually to bypass the SwiftUI bug.
+                    
+                    // The vector's true mathematical angle.
+                    let vectorAngle = atan2(point.y, point.x)
+                    
+                    // The logic to correct for the chart's coordinate system remains necessary.
+                    // Start angle (UP) - Target Angle.
+                    let rotationInRadians = .pi / 2 - vectorAngle
+
+                    // Use our custom Arrowhead shape.
+                    Arrowhead()
+                        .fill(color)
+                        .frame(width: 8, height: 10) // The size of the arrowhead
+                        // We must first offset the shape so the tip is at the anchor point.
+                        .offset(y: -5)
+                        // Now, we rotate our custom view. This is much more stable than rotating an Image.
+                        .rotationEffect(.radians(rotationInRadians))
                 }
             }
         }
@@ -100,6 +112,7 @@ struct PlotView: View {
             .chartYScale(domain: viewModel.viewDomainY)
             .chartXAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
             .chartYAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
+            .aspectRatio(1, contentMode: .fit) // Forces the graph to a square aspect ratio
             .chartPlotStyle { plotArea in
                 plotArea
                     .background(Color.gray.opacity(0.1))
@@ -154,5 +167,18 @@ struct PlotView: View {
                 }
             }
         }
+    }
+}
+
+// A custom shape for drawing a simple arrowhead triangle.
+struct Arrowhead: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        // The path for a triangle pointing up.
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY)) // Tip
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY)) // Bottom-left
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY)) // Bottom-right
+        path.closeSubpath()
+        return path
     }
 }
