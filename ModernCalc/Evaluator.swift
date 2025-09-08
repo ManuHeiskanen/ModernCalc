@@ -1070,85 +1070,111 @@ struct Evaluator {
         }
     
     private func evaluateAutoplot(_ node: AutoplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
-        
-        let numPoints = 200
-        let defaultRange = -10.0...10.0
-        
-        // Correctly identify if the plot is parametric *only if* 't' is present.
-        var isParametric = false
-        if node.expressions.count == 2 {
-            var containsT = false
-            for expr in node.expressions {
-                if expr.description.range(of: #"\bt\b"#, options: .regularExpression) != nil {
-                    containsT = true
-                    break
-                }
-            }
-            isParametric = containsT
+
+        // First, evaluate all arguments to see what they are.
+        var evaluatedArgs: [MathValue] = []
+        for expr in node.expressions {
+            let (val, _) = try _evaluateSingle(node: expr, variables: &variables, functions: &functions, angleMode: .radians) // Use radians for consistency
+            evaluatedArgs.append(val)
         }
-        
-        if isParametric {
-            let xBody = node.expressions[0]
-            let yBody = node.expressions[1]
-            let varName = "t"
-            
-            var dataPoints: [DataPoint] = []
-            let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
-            
-            for i in 0..<numPoints {
-                let t = defaultRange.lowerBound + Double(i) * step
-                do {
-                    // ALWAYS use radians for plotting calculations
-                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
-                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
-                    
-                    if case .scalar(let x) = xValue, case .scalar(let y) = yValue {
-                        if x.isFinite && y.isFinite {
-                             dataPoints.append(DataPoint(x: x, y: y))
-                        }
-                    }
-                } catch {
-                    // Skip points where function is undefined
-                }
+
+        // Check if all evaluated arguments are 2D vectors.
+        var areAllVectors = !evaluatedArgs.isEmpty
+        var vectorsToPlot: [Vector] = []
+        for arg in evaluatedArgs {
+            if case .vector(let v) = arg, v.dimension == 2 {
+                vectorsToPlot.append(v)
+            } else {
+                areAllVectors = false
+                break
             }
+        }
+
+        if areAllVectors {
+            // --- VECTOR PLOTTING LOGIC ---
+            var allSeries: [PlotSeries] = []
+            for vector in vectorsToPlot {
+                let endPoint = DataPoint(x: vector[0], y: vector[1])
+                // Each vector is a series with its endpoint as data.
+                allSeries.append(PlotSeries(name: "v = [\(vector[0]); \(vector[1])]", dataPoints: [endPoint]))
+            }
+            if allSeries.isEmpty { throw MathError.plotError(reason: "No valid 2D vectors provided to plot.")}
             
-            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
-            
-            let seriesName = "(\(xBody.description), \(yBody.description))"
-            let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
-            let plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil)
+            let plotData = PlotData(expression: node.description, series: allSeries, plotType: .vector, explicitYRange: nil)
             return .plot(plotData)
 
-        } else { // Standard plot with one or more functions
-            var allSeries: [PlotSeries] = []
-            let varName = "x"
+        } else {
+            // --- FUNCTION PLOTTING LOGIC (existing logic) ---
+            let numPoints = 200
+            let defaultRange = -10.0...10.0
             
-            for body in node.expressions {
+            var isParametric = false
+            if node.expressions.count == 2 {
+                var containsT = false
+                for expr in node.expressions {
+                    if expr.description.range(of: #"\bt\b"#, options: .regularExpression) != nil {
+                        containsT = true
+                        break
+                    }
+                }
+                isParametric = containsT
+            }
+            
+            if isParametric {
+                let xBody = node.expressions[0]
+                let yBody = node.expressions[1]
+                let varName = "t"
+                
                 var dataPoints: [DataPoint] = []
                 let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
                 
                 for i in 0..<numPoints {
-                    let x = defaultRange.lowerBound + Double(i) * step
+                    let t = defaultRange.lowerBound + Double(i) * step
                     do {
-                        // ALWAYS use radians for plotting calculations
-                        let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &variables, functions: &functions, angleMode: .radians)
-                        if case .scalar(let y) = yValue, y.isFinite {
-                            dataPoints.append(DataPoint(x: x, y: y))
+                        let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
+                        let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
+                        
+                        if case .scalar(let x) = xValue, case .scalar(let y) = yValue, x.isFinite, y.isFinite {
+                             dataPoints.append(DataPoint(x: x, y: y))
                         }
-                    } catch {
-                        // Skip points where the function is undefined
-                    }
+                    } catch { }
                 }
                 
-                if !dataPoints.isEmpty {
-                    allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints))
-                }
-            }
+                if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+                
+                let seriesName = "(\(xBody.description), \(yBody.description))"
+                let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
+                let plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil)
+                return .plot(plotData)
 
-            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
-            
-            let plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil)
-            return .plot(plotData)
+            } else {
+                var allSeries: [PlotSeries] = []
+                let varName = "x"
+                
+                for body in node.expressions {
+                    var dataPoints: [DataPoint] = []
+                    let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+                    
+                    for i in 0..<numPoints {
+                        let x = defaultRange.lowerBound + Double(i) * step
+                        do {
+                            let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &variables, functions: &functions, angleMode: .radians)
+                            if case .scalar(let y) = yValue, y.isFinite {
+                                dataPoints.append(DataPoint(x: x, y: y))
+                            }
+                        } catch { }
+                    }
+                    
+                    if !dataPoints.isEmpty {
+                        allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints))
+                    }
+                }
+
+                if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
+                
+                let plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil)
+                return .plot(plotData)
+            }
         }
     }
     

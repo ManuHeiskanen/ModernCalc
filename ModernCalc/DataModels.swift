@@ -75,6 +75,7 @@ struct DataPoint: Identifiable {
 enum PlotType {
     case line
     case parametric
+    case vector
 }
 
 
@@ -112,3 +113,4 @@ struct HelpTopic: Identifiable, Hashable {
     let title: String
     let content: String
 }
+
