@@ -37,14 +37,24 @@ struct Calculation: Identifiable, Hashable {
     }
 }
 
-// MARK: - Plotting Models
+// MARK: - Plotting Models (Updated for Multiple Functions)
 
+// Represents a single function line on the chart.
+struct PlotSeries: Identifiable {
+    let id = UUID()
+    let name: String
+    let dataPoints: [DataPoint]
+}
+
+// Represents the complete set of data for a plot window.
 struct PlotData: Identifiable, Hashable {
     let id = UUID()
+    // The original, full expression string like "plot(x^2, sin(x))"
     let expression: String
-    let dataPoints: [DataPoint]
+    // An array of series, one for each function to be plotted.
+    var series: [PlotSeries]
     let plotType: PlotType
-
+    
     static func == (lhs: PlotData, rhs: PlotData) -> Bool {
         lhs.id == rhs.id
     }
@@ -54,6 +64,7 @@ struct PlotData: Identifiable, Hashable {
     }
 }
 
+// Represents a single (x, y) coordinate.
 struct DataPoint: Identifiable {
     let id = UUID()
     let x: Double
@@ -64,6 +75,7 @@ enum PlotType {
     case line
     case parametric
 }
+
 
 // MARK: - UI and Help Models
 

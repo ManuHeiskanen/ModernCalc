@@ -645,7 +645,7 @@ struct Evaluator {
             return (.scalar(derivative), pointUsedAngle || bodyUsedAngle)
             
         case let plotNode as PlotNode:
-            return try (evaluatePlot(plotNode, variables: &variables, functions: &functions, angleMode: angleMode), false)
+            return try (evaluatePlot(plotNode, variables: &variables, functions: &functions), false)
 
 
         default:
@@ -781,7 +781,7 @@ struct Evaluator {
         
         var partialDerivatives: [Double] = []
         
-        for (i, _) in varNames.enumerated() {
+        for (i,_) in varNames.enumerated() {
             // To calculate the partial derivative with respect to varName, all other variables
             // must be fixed to their values from the pointVector.
             let pointForThisVar = pointVector.values[i]
@@ -1067,42 +1067,29 @@ struct Evaluator {
             return leftHalf + rightHalf
         }
     
-    private func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
+    private func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
         
         let numPoints = 200
         let defaultRange = -10.0...10.0
         
-        // TODO: Parse 'from', 'to', 'variable' arguments later.
-        
-        switch node.expressions.count {
-        case 1: // Standard plot: plot(y(x))
-            let body = node.expressions[0]
-            let varName = "x" // Default variable
-            
-            var dataPoints: [DataPoint] = []
-            let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
-            
-            for i in 0..<numPoints {
-                let x = defaultRange.lowerBound + Double(i) * step
-                do {
-                    let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &variables, functions: &functions, angleMode: angleMode)
-                    if case .scalar(let y) = yValue {
-                        dataPoints.append(DataPoint(x: x, y: y))
-                    }
-                } catch {
-                    // Skip points where the function is undefined (e.g., division by zero)
-                }
+        // --- FIX: Smarter detection for parametric plots ---
+        var isParametric = false
+        if node.expressions.count == 2 {
+            let desc1 = node.expressions[0].description
+            let desc2 = node.expressions[1].description
+            // Heuristic: If 't' appears as a standalone variable, treat as parametric.
+            let tRegex = try! NSRegularExpression(pattern: "\\bt\\b")
+            let hasT1 = tRegex.firstMatch(in: desc1, options: [], range: NSRange(location: 0, length: desc1.utf16.count)) != nil
+            let hasT2 = tRegex.firstMatch(in: desc2, options: [], range: NSRange(location: 0, length: desc2.utf16.count)) != nil
+            if hasT1 || hasT2 {
+                isParametric = true
             }
-            
-            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression.")}
-            
-            let plotData = PlotData(expression: node.description, dataPoints: dataPoints, plotType: .line)
-            return .plot(plotData)
-            
-        case 2: // Parametric plot: plot(x(t), y(t))
+        }
+        
+        if isParametric {
             let xBody = node.expressions[0]
             let yBody = node.expressions[1]
-            let varName = "t" // Default parameter
+            let varName = "t"
             
             var dataPoints: [DataPoint] = []
             let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
@@ -1110,24 +1097,55 @@ struct Evaluator {
             for i in 0..<numPoints {
                 let t = defaultRange.lowerBound + Double(i) * step
                 do {
-                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: angleMode)
-                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: angleMode)
+                    // --- FIX: Always use RADIANS for plotting calculations ---
+                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
+                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
                     
                     if case .scalar(let x) = xValue, case .scalar(let y) = yValue {
                         dataPoints.append(DataPoint(x: x, y: y))
                     }
                 } catch {
-                    // Skip points
+                    // Skip points where the function is undefined
                 }
             }
             
             if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
             
-            let plotData = PlotData(expression: node.description, dataPoints: dataPoints, plotType: .parametric)
+            let seriesName = "(\(xBody.description), \(yBody.description))"
+            let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
+            let plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric)
             return .plot(plotData)
 
-        default:
-            throw MathError.incorrectArgumentCount(function: "plot", expected: "1 or 2", found: node.expressions.count)
+        } else { // Standard plot with one or more functions
+            var allSeries: [PlotSeries] = []
+            let varName = "x"
+            
+            for body in node.expressions {
+                var dataPoints: [DataPoint] = []
+                let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+                
+                for i in 0..<numPoints {
+                    let x = defaultRange.lowerBound + Double(i) * step
+                    do {
+                        // --- FIX: Always use RADIANS for plotting calculations ---
+                        let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &variables, functions: &functions, angleMode: .radians)
+                        if case .scalar(let y) = yValue { // Keep finite and non-finite to let the view model handle them
+                            dataPoints.append(DataPoint(x: x, y: y))
+                        }
+                    } catch {
+                        // Skip points where the function is undefined
+                    }
+                }
+                
+                if !dataPoints.isEmpty {
+                    allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints))
+                }
+            }
+
+            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
+            
+            let plotData = PlotData(expression: node.description, series: allSeries, plotType: .line)
+            return .plot(plotData)
         }
     }
 }

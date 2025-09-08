@@ -14,69 +14,71 @@ class PlotViewModel: ObservableObject {
     @Published var viewDomainX: ClosedRange<Double>
     @Published var viewDomainY: ClosedRange<Double>
     
-    // Store the initial domains to easily reset the view
-    private let initialDomainX: ClosedRange<Double>
-    private let initialDomainY: ClosedRange<Double>
-    
-    // Initializer
     init(plotData: PlotData) {
         self.plotData = plotData
-        
-        // Initialize domains based on data
-        let xValues = plotData.dataPoints.map { $0.x }
-        let yValues = plotData.dataPoints.map { $0.y }
-
-        // Use a safe default if there are no points
-        let minX = xValues.min() ?? -10
-        let maxX = xValues.max() ?? 10
-        let minY = yValues.min() ?? -10
-        let maxY = yValues.max() ?? 10
-        
-        // Add some padding to the domain
-        let xPadding = (maxX - minX) * 0.1
-        let yPadding = (maxY - minY) * 0.1
-
-        let initialX = (minX - xPadding)...(maxX + xPadding)
-        let initialY = (minY - yPadding)...(maxY + yPadding)
-        
-        self.initialDomainX = initialX
-        self.initialDomainY = initialY
-        
-        self.viewDomainX = initialX
-        self.viewDomainY = initialY
+        let (xDomain, yDomain) = PlotViewModel.calculateOptimalDomains(for: plotData)
+        self.viewDomainX = xDomain
+        self.viewDomainY = yDomain
     }
     
     func resetView() {
-        // Reset to the calculated initial domains
-        viewDomainX = initialDomainX
-        viewDomainY = initialDomainY
+        let (xDomain, yDomain) = PlotViewModel.calculateOptimalDomains(for: plotData)
+        viewDomainX = xDomain
+        viewDomainY = yDomain
     }
     
-    // New function to handle panning
-    func pan(translation: CGSize, chartSize: CGSize) {
-        let xRange = viewDomainX.upperBound - viewDomainX.lowerBound
-        let yRange = viewDomainY.upperBound - viewDomainY.lowerBound
-        
-        // Calculate the shift based on the drag translation
-        let xShift = (translation.width / chartSize.width) * xRange
-        let yShift = (translation.height / chartSize.height) * yRange
-        
-        // Update the domains
-        viewDomainX = (viewDomainX.lowerBound - xShift)...(viewDomainX.upperBound - xShift)
-        viewDomainY = (viewDomainY.lowerBound + yShift)...(viewDomainY.upperBound + yShift)
-    }
-    
-    // New function to handle zooming
-    func zoom(scale: Double) {
-        let currentXCenter = (viewDomainX.lowerBound + viewDomainX.upperBound) / 2
-        let currentYCenter = (viewDomainY.lowerBound + viewDomainY.upperBound) / 2
-        
-        let newXRange = (viewDomainX.upperBound - viewDomainX.lowerBound) * scale
-        let newYRange = (viewDomainY.upperBound - viewDomainY.lowerBound) * scale
-        
-        // Update the domains, keeping the center point fixed
-        viewDomainX = (currentXCenter - newXRange / 2)...(currentXCenter + newXRange / 2)
-        viewDomainY = (currentYCenter - newYRange / 2)...(currentYCenter + newYRange / 2)
-    }
-}
+    // --- START: New, Robust Axis Scaling Logic ---
+    static func calculateOptimalDomains(for plotData: PlotData) -> (x: ClosedRange<Double>, y: ClosedRange<Double>) {
+        // 1. Get all data points, crucially filtering out any non-finite values (NaN, infinity) for BOTH x and y.
+        // This is the key fix for plots that seemed to disappear.
+        let allPoints = plotData.series.flatMap { $0.dataPoints }.filter { $0.x.isFinite && $0.y.isFinite }
 
+        // 2. If there are no valid points at all, fall back to a default view.
+        guard !allPoints.isEmpty else {
+            return (-10...10, -10...10)
+        }
+
+        // 3. Get the true min and max from the valid data.
+        var minX = allPoints.map { $0.x }.min()!
+        var maxX = allPoints.map { $0.x }.max()!
+        var minY = allPoints.map { $0.y }.min()!
+        var maxY = allPoints.map { $0.y }.max()!
+
+        // 4. Handle cases where the data forms a vertical or horizontal line.
+        if minX == maxX {
+            minX -= 1
+            maxX += 1
+        }
+        if minY == maxY {
+            minY -= 1
+            maxY += 1
+        }
+        
+        // 5. Intelligently symmetrize axes if the function is centered around the origin.
+        // This makes plots like sin(x), x^2, and parametric circles look much better.
+        if abs(minX + maxX) < (maxX - minX) * 0.1 {
+            let largestMagnitude = max(abs(minX), abs(maxX))
+            minX = -largestMagnitude
+            maxX = largestMagnitude
+        }
+        if abs(minY + maxY) < (maxY - minY) * 0.1 {
+            let largestMagnitude = max(abs(minY), abs(maxY))
+            minY = -largestMagnitude
+            maxY = largestMagnitude
+        }
+
+        // 6. Add sensible padding to prevent lines from touching the edges.
+        let xPadding = (maxX - minX) * 0.05
+        let yPadding = (maxY - minY) * 0.1
+        
+        // Use a minimum padding to handle flat lines or single points gracefully.
+        let finalXPadding = max(xPadding, 0.5)
+        let finalYPadding = max(yPadding, 0.5)
+
+        let finalXDomain = (minX - finalXPadding)...(maxX + finalXPadding)
+        let finalYDomain = (minY - finalYPadding)...(maxY + finalYPadding)
+        
+        return (finalXDomain, finalYDomain)
+    }
+    // --- END: New Logic ---
+}
