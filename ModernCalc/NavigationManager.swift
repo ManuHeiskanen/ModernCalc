@@ -76,7 +76,12 @@ class NavigationManager: ObservableObject {
                 return selectedItem.expression.replacingOccurrences(of: " ", with: "")
             }
             
-            // NEW: Return the specific result from the tuple based on the selected index.
+            // FIX: Add a special case for plot items to show a user-friendly message.
+            if selectedItem.type == .plot {
+                return "Press enter to \(selectedItem.expression)..."
+            }
+            
+            // Return the specific result from the tuple based on the selected index.
             if case .result(let index) = selectedPart {
                 if case .tuple(let values) = selectedItem.result {
                     if index < values.count {

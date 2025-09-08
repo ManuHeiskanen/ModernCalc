@@ -181,7 +181,17 @@ class CalculatorViewModel: ObservableObject {
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
             .sink { [weak self] (expression, position, _) in
                 guard let self = self else { return }
-                self.calculate(expression: expression, cursor: position)
+
+                guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
+                    self.lastSuccessfulValue = nil
+                    self.liveResult = ""
+                    self.liveLaTeXPreview = ""
+                    return
+                }
+                
+                Task {
+                    await self.calculate(expression: expression, cursor: position)
+                }
             }
             .store(in: &cancellables)
             
@@ -189,7 +199,6 @@ class CalculatorViewModel: ObservableObject {
     }
     
     func addPlotViewModel(for plotData: PlotData) {
-        // Ensure a view model exists for the given plot data
         if !plotViewModels.contains(where: { $0.plotData.id == plotData.id }) {
             let newPlotViewModel = PlotViewModel(plotData: plotData)
             plotViewModels.append(newPlotViewModel)
@@ -197,8 +206,8 @@ class CalculatorViewModel: ObservableObject {
     }
 
     func requestOpenPlotWindow(for plotData: PlotData) {
-        addPlotViewModel(for: plotData) // Ensure the VM is created
-        plotToShow = plotData.id // Signal the View to open the window
+        addPlotViewModel(for: plotData)
+        plotToShow = plotData.id
     }
 
     func closePlotWindow(id: PlotData.ID?) {
@@ -242,29 +251,20 @@ class CalculatorViewModel: ObservableObject {
         return nil
     }
 
-    private func calculate(expression: String, cursor: NSRange) {
+    private func calculate(expression: String, cursor: NSRange) async {
         let helpText = getContextualHelp(expression: expression, cursor: cursor)
-        
+
         let callsTallFunction = expression.contains("vector(") || expression.contains("matrix(") || expression.contains("range(") || expression.contains("linspace(")
         let parts = expression.components(separatedBy: CharacterSet(charactersIn: "+-()"))
         let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
-        let isTall = callsTallFunction || hasNestedFraction
-        
-        if self.isTallExpression != isTall {
-            DispatchQueue.main.async {
-                self.isTallExpression = isTall
-            }
-        }
-
-        guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
-            self.liveResult = helpText ?? ""
-            self.liveLaTeXPreview = ""
-            self.lastSuccessfulValue = nil
-            return
-        }
+        let newIsTallExpression = callsTallFunction || hasNestedFraction
 
         var tempVars = self.variables
         var tempFuncs = self.functions
+        
+        let finalLiveResult: String
+        let finalLiveLaTeXPreview: String
+        
         do {
             let lexer = Lexer(input: expression, decimalSeparator: settings.decimalSeparator)
             let tokens = lexer.tokenize()
@@ -274,19 +274,19 @@ class CalculatorViewModel: ObservableObject {
 
             let (value, usedAngle) = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             
-            let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
-            
-            self.variables = tempVars
-            self.functions = tempFuncs
             self.lastSuccessfulValue = value
             self.lastUsedAngleFlag = usedAngle
+            self.variables = tempVars
+            self.functions = tempFuncs
+            
+            let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
             
             if case .plot(let plotData) = value {
-                self.liveLaTeXPreview = "\\text{Plotting: \(plotData.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
+                finalLiveLaTeXPreview = "\\text{Plotting: \(plotData.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
             } else if case .functionDefinition = value {
-                self.liveLaTeXPreview = expressionLaTeX
+                finalLiveLaTeXPreview = expressionLaTeX
             } else if isSimpleVariableDefinition {
-                self.liveLaTeXPreview = expressionLaTeX
+                finalLiveLaTeXPreview = expressionLaTeX
             } else {
                 let resultLaTeX: String
                 let maxLivePreviewRows = 50
@@ -299,16 +299,11 @@ class CalculatorViewModel: ObservableObject {
 
                 if isResultTooLargeForPreview {
                     switch value {
-                    case .vector(let v):
-                        resultLaTeX = "\\text{\(v.dimension)-element Vector}"
-                    case .matrix(let m):
-                        resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
-                    case .complexVector(let cv):
-                        resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
-                    case .complexMatrix(let cm):
-                        resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
-                    default:
-                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                    case .vector(let v): resultLaTeX = "\\text{\(v.dimension)-element Vector}"
+                    case .matrix(let m): resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
+                    case .complexVector(let cv): resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
+                    case .complexMatrix(let cm): resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
+                    default: resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
                     }
                 } else {
                     if self.settings.enableLiveRounding {
@@ -319,20 +314,24 @@ class CalculatorViewModel: ObservableObject {
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
                     }
                 }
-                self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
+                finalLiveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
             }
             
-            self.liveResult = helpText ?? ""
+            finalLiveResult = helpText ?? ""
 
         } catch let error {
-            let errorMessage = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
-            let finalMessage = [helpText, errorMessage].compactMap { $0 }.joined(separator: "\n")
-            
-            let partialLaTeX = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
-            
             self.lastSuccessfulValue = nil
-            self.liveLaTeXPreview = partialLaTeX
-            self.liveResult = finalMessage
+            
+            let errorMessage = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
+            finalLiveResult = [helpText, errorMessage].compactMap { $0 }.joined(separator: "\n")
+            finalLiveLaTeXPreview = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
+        }
+        
+        self.liveResult = finalLiveResult
+        self.liveLaTeXPreview = finalLiveLaTeXPreview
+        
+        if self.isTallExpression != newIsTallExpression {
+            self.isTallExpression = newIsTallExpression
         }
     }
     
@@ -377,8 +376,7 @@ class CalculatorViewModel: ObservableObject {
             
             let newCalculation = Calculation(expression: rawExpression, result: valueToCommit, type: calcType, usedAngleSensitiveFunction: self.lastUsedAngleFlag, angleMode: self.angleMode)
             
-            // FIX: Defer state changes that affect the UI to avoid publishing during a view update.
-            DispatchQueue.main.async {
+            Task {
                 self.history.append(newCalculation)
                 self.rawExpression = ""
             }
@@ -389,14 +387,12 @@ class CalculatorViewModel: ObservableObject {
 
     func handleKeyPress(keys: Set<KeyEquivalent>) -> Bool {
         if let selectedText = navigationManager.handleKeyPress(keys: keys, history: history, viewModel: self) {
-            // FIX: Defer this state change
-            DispatchQueue.main.async {
+            Task {
                 self.previewText = selectedText
             }
             return true
         } else {
-            // FIX: Defer this state change
-            DispatchQueue.main.async {
+            Task {
                 self.previewText = ""
             }
             return false
@@ -405,8 +401,7 @@ class CalculatorViewModel: ObservableObject {
 
     func resetNavigation() {
         navigationManager.resetSelection()
-        // FIX: Defer this state change
-        DispatchQueue.main.async {
+        Task {
             self.previewText = ""
         }
     }
@@ -539,14 +534,10 @@ class CalculatorViewModel: ObservableObject {
             var lines: [String] = []
             let headCount = 5
             let tailCount = 4
-            // First few elements
             for i in 0..<headCount {
                 lines.append("[ \(formatScalarForDisplay(vector[i])) ]")
             }
-            // Ellipsis and count
-            let remaining = vector.dimension - (headCount + tailCount)
-            lines.append("... (\(remaining) more items) ...")
-            // Last few elements
+            lines.append("... (\(vector.dimension - (headCount + tailCount)) more items) ...")
             for i in (vector.dimension - tailCount)..<vector.dimension {
                 lines.append("[ \(formatScalarForDisplay(vector[i])) ]")
             }
@@ -558,7 +549,6 @@ class CalculatorViewModel: ObservableObject {
         let maxDisplayRows = 10
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
 
-        // Common formatting logic for a row
         func formatRow(_ r: Int, columnWidths: [Int]) -> String {
             let rowContent = (0..<matrix.columns).map { c in
                 let formattedNumber = formatScalarForDisplay(matrix[r, c])
@@ -568,7 +558,6 @@ class CalculatorViewModel: ObservableObject {
             return "[ \(rowContent) ]"
         }
 
-        // Calculate column widths based on all elements for consistent alignment
         var columnWidths = [Int](repeating: 0, count: matrix.columns)
         for c in 0..<matrix.columns {
             var maxWidth = 0
@@ -585,14 +574,10 @@ class CalculatorViewModel: ObservableObject {
             var lines: [String] = []
             let headCount = 5
             let tailCount = 4
-            // First few rows
             for r in 0..<headCount {
                 lines.append(formatRow(r, columnWidths: columnWidths))
             }
-            // Ellipsis and count
-            let remaining = matrix.rows - (headCount + tailCount)
-            lines.append("... (\(remaining) more rows) ...")
-            // Last few rows
+            lines.append("... (\(matrix.rows - (headCount + tailCount)) more rows) ...")
             for r in (matrix.rows - tailCount)..<matrix.rows {
                 lines.append(formatRow(r, columnWidths: columnWidths))
             }
@@ -608,14 +593,10 @@ class CalculatorViewModel: ObservableObject {
             var lines: [String] = []
             let headCount = 5
             let tailCount = 4
-            // First few elements
             for i in 0..<headCount {
                 lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
             }
-            // Ellipsis and count
-            let remaining = vector.dimension - (headCount + tailCount)
-            lines.append("... (\(remaining) more items) ...")
-            // Last few elements
+            lines.append("... (\(vector.dimension - (headCount + tailCount)) more items) ...")
             for i in (vector.dimension - tailCount)..<vector.dimension {
                 lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
             }
@@ -627,7 +608,6 @@ class CalculatorViewModel: ObservableObject {
         let maxDisplayRows = 10
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
         
-        // Common formatting logic for a row
         func formatRow(_ r: Int, columnWidths: [Int]) -> String {
             let rowContent = (0..<matrix.columns).map { c in
                 let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"
@@ -637,7 +617,6 @@ class CalculatorViewModel: ObservableObject {
             return "[ \(rowContent) ]"
         }
 
-        // Calculate column widths based on all elements for consistent alignment
         var columnWidths = [Int](repeating: 0, count: matrix.columns)
         for c in 0..<matrix.columns {
             var maxWidth = 0
@@ -654,14 +633,10 @@ class CalculatorViewModel: ObservableObject {
             var lines: [String] = []
             let headCount = 5
             let tailCount = 4
-            // First few rows
             for r in 0..<headCount {
                 lines.append(formatRow(r, columnWidths: columnWidths))
             }
-            // Ellipsis and count
-            let remaining = matrix.rows - (headCount + tailCount)
-            lines.append("... (\(remaining) more rows) ...")
-            // Last few rows
+            lines.append("... (\(matrix.rows - (headCount + tailCount)) more rows) ...")
             for r in (matrix.rows - tailCount)..<matrix.rows {
                 lines.append(formatRow(r, columnWidths: columnWidths))
             }
@@ -684,4 +659,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
