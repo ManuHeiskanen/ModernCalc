@@ -113,8 +113,9 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "acos", signature: "acos(value)", description: "Calculates the inverse cosine (arccos)."),
         .init(name: "atan", signature: "atan(value)", description: "Calculates the inverse tangent (arctan)."),
         // Calculus
-        .init(name: "derivative", signature: "derivative(expr, var, point, [order])", description: "Finds the instantaneous rate of change (slope). Can calculate higher-order derivatives (e.g., order 2 for concavity)."),
+        .init(name: "derivative", signature: "derivative(expr, var, point, [order]) or derivative(func, point)", description: "Finds the instantaneous rate of change. Can use an expression or a pre-defined single-variable function."),
         .init(name: "integral", signature: "integral(expr, var, from, to)", description: "Calculates the total area under a function's curve between two points."),
+        .init(name: "grad", signature: "grad(func, pointVector)", description: "Calculates the gradient of a multi-variable function. Requires a pre-defined function and a vector point."),
         // General
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
         .init(name: "root", signature: "root(number, degree)", description: "Calculates the nth root of a number."),
@@ -139,6 +140,10 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "max", signature: "max(a, b, ...)", description: "Finds the maximum value in a list of numbers or a vector/matrix."),
         .init(name: "median", signature: "median(a, b, ...)", description: "Finds the median of a list of numbers or a vector/matrix."),
         .init(name: "stddev", signature: "stddev(a, b, ...)", description: "Calculates the sample standard deviation."),
+        .init(name: "stddevp", signature: "stddevp(a, b, ...)", description: "Calculates the population standard deviation."),
+        .init(name: "variance", signature: "variance(a, b, ...)", description: "Calculates the sample variance."),
+        .init(name: "linreg", signature: "linreg(xValues, yValues)", description: "Performs a linear regression and returns the slope and y-intercept."),
+        .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
         // Linear Algebra
         .init(name: "dot", signature: "dot(vectorA, vectorB)", description: "Calculates the dot product of two vectors (real or complex)."),
         .init(name: "cross", signature: "cross(vectorA, vectorB)", description: "Calculates the cross product of two 3D vectors."),
@@ -189,7 +194,8 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
-        .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. For example, `derivative(x^3, x, 2)` finds the slope of x³ at x=2. \nCalculate definite integrals with `integral(expression, variable, from, to)`, for example `integral(x^2, x, 0, 1)`.")
+        .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
+        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data.")
     ]
 
 
@@ -332,11 +338,9 @@ class CalculatorViewModel: ObservableObject {
                         case .complexMatrix(let cm):
                             resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
                         default:
-                            // Fallback for any other type, though it shouldn't be reached with the current logic
                             resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
                         }
                     } else {
-                        // Original logic for generating LaTeX for results that are not too large
                         if self.settings.enableLiveRounding {
                             let liveSettings = UserSettings(); liveSettings.displayMode = .fixed
                             liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces; liveSettings.decimalSeparator = self.settings.decimalSeparator
@@ -465,7 +469,7 @@ class CalculatorViewModel: ObservableObject {
         case .scalar(let d): return formatScalarForDisplay(d); case .complex(let c): return formatComplexForDisplay(c); case .vector(let v): return formatVectorForDisplay(v)
         case .matrix(let m): return formatMatrixForDisplay(m); case .tuple(let t): return t.map { formatForHistory($0) }.joined(separator: " OR ")
         case .complexVector(let cv): return formatComplexVectorForDisplay(cv); case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm)
-        case .functionDefinition: return ""; case .polar(let p): return formatPolarForDisplay(p)
+        case .functionDefinition: return ""; case .polar(let p): return formatPolarForDisplay(p); case .regressionResult(let s, let i): return "m = \(formatScalarForDisplay(s)), b = \(formatScalarForDisplay(i))"
         }
     }
     
@@ -477,7 +481,7 @@ class CalculatorViewModel: ObservableObject {
         case .tuple(let t): return t.map { formatForParsing($0) }.first ?? ""
         case .complexVector(let cv): return "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: ",") }.joined(separator: ";")))"
-        case .functionDefinition: return ""; case .polar(let p): return formatPolarForParsing(p)
+        case .functionDefinition: return ""; case .polar(let p): return formatPolarForParsing(p); case .regressionResult: return ""
         }
     }
 
@@ -672,4 +676,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-

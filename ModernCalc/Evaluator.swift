@@ -29,8 +29,6 @@ enum MathError: Error, CustomStringConvertible {
             }
             if typeA == "hyp < side" { return "Error: Hypotenuse must be greater than or equal to the side." }
             if typeA == "Singular Matrix" { return "Error: Matrix is singular and cannot be inverted."}
-            if typeA == "step cannot be zero" { return "Error: Range step cannot be zero."}
-            if typeA == "count must be at least 2" { return "Error: Linspace count must be at least 2."}
             return "Error: Operator '\(op)' is not supported for \(typeA)."
         case .dimensionMismatch(let reason): return "Error: Dimension mismatch. \(reason)."
         case .incorrectArgumentCount(let function, let expected, let found): return "Error: Function '\(function)' expects \(expected) argument(s), but received \(found)."
@@ -66,7 +64,9 @@ struct Evaluator {
         "min": { args in try performStatisticalOperation(args: args, on: { $0.min() }) },
         "max": { args in try performStatisticalOperation(args: args, on: { $0.max() }) },
         "median": { args in try performStatisticalOperation(args: args, on: { $0.median() }) },
-        "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) }
+        "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) },
+        "variance": { args in try performStatisticalOperation(args: args, on: { $0.variance() }) },
+        "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp() }) }
     ]
     
     private let multiArgumentFunctions: [String: ([MathValue]) throws -> MathValue] = [
@@ -76,19 +76,20 @@ struct Evaluator {
             }
             let start = try args[0].asScalar()
             let end = try args[1].asScalar()
-            let step = (args.count == 3) ? (try args[2].asScalar()) : 1.0
-
+            let step = try args.count == 3 ? args[2].asScalar() : 1.0
+            
             guard step != 0 else { throw MathError.unsupportedOperation(op: "range", typeA: "step cannot be zero", typeB: nil) }
-
+            
             var values: [Double] = []
             var current = start
+            
             if step > 0 {
-                while current <= end + 1e-9 { // Add tolerance for floating point issues
+                while current <= end {
                     values.append(current)
                     current += step
                 }
             } else { // step < 0
-                while current >= end - 1e-9 { // Add tolerance for floating point issues
+                while current >= end {
                     values.append(current)
                     current += step
                 }
@@ -102,21 +103,49 @@ struct Evaluator {
             let start = try args[0].asScalar()
             let end = try args[1].asScalar()
             let countScalar = try args[2].asScalar()
-
-            guard countScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "integer count", found: "non-integer") }
+            
+            guard countScalar >= 2, countScalar.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.unsupportedOperation(op: "linspace", typeA: "count must be an integer >= 2", typeB: nil)
+            }
             let count = Int(countScalar)
-            guard count >= 2 else { throw MathError.unsupportedOperation(op: "linspace", typeA: "count must be at least 2", typeB: nil) }
 
-            var values: [Double] = [start]
+            var values: [Double] = []
+            if count == 0 { return .vector(Vector(values: [])) }
+            if count == 1 { return .vector(Vector(values: [start]))}
+            
             let step = (end - start) / Double(count - 1)
-            for i in 1..<count-1 {
+            for i in 0..<count {
                 values.append(start + step * Double(i))
             }
-            values.append(end) // Ensure the last value is exactly 'end'
             return .vector(Vector(values: values))
+        },
+        "random": { args in
+            switch args.count {
+            case 0:
+                return .scalar(Double.random(in: 0...1))
+            case 1:
+                let max = try args[0].asScalar()
+                guard max >= 1, max.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "random", typeA: "max must be an integer >= 1", typeB: nil)}
+                return .scalar(Double(Int.random(in: 1...Int(max))))
+            case 2:
+                let min = try args[0].asScalar()
+                let max = try args[1].asScalar()
+                guard min <= max, min.truncatingRemainder(dividingBy: 1) == 0, max.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "random", typeA: "min and max must be integers where min <= max", typeB: nil)}
+                return .scalar(Double(Int.random(in: Int(min)...Int(max))))
+            case 3:
+                let min = try args[0].asScalar()
+                let max = try args[1].asScalar()
+                let count = try args[2].asScalar()
+                guard min <= max, min.truncatingRemainder(dividingBy: 1) == 0, max.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "random", typeA: "min and max must be integers where min <= max", typeB: nil)}
+                guard count >= 1, count.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "random", typeA: "count must be an integer >= 1", typeB: nil)}
+                let values = (0..<Int(count)).map { _ in Double(Int.random(in: Int(min)...Int(max))) }
+                return .vector(Vector(values: values))
+            default:
+                throw MathError.incorrectArgumentCount(function: "random", expected: "0, 1, 2, or 3", found: args.count)
+            }
         }
     ]
-    
+
     private let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
         "abs": { arg in
             switch arg {
@@ -260,6 +289,27 @@ struct Evaluator {
     ]
     
     private let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
+        "linreg": { a, b in
+            guard case .vector(let xVec) = a, case .vector(let yVec) = b else {
+                throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)")
+            }
+            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else {
+                throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for linear regression.")
+            }
+            let n = Double(xVec.dimension)
+            let sumX = xVec.sum()
+            let sumY = yVec.sum()
+            let sumXY = try xVec.hadamard(with: yVec).sum()
+            let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
+
+            let denominator = (n * sumX2 - sumX * sumX)
+            guard denominator != 0 else { throw MathError.unsupportedOperation(op: "linreg", typeA: "Cannot perform regression on vertical line (undefined slope)", typeB: nil) }
+            
+            let slope = (n * sumXY - sumX * sumY) / denominator
+            let intercept = (sumY - slope * sumX) / n
+
+            return .regressionResult(slope: slope, intercept: intercept)
+        },
         "dot": { a, b in
             if case .vector(let v1) = a, case .vector(let v2) = b {
                 return .scalar(try v1.dot(with: v2))
@@ -450,70 +500,49 @@ struct Evaluator {
             }
             
             let (leftValue, leftUsedAngle) = try _evaluateSingle(node: binaryNode.left, variables: &variables, functions: &functions, angleMode: angleMode)
+            
+            if let indexedOpNode = binaryNode.right as? IndexedOperationNode {
+                return try evaluateIndexedAssignment(op: binaryNode.op, target: leftValue, indexedOp: indexedOpNode, variables: &variables, functions: &functions, angleMode: angleMode)
+            }
+
             let (rightValue, rightUsedAngle) = try _evaluateSingle(node: binaryNode.right, variables: &variables, functions: &functions, angleMode: angleMode)
             let result = try evaluateBinaryOperation(op: binaryNode.op, left: leftValue, right: rightValue)
             return (result, leftUsedAngle || rightUsedAngle)
-        
-        case let modifyNode as ElementWiseModifyNode:
-            let (vectorValue, vecUsedAngle) = try _evaluateSingle(node: modifyNode.vector, variables: &variables, functions: &functions, angleMode: angleMode)
-            let (indexValue, idxUsedAngle) = try _evaluateSingle(node: modifyNode.index, variables: &variables, functions: &functions, angleMode: angleMode)
-            let (scalarValue, valUsedAngle) = try _evaluateSingle(node: modifyNode.value, variables: &variables, functions: &functions, angleMode: angleMode)
-
-            guard case .scalar(let indexDouble) = indexValue, indexDouble.truncatingRemainder(dividingBy: 1) == 0 else {
-                throw MathError.typeMismatch(expected: "Integer for index", found: indexValue.typeName)
-            }
-            let index = Int(indexDouble) - 1 // Use 1-based indexing for user input
-
-            switch vectorValue {
-            case .vector(let v):
-                guard case .scalar(let s) = scalarValue else {
-                    throw MathError.typeMismatch(expected: "Scalar for modification value", found: scalarValue.typeName)
-                }
-                let opFunction: (Double, Double) -> Double
-                switch modifyNode.op.rawValue {
-                    case ".+@": opFunction = (+)
-                    case ".-@": opFunction = (-)
-                    case ".*@": opFunction = (*)
-                    case "./@":
-                        opFunction = { a, b in
-                            guard b != 0 else { return a } // Avoid division by zero, maybe throw instead? For now, no-op.
-                            return a / b
-                        }
-                    case ".=@": opFunction = { _, new in new }
-                    default: throw MathError.unknownOperator(op: modifyNode.op.rawValue)
-                }
-                let resultVector = try v.modifying(at: index, with: s, operation: opFunction)
-                return (.vector(resultVector), vecUsedAngle || idxUsedAngle || valUsedAngle)
-            
-            case .complexVector(let cv):
-                let s: Complex
-                switch scalarValue {
-                case .scalar(let real):
-                    s = Complex(real: real, imaginary: 0)
-                case .complex(let complex):
-                    s = complex
-                default:
-                    throw MathError.typeMismatch(expected: "Scalar or Complex for modification value", found: scalarValue.typeName)
-                }
-
-                let opFunction: (Complex, Complex) throws -> Complex
-                switch modifyNode.op.rawValue {
-                    case ".+@": opFunction = (+)
-                    case ".-@": opFunction = (-)
-                    case ".*@": opFunction = (*)
-                    case "./@": opFunction = { try $0 / $1 }
-                    case ".=@": opFunction = { _, new in new }
-                    default: throw MathError.unknownOperator(op: modifyNode.op.rawValue)
-                }
-                let resultVector = try cv.modifying(at: index, with: s, operation: opFunction)
-                return (.complexVector(resultVector), vecUsedAngle || idxUsedAngle || valUsedAngle)
-
-            default:
-                throw MathError.typeMismatch(expected: "Vector or ComplexVector", found: vectorValue.typeName)
-            }
 
         case let derivativeNode as DerivativeNode:
-            let (pointValue, pointUsedAngle) = try _evaluateSingle(node: derivativeNode.point, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (bodyNode, varName): (ExpressionNode, String)
+            let pointNode = derivativeNode.point
+
+            if let variableNode = derivativeNode.variable {
+                // This handles the 3 and 4-argument calls, e.g., derivative(x^2, x, 2)
+                bodyNode = derivativeNode.body
+                varName = variableNode.name
+            } else {
+                // This handles the 2-argument calls, e.g., derivative(f, 2) or derivative(f(x), 2)
+                let funcName: String
+                
+                // Determine the function name from the body node
+                if let funcNameNode = derivativeNode.body as? ConstantNode {
+                    funcName = funcNameNode.name
+                } else if let funcCallNode = derivativeNode.body as? FunctionCallNode {
+                    // If the user writes derivative(f(x), 2), we use 'f' as the function name.
+                    funcName = funcCallNode.name
+                } else {
+                    // If it's a raw expression like derivative(x^2, 2), we can't infer the variable.
+                    throw MathError.incorrectArgumentCount(function: "derivative", expected: "3 arguments (expression, variable, point) for this type of expression", found: 2)
+                }
+                
+                guard let userFunction = functions[funcName] else {
+                    throw MathError.unknownFunction(name: funcName)
+                }
+                guard userFunction.parameterNames.count == 1 else {
+                    throw MathError.unsupportedOperation(op: "derivative", typeA: "function with \(userFunction.parameterNames.count) variables in 2-argument form", typeB: nil)
+                }
+                bodyNode = userFunction.body
+                varName = userFunction.parameterNames[0]
+            }
+
+            let (pointValue, pointUsedAngle) = try _evaluateSingle(node: pointNode, variables: &variables, functions: &functions, angleMode: angleMode)
             let (orderValue, _) = try _evaluateSingle(node: derivativeNode.order, variables: &variables, functions: &functions, angleMode: angleMode)
 
             guard case .scalar(let point) = pointValue else {
@@ -524,10 +553,9 @@ struct Evaluator {
             }
             let order = Int(orderScalar)
 
-            // Perform a dry run evaluation of the body to check for angle-sensitive functions
-            var tempVars = variables
-            tempVars[derivativeNode.variable.name] = .scalar(0) // Use a dummy value
-            let bodyUsedAngle = (try? _evaluateSingle(node: derivativeNode.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
+            var tempVarsForDryRun = variables
+            tempVarsForDryRun[varName] = .scalar(0)
+            let bodyUsedAngle = (try? _evaluateSingle(node: bodyNode, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
 
             func calculateNthDerivative(node: ExpressionNode, varName: String, at a: Double, order n: Int) throws -> Double {
                 if n == 1 {
@@ -545,7 +573,7 @@ struct Evaluator {
                 return (f_prime_at_a_plus_h - f_prime_at_a_minus_h) / (2 * h)
             }
             
-            let result = try calculateNthDerivative(node: derivativeNode.body, varName: derivativeNode.variable.name, at: point, order: order)
+            let result = try calculateNthDerivative(node: bodyNode, varName: varName, at: point, order: order)
             return (.scalar(result), pointUsedAngle || bodyUsedAngle)
 
         case let integralNode as IntegralNode:
@@ -556,20 +584,22 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "Scalar for integration bounds", found: "Non-scalar")
             }
 
-            // Perform a dry run evaluation of the body to check for angle-sensitive functions
-            var tempVars = variables
-            tempVars[integralNode.variable.name] = .scalar(0) // Use a dummy value
-            let bodyUsedAngle = (try? _evaluateSingle(node: integralNode.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
+            var tempVarsForDryRun = variables
+            tempVarsForDryRun[integralNode.variable.name] = .scalar(0)
+            let bodyUsedAngle = (try? _evaluateSingle(node: integralNode.body, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
 
-            // Create a closure that represents the mathematical function f(x)
-            // This captures the necessary context to evaluate the expression body at any x.
+            let capturedVariables = variables
+            let capturedFunctions = functions
+
             let f: (Double) throws -> Double = { x in
+                var localVars = capturedVariables
+                var localFuncs = capturedFunctions
                 let value = try self.evaluateWithTempVar(
                     node: integralNode.body,
                     varName: integralNode.variable.name,
                     varValue: x,
-                    variables: &variables,
-                    functions: &functions,
+                    variables: &localVars,
+                    functions: &localFuncs,
                     angleMode: angleMode
                 )
                 guard case .scalar(let scalarValue) = value else {
@@ -578,7 +608,6 @@ struct Evaluator {
                 return scalarValue
             }
                 
-            // Define a tolerance for the adaptive algorithm
             let tolerance = 1e-7
             let result = try adaptiveSimpson(f: f, a: a, b: b, tolerance: tolerance)
                     
@@ -599,9 +628,8 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "Scalar for differentiation point", found: pointValue.typeName)
             }
 
-            // Perform a dry run evaluation of the function body
             var tempVars = variables
-            tempVars[varName] = .scalar(point) // Use the actual point for the dry run
+            tempVars[varName] = .scalar(point)
             let bodyUsedAngle = (try? _evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
 
             let valPlus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -622,6 +650,10 @@ struct Evaluator {
     private func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         var usedAngle = false
         
+        if node.name == "grad" {
+            return try evaluateGradFunction(node, variables: &variables, functions: &functions, angleMode: angleMode)
+        }
+        
         if node.name == "angle" {
             guard node.arguments.count == 2 else {
                 throw MathError.incorrectArgumentCount(function: "angle", expected: "2", found: node.arguments.count)
@@ -632,22 +664,20 @@ struct Evaluator {
             return (result!, true || arg1UsedAngle || arg2UsedAngle)
         }
 
-        if let multiArgFunc = multiArgumentFunctions[node.name] {
-            var args: [MathValue] = []
-            for argNode in node.arguments {
-                let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
-                usedAngle = usedAngle || argUsedAngle
-                args.append(arg)
-            }
-            return (try multiArgFunc(args), usedAngle)
-        }
-        
         if let variadicFunc = variadicFunctions[node.name] {
             var args: [MathValue] = []; for argNode in node.arguments {
                 let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = usedAngle || argUsedAngle; args.append(arg)
             }
             return (try variadicFunc(args), usedAngle)
+        }
+        
+        if let multiArgFunc = multiArgumentFunctions[node.name] {
+            var args: [MathValue] = []; for argNode in node.arguments {
+                let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
+                usedAngle = usedAngle || argUsedAngle; args.append(arg)
+            }
+            return (try multiArgFunc(args), usedAngle)
         }
         
         if let singleArgFunc = singleArgumentFunctions[node.name] {
@@ -677,6 +707,27 @@ struct Evaluator {
         }
         
         if let userFunction = functions[node.name] {
+            // Check for vectorization: single-parameter function called with a single vector argument
+            if userFunction.parameterNames.count == 1 && node.arguments.count == 1 {
+                let (argValue, argUsedAngle) = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
+                if case .vector(let v) = argValue {
+                    var resultValues: [Double] = []
+                    var overallUsedAngle = argUsedAngle
+                    for element in v.values {
+                        var localVariables = variables
+                        localVariables[userFunction.parameterNames[0]] = .scalar(element)
+                        let (result, elementUsedAngle) = try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions, angleMode: angleMode)
+                        guard case .scalar(let scalarResult) = result else {
+                            throw MathError.typeMismatch(expected: "Scalar result from vectorized function", found: result.typeName)
+                        }
+                        resultValues.append(scalarResult)
+                        overallUsedAngle = overallUsedAngle || elementUsedAngle
+                    }
+                    return (.vector(Vector(values: resultValues)), overallUsedAngle)
+                }
+            }
+            
+            // Standard function call
             guard node.arguments.count == userFunction.parameterNames.count else { throw MathError.incorrectArgumentCount(function: node.name, expected: "\(userFunction.parameterNames.count)", found: node.arguments.count) }
             var localVariables = variables
             for (paramName, argNode) in zip(userFunction.parameterNames, node.arguments) {
@@ -687,6 +738,72 @@ struct Evaluator {
         }
         
         throw MathError.unknownFunction(name: node.name)
+    }
+    
+    private func evaluateGradFunction(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
+        guard node.arguments.count == 2 else {
+            throw MathError.incorrectArgumentCount(function: "grad", expected: "2", found: node.arguments.count)
+        }
+
+        // First argument must be a function name, not evaluated.
+        guard let funcNameNode = node.arguments[0] as? ConstantNode else {
+            throw MathError.typeMismatch(expected: "User function name for gradient", found: node.arguments[0].description)
+        }
+        let funcName = funcNameNode.name
+
+        // Look up the function definition.
+        guard let userFunction = functions[funcName] else {
+            throw MathError.unknownFunction(name: funcName)
+        }
+        let varNames = userFunction.parameterNames
+        guard !varNames.isEmpty else {
+            throw MathError.unsupportedOperation(op: "grad", typeA: "function with no parameters", typeB: nil)
+        }
+
+        // Second argument is the point vector, which needs evaluation.
+        let (pointValue, pointUsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
+        guard case .vector(let pointVector) = pointValue else {
+            throw MathError.typeMismatch(expected: "Vector for gradient point", found: pointValue.typeName)
+        }
+        guard pointVector.dimension == varNames.count else {
+            throw MathError.dimensionMismatch(reason: "Point dimension (\(pointVector.dimension)) must match number of function variables (\(varNames.count)).")
+        }
+
+        // Create non-inout copies to be captured by the closure.
+        let capturedVariables = variables
+        let capturedFunctions = functions
+        
+        var partialDerivatives: [Double] = []
+        
+        for (i, varName) in varNames.enumerated() {
+            // To calculate the partial derivative with respect to varName, all other variables
+            // must be fixed to their values from the pointVector.
+            let pointForThisVar = pointVector.values[i]
+            
+            // This closure will evaluate the function with one variable perturbed.
+            let f: (Double) throws -> Double = { x_perturbed in
+                var tempVars = capturedVariables
+                for (j, otherVarName) in varNames.enumerated() {
+                    let value = (j == i) ? x_perturbed : pointVector.values[j]
+                    tempVars[otherVarName] = .scalar(value)
+                }
+                var tempFuncs = capturedFunctions
+                let result = try self._evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode).result
+                guard case .scalar(let scalarResult) = result else {
+                    throw MathError.typeMismatch(expected: "Scalar expression for gradient calculation", found: result.typeName)
+                }
+                return scalarResult
+            }
+            
+            // Central difference method
+            let valPlus = try f(pointForThisVar + h)
+            let valMinus = try f(pointForThisVar - h)
+            
+            let derivative = (valPlus - valMinus) / (2 * h)
+            partialDerivatives.append(derivative)
+        }
+        
+        return (.vector(Vector(values: partialDerivatives)), pointUsedAngle)
     }
 
     private func evaluateUnaryOperation(op: Token, value: MathValue) throws -> MathValue {
@@ -751,6 +868,62 @@ struct Evaluator {
         }
     }
     
+    private func evaluateIndexedAssignment(op: Token, target: MathValue, indexedOp: IndexedOperationNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (MathValue, Bool) {
+        
+        let (indexValue, indexUsedAngle) = try _evaluateSingle(node: indexedOp.index, variables: &variables, functions: &functions, angleMode: angleMode)
+        let (scalarValue, scalarUsedAngle) = try _evaluateSingle(node: indexedOp.scalar, variables: &variables, functions: &functions, angleMode: angleMode)
+        
+        guard case .scalar(let indexScalar) = indexValue, indexScalar.truncatingRemainder(dividingBy: 1) == 0 else {
+            throw MathError.typeMismatch(expected: "Integer for index", found: indexValue.typeName)
+        }
+        let oneBasedIndex = Int(indexScalar)
+        let zeroBasedIndex = oneBasedIndex - 1
+
+        let result: MathValue
+        switch target {
+        case .vector(let v):
+            guard case .scalar(let s) = scalarValue else { throw MathError.typeMismatch(expected: "Scalar", found: scalarValue.typeName) }
+            let opFunction: (Double, Double) -> Double
+            switch op.rawValue {
+            case ".=@": opFunction = { _, s in s }
+            case ".+@": opFunction = (+)
+            case ".-@": opFunction = (-)
+            case ".*@": opFunction = (*)
+            case "./@":
+                opFunction = { v, s in
+                    guard s != 0 else { return .nan } // Will be caught by the check below
+                    return v / s
+                }
+            default: throw MathError.unknownOperator(op: op.rawValue)
+            }
+            let modifiedVector = try v.modifying(at: zeroBasedIndex, with: s, operation: opFunction)
+            if modifiedVector.values.contains(where: { $0.isNaN }) { throw MathError.divisionByZero }
+            result = .vector(modifiedVector)
+            
+        case .complexVector(let cv):
+            let complexScalar: Complex
+            if case .scalar(let s) = scalarValue { complexScalar = Complex(real: s, imaginary: 0) }
+            else if case .complex(let c) = scalarValue { complexScalar = c }
+            else { throw MathError.typeMismatch(expected: "Scalar or Complex", found: scalarValue.typeName) }
+            
+            let opFunction: (Complex, Complex) throws -> Complex
+            switch op.rawValue {
+            case ".=@": opFunction = { _, s in s }
+            case ".+@": opFunction = (+)
+            case ".-@": opFunction = (-)
+            case ".*@": opFunction = (*)
+            case "./@": opFunction = { v, s in try v / s }
+            default: throw MathError.unknownOperator(op: op.rawValue)
+            }
+            result = .complexVector(try cv.modifying(at: zeroBasedIndex, with: complexScalar, operation: opFunction))
+            
+        default:
+            throw MathError.typeMismatch(expected: "Vector or ComplexVector", found: target.typeName)
+        }
+        
+        return (result, indexUsedAngle || scalarUsedAngle)
+    }
+
     private func performScalarScalarOp(_ op: String, _ l: Double, _ r: Double) throws -> Double {
         switch op {
         case "+": return l + r; case "-": return l - r; case "*": return l * r
@@ -771,11 +944,13 @@ struct Evaluator {
         if reversed {
             switch op { case "+": return s + v; case "*": return s * v; case "-": return s - v
             case "/": guard !v.values.contains(0) else { throw MathError.divisionByZero }; return s / v
+            case "^": throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Vector")
             default: throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Vector")
             }
         } else {
             switch op { case "+": return v + s; case "*": return v * s; case "-": return v - s
             case "/": guard s != 0 else { throw MathError.divisionByZero }; return v / s
+            case "^": return Vector(values: v.values.map { pow($0, s) })
             default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Scalar")
             }
         }
@@ -784,6 +959,7 @@ struct Evaluator {
         switch op {
         case "+": return try l + r; case "-": return try l - r
         case ".*": return try l.hadamard(with: r); case "./": return try l.hadamardDivision(with: r)
+        case "^": return Vector(values: zip(l.values, r.values).map(pow))
         default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Vector")
         }
     }
@@ -906,5 +1082,4 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
-
 

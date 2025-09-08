@@ -185,6 +185,20 @@ struct Vector: Equatable, Codable {
     func magnitude() -> Double {
         return Foundation.sqrt(values.map { $0 * $0 }.reduce(0, +))
     }
+    
+    func variance() -> Double? {
+        guard dimension > 1 else { return nil }
+        let mean = average()
+        let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
+        return sumOfSquaredDiffs / Double(dimension - 1)
+    }
+
+    func stddevp() -> Double? {
+        guard dimension > 0 else { return nil }
+        let mean = average()
+        let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
+        return Foundation.sqrt(sumOfSquaredDiffs / Double(dimension))
+    }
 }
 
 struct Matrix: Equatable, Codable {
@@ -508,14 +522,15 @@ struct ComplexMatrix: Equatable, Codable {
 
 enum MathValue: Equatable, Codable {
     case scalar(Double); case complex(Complex); case vector(Vector); case matrix(Matrix); case tuple([MathValue]); case functionDefinition(String); case complexVector(ComplexVector); case complexMatrix(ComplexMatrix); case polar(Complex)
+    case regressionResult(slope: Double, intercept: Double)
 
     var typeName: String {
         switch self {
-        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"
+        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"
         }
     }
     
-    enum CodingKeys: String, CodingKey { case type, value }
+    enum CodingKeys: String, CodingKey { case type, value, slope, intercept }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -529,6 +544,10 @@ enum MathValue: Equatable, Codable {
         case .complexVector(let cv): try container.encode("complexVector", forKey: .type); try container.encode(cv, forKey: .value)
         case .complexMatrix(let cm): try container.encode("complexMatrix", forKey: .type); try container.encode(cm, forKey: .value)
         case .polar(let p): try container.encode("polar", forKey: .type); try container.encode(p, forKey: .value)
+        case .regressionResult(let slope, let intercept):
+            try container.encode("regressionResult", forKey: .type)
+            try container.encode(slope, forKey: .slope)
+            try container.encode(intercept, forKey: .intercept)
         }
     }
 
@@ -545,6 +564,10 @@ enum MathValue: Equatable, Codable {
         case "complexVector": self = .complexVector(try container.decode(ComplexVector.self, forKey: .value))
         case "complexMatrix": self = .complexMatrix(try container.decode(ComplexMatrix.self, forKey: .value))
         case "polar": self = .polar(try container.decode(Complex.self, forKey: .value))
+        case "regressionResult":
+            let slope = try container.decode(Double.self, forKey: .slope)
+            let intercept = try container.decode(Double.self, forKey: .intercept)
+            self = .regressionResult(slope: slope, intercept: intercept)
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
         }
     }

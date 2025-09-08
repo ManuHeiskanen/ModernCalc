@@ -56,18 +56,10 @@ struct PostfixOpNode: ExpressionNode {
     let op: Token, child: ExpressionNode
     var description: String { "(\(child.description)\(op.rawValue))" }
 }
-// --- NEW NODE FOR ELEMENT MODIFICATION ---
-struct ElementWiseModifyNode: ExpressionNode {
-    let op: Token
-    let vector: ExpressionNode
-    let index: ExpressionNode
-    let value: ExpressionNode
-    var description: String { "modify(\(vector.description), at: \(index.description), op: \(op.rawValue), with: \(value.description))" }
-}
 // --- NEW NODES FOR CALCULUS ---
 struct DerivativeNode: ExpressionNode {
-    let body: ExpressionNode, variable: ConstantNode, point: ExpressionNode, order: ExpressionNode
-    var description: String { "derivative(\(body.description), at: \(variable.description)=\(point.description), order: \(order.description))" }
+    let body: ExpressionNode, variable: ConstantNode?, point: ExpressionNode, order: ExpressionNode
+    var description: String { "derivative(\(body.description), at: \(variable?.description ?? "auto")=\(point.description), order: \(order.description))" }
 }
 struct IntegralNode: ExpressionNode {
     let body: ExpressionNode, variable: ConstantNode, lowerBound: ExpressionNode, upperBound: ExpressionNode
@@ -76,6 +68,11 @@ struct IntegralNode: ExpressionNode {
 struct PrimeDerivativeNode: ExpressionNode {
     let functionName: String, argument: ExpressionNode
     var description: String { "\(functionName)'(\(argument.description))" }
+}
+struct IndexedOperationNode: ExpressionNode {
+    let index: ExpressionNode
+    let scalar: ExpressionNode
+    var description: String { "@(\(index.description), \(scalar.description))" }
 }
 
 
@@ -86,7 +83,7 @@ enum ParserError: Error, CustomStringConvertible {
     case matrixRowMismatch(expected: Int, found: Int)
     case invalidParameterSyntax
     case invalidAssignmentTarget
-    case incorrectArgumentCount(function: String, expected: Int, found: Int)
+    case incorrectArgumentCount(function: String, expected: String, found: Int)
 
     var description: String {
         switch self {
@@ -166,13 +163,13 @@ class Parser {
                     try advance()
                 }
                 
-                if [".+@", ".-@", ".*@", "./@", ".=@"].contains(op.rawValue) {
-                    try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for element modification"))
-                    let index = try parseExpression()
-                    try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' separating index and value"))
-                    let value = try parseExpression()
-                    try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close element modification"))
-                    left = ElementWiseModifyNode(op: op, vector: left, index: index, value: value)
+                if op.rawValue.hasSuffix("@") {
+                     try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for indexed operation"))
+                     let index = try parseExpression()
+                     try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "','"))
+                     let scalar = try parseExpression()
+                     try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')'"))
+                     left = BinaryOpNode(op: op, left: left, right: IndexedOperationNode(index: index, scalar: scalar))
                 } else {
                     let nextPrecedence = (op.rawValue == "^") ? precedence - 1 : precedence
                     let right = try parseExpression(currentPrecedence: nextPrecedence)
@@ -260,26 +257,37 @@ class Parser {
     private func parseDerivative() throws -> ExpressionNode {
         try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for derivative"))
         
-        let body = try parseExpression()
-        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after expression"))
-        
-        let variableToken = try advance()
-        guard case .identifier(let varName) = variableToken.type else {
-            throw ParserError.unexpectedToken(token: variableToken, expected: "variable name")
-        }
-        let variableNode = ConstantNode(name: varName)
-        
-        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after variable"))
-        let point = try parseExpression()
-        
-        var order: ExpressionNode = NumberNode(value: 1) // Default order is 1
+        let arg1 = try parseExpression() // This can be the body expression OR a function name
+        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after first argument"))
+        let arg2 = try parseExpression() // This can be the variable OR the point
+
+        var order: ExpressionNode = NumberNode(value: 1)
+
+        // Check if there is a third argument, which clarifies the function signature
         if let nextToken = peek(), case .separator(",") = nextToken.type {
-            try advance() // consume ','
-            order = try parseExpression()
+            // This is a 3 or 4-argument call: derivative(body, var, point, [order])
+            try advance() // Consume the comma
+            let arg3 = try parseExpression() // This is the point
+
+            guard let varNode = arg2 as? ConstantNode else {
+                throw ParserError.unexpectedToken(token: nil, expected: "a variable name for the second argument (e.g., 'x')")
+            }
+
+            // Check for optional 4th argument (order)
+            if let anotherComma = peek(), case .separator(",") = anotherComma.type {
+                try advance()
+                order = try parseExpression()
+            }
+            
+            try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close derivative call"))
+            return DerivativeNode(body: arg1, variable: varNode, point: arg3, order: order)
+
+        } else {
+            // This is a 2-argument call: derivative(body, point)
+            try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close derivative call"))
+            // The variable is left as nil, to be inferred by the Evaluator
+            return DerivativeNode(body: arg1, variable: nil, point: arg2, order: order)
         }
-        
-        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')'"))
-        return DerivativeNode(body: body, variable: variableNode, point: point, order: order)
     }
 
     private func parseIntegral() throws -> ExpressionNode {
@@ -412,9 +420,8 @@ class Parser {
             case "±": return 1
             case "+", "-": return 2
             case "*", "/", "∠", ".*", "./": return 3
-            case "%": return 4
+            case ".=@", ".+@", ".-@", ".*@", "./@": return 4
             case "^": return 5
-            case ".+@", ".-@", ".*@", "./@", ".=@": return 7 // Increased precedence
             default: return nil
             }
         }

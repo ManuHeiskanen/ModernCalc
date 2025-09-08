@@ -56,6 +56,14 @@ struct LaTeXEngine {
             return "\(unaryNode.op.rawValue)\(childLaTeX)"
 
         case let binaryNode as BinaryOpNode:
+            
+            if let indexedOpNode = binaryNode.right as? IndexedOperationNode {
+                let targetLaTeX = formatNode(binaryNode.left, evaluator: evaluator, settings: settings)
+                let indexLaTeX = formatNode(indexedOpNode.index, evaluator: evaluator, settings: settings)
+                let scalarLaTeX = formatNode(indexedOpNode.scalar, evaluator: evaluator, settings: settings)
+                return "\(targetLaTeX)_{ \(indexLaTeX) } \\(opString) \(scalarLaTeX)"
+            }
+            
             var leftLaTeX = formatNode(binaryNode.left, evaluator: evaluator, settings: settings)
             var rightLaTeX = formatNode(binaryNode.right, evaluator: evaluator, settings: settings)
 
@@ -108,6 +116,18 @@ struct LaTeXEngine {
             }
 
         case let functionCallNode as FunctionCallNode:
+            if functionCallNode.name == "grad" && functionCallNode.arguments.count == 2 {
+                let funcName = formatNode(functionCallNode.arguments[0], evaluator: evaluator, settings: settings)
+                
+                if let pointVectorNode = functionCallNode.arguments[1] as? VectorNode {
+                    let pointElements = pointVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: ", ")
+                    return "\\nabla \\text{\(funcName)}(\(pointElements))"
+                } else {
+                    let point = formatNode(functionCallNode.arguments[1], evaluator: evaluator, settings: settings)
+                    return "\\nabla \\text{\(funcName)}(\(point))"
+                }
+            }
+            
             let args = functionCallNode.arguments.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: ", ")
             let knownFuncs = ["sin", "cos", "tan", "log", "ln", "det", "exp", "min", "max", "lim"]
             if functionCallNode.name == "sqrt" {
@@ -165,15 +185,26 @@ struct LaTeXEngine {
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
         case let derivativeNode as DerivativeNode:
-            let body = formatNode(derivativeNode.body, evaluator: evaluator, settings: settings)
-            let variable = derivativeNode.variable.name
-            let point = formatNode(derivativeNode.point, evaluator: evaluator, settings: settings)
-            let orderLaTeX = formatNode(derivativeNode.order, evaluator: evaluator, settings: settings)
+            if let variableNode = derivativeNode.variable {
+                // Standard derivative(body, var, point) form
+                let body = formatNode(derivativeNode.body, evaluator: evaluator, settings: settings)
+                let variable = variableNode.name
+                let point = formatNode(derivativeNode.point, evaluator: evaluator, settings: settings)
+                let orderLaTeX = formatNode(derivativeNode.order, evaluator: evaluator, settings: settings)
 
-            if let orderNode = derivativeNode.order as? NumberNode, orderNode.value == 1.0 {
-                return "\\frac{d}{d\(variable)}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+                if let orderNode = derivativeNode.order as? NumberNode, orderNode.value == 1.0 {
+                    return "\\frac{d}{d\(variable)}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+                } else {
+                    return "\\frac{d^{\(orderLaTeX)}}{d\(variable)^{\(orderLaTeX)}}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+                }
             } else {
-                return "\\frac{d^{\(orderLaTeX)}}{d\(variable)^{\(orderLaTeX)}}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
+                // Shorthand derivative(f, point) form
+                // Here, derivativeNode.body is expected to be a ConstantNode with the function name
+                let functionName = (derivativeNode.body as? ConstantNode)?.name ?? "f"
+                let point = formatNode(derivativeNode.point, evaluator: evaluator, settings: settings)
+                
+                // Note: The parser for this form hardcodes the order to 1, so we only need to handle f'
+                return "\\text{\(functionName.replacingOccurrences(of: "_", with: "\\_"))}'(\(point))"
             }
 
         case let integralNode as IntegralNode:
@@ -187,24 +218,10 @@ struct LaTeXEngine {
             let argument = formatNode(primeNode.argument, evaluator: evaluator, settings: settings)
             return "\\text{\(primeNode.functionName)}'(\(argument))"
 
-        case let modifyNode as ElementWiseModifyNode:
-            let vector = formatNode(modifyNode.vector, evaluator: evaluator, settings: settings)
-            let index = formatNode(modifyNode.index, evaluator: evaluator, settings: settings)
-            let value = formatNode(modifyNode.value, evaluator: evaluator, settings: settings)
-
-            let opSymbol: String
-            switch modifyNode.op.rawValue {
-            case ".+@": opSymbol = "\\text{+=}"
-            case ".-@": opSymbol = "\\text{-=}"
-            case ".*@": opSymbol = "\\text{\\cdot=}"
-            case "./@": opSymbol = "\\text{/=}"
-            case ".=@": opSymbol = "\\leftarrow"
-            default: opSymbol = "\\text{\(modifyNode.op.rawValue.replacingOccurrences(of: "_", with: "\\_"))}"
-            }
-            
-            return "\(vector) \\underset{\\text{at index } \(index)}{\(opSymbol)} \(value)"
-
         case is TupleNode:
+            return ""
+            
+        case is IndexedOperationNode: // Should be handled by the BinaryOpNode case
             return ""
 
         default:
@@ -253,6 +270,10 @@ struct LaTeXEngine {
                 }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+        case .regressionResult(let slope, let intercept):
+            let m = formatScalar(slope, settings: settings)
+            let b = formatScalar(intercept, settings: settings)
+            return "\\text{m = } \(m), \\text{ b = } \(b)"
         }
     }
 
@@ -261,7 +282,8 @@ struct LaTeXEngine {
         case "±": return 1
         case "+", "-": return 2
         case "*", "/", "×", "÷": return 3
-        case "^": return 4
+        case ".=@", ".+@", ".-@", ".*@", "./@": return 4
+        case "^": return 5
         default: return 0
         }
     }
