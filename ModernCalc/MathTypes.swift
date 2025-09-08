@@ -549,3 +549,13 @@ enum MathValue: Equatable, Codable {
         }
     }
 }
+
+extension MathValue {
+    func asScalar() throws -> Double {
+        guard case .scalar(let s) = self else {
+            throw MathError.typeMismatch(expected: "Scalar", found: self.typeName)
+        }
+        return s
+    }
+}
+

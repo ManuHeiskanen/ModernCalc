@@ -9,7 +9,7 @@ enum MathError: Error, CustomStringConvertible {
     case typeMismatch(expected: String, found: String)
     case unsupportedOperation(op: String, typeA: String, typeB: String?)
     case dimensionMismatch(reason: String)
-    case incorrectArgumentCount(function: String, expected: Int, found: Int)
+    case incorrectArgumentCount(function: String, expected: String, found: Int)
     case requiresAtLeastOneArgument(function: String)
 
     var description: String {
@@ -29,6 +29,8 @@ enum MathError: Error, CustomStringConvertible {
             }
             if typeA == "hyp < side" { return "Error: Hypotenuse must be greater than or equal to the side." }
             if typeA == "Singular Matrix" { return "Error: Matrix is singular and cannot be inverted."}
+            if typeA == "step cannot be zero" { return "Error: Range step cannot be zero."}
+            if typeA == "count must be at least 2" { return "Error: Linspace count must be at least 2."}
             return "Error: Operator '\(op)' is not supported for \(typeA)."
         case .dimensionMismatch(let reason): return "Error: Dimension mismatch. \(reason)."
         case .incorrectArgumentCount(let function, let expected, let found): return "Error: Function '\(function)' expects \(expected) argument(s), but received \(found)."
@@ -65,6 +67,54 @@ struct Evaluator {
         "max": { args in try performStatisticalOperation(args: args, on: { $0.max() }) },
         "median": { args in try performStatisticalOperation(args: args, on: { $0.median() }) },
         "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) }
+    ]
+    
+    private let multiArgumentFunctions: [String: ([MathValue]) throws -> MathValue] = [
+        "range": { args in
+            guard args.count == 2 || args.count == 3 else {
+                throw MathError.incorrectArgumentCount(function: "range", expected: "2 or 3", found: args.count)
+            }
+            let start = try args[0].asScalar()
+            let end = try args[1].asScalar()
+            let step = (args.count == 3) ? (try args[2].asScalar()) : 1.0
+
+            guard step != 0 else { throw MathError.unsupportedOperation(op: "range", typeA: "step cannot be zero", typeB: nil) }
+
+            var values: [Double] = []
+            var current = start
+            if step > 0 {
+                while current <= end + 1e-9 { // Add tolerance for floating point issues
+                    values.append(current)
+                    current += step
+                }
+            } else { // step < 0
+                while current >= end - 1e-9 { // Add tolerance for floating point issues
+                    values.append(current)
+                    current += step
+                }
+            }
+            return .vector(Vector(values: values))
+        },
+        "linspace": { args in
+            guard args.count == 3 else {
+                throw MathError.incorrectArgumentCount(function: "linspace", expected: "3", found: args.count)
+            }
+            let start = try args[0].asScalar()
+            let end = try args[1].asScalar()
+            let countScalar = try args[2].asScalar()
+
+            guard countScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "integer count", found: "non-integer") }
+            let count = Int(countScalar)
+            guard count >= 2 else { throw MathError.unsupportedOperation(op: "linspace", typeA: "count must be at least 2", typeB: nil) }
+
+            var values: [Double] = [start]
+            let step = (end - start) / Double(count - 1)
+            for i in 1..<count-1 {
+                values.append(start + step * Double(i))
+            }
+            values.append(end) // Ensure the last value is exactly 'end'
+            return .vector(Vector(values: values))
+        }
     ]
     
     private let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
@@ -540,7 +590,7 @@ struct Evaluator {
                 throw MathError.unknownFunction(name: primeNode.functionName)
             }
             guard userFunction.parameterNames.count == 1 else {
-                throw MathError.incorrectArgumentCount(function: "\(primeNode.functionName)'", expected: 1, found: userFunction.parameterNames.count)
+                throw MathError.incorrectArgumentCount(function: "\(primeNode.functionName)'", expected: "1", found: userFunction.parameterNames.count)
             }
             let varName = userFunction.parameterNames[0]
 
@@ -574,7 +624,7 @@ struct Evaluator {
         
         if node.name == "angle" {
             guard node.arguments.count == 2 else {
-                throw MathError.incorrectArgumentCount(function: "angle", expected: 2, found: node.arguments.count)
+                throw MathError.incorrectArgumentCount(function: "angle", expected: "2", found: node.arguments.count)
             }
             let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             let (arg2, arg2UsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
@@ -582,6 +632,16 @@ struct Evaluator {
             return (result!, true || arg1UsedAngle || arg2UsedAngle)
         }
 
+        if let multiArgFunc = multiArgumentFunctions[node.name] {
+            var args: [MathValue] = []
+            for argNode in node.arguments {
+                let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
+                usedAngle = usedAngle || argUsedAngle
+                args.append(arg)
+            }
+            return (try multiArgFunc(args), usedAngle)
+        }
+        
         if let variadicFunc = variadicFunctions[node.name] {
             var args: [MathValue] = []; for argNode in node.arguments {
                 let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -591,33 +651,33 @@ struct Evaluator {
         }
         
         if let singleArgFunc = singleArgumentFunctions[node.name] {
-            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count) }
+            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "1", found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             return (try singleArgFunc(arg), argUsedAngle)
         }
         
         if let twoArgFunc = twoArgumentFunctions[node.name] {
-            guard node.arguments.count == 2 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 2, found: node.arguments.count) }
+            guard node.arguments.count == 2 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "2", found: node.arguments.count) }
             let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             let (arg2, arg2UsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
             return (try twoArgFunc(arg1, arg2), arg1UsedAngle || arg2UsedAngle)
         }
         
         if let angleFunc = angleAwareFunctions[node.name] {
-            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count) }
+            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "1", found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             return (try angleFunc(arg, angleMode), true || argUsedAngle)
         }
 
         if let scalarFunc = scalarFunctions[node.name] {
-            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: 1, found: node.arguments.count) }
+            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "1", found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
             return (.scalar(scalarFunc(s)), argUsedAngle)
         }
         
         if let userFunction = functions[node.name] {
-            guard node.arguments.count == userFunction.parameterNames.count else { throw MathError.incorrectArgumentCount(function: node.name, expected: userFunction.parameterNames.count, found: node.arguments.count) }
+            guard node.arguments.count == userFunction.parameterNames.count else { throw MathError.incorrectArgumentCount(function: node.name, expected: "\(userFunction.parameterNames.count)", found: node.arguments.count) }
             var localVariables = variables
             for (paramName, argNode) in zip(userFunction.parameterNames, node.arguments) {
                 let (argValue, _) = try evaluate(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -846,4 +906,5 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
+
 

@@ -126,6 +126,8 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "floor", signature: "floor(number)", description: "Rounds a number down to the nearest integer."),
         .init(name: "ceil", signature: "ceil(number)", description: "Rounds a number up to the nearest integer."),
         .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),
+        .init(name: "range", signature: "range(start, end, [step])", description: "Creates a vector from 'start' to 'end' with an optional 'step' (default is 1)."),
+        .init(name: "linspace", signature: "linspace(start, end, count)", description: "Creates a vector with 'count' evenly spaced values from 'start' to 'end'."),
         .init(name: "matrix", signature: "matrix(a, b ; c, d ; ...)", description: "Forms a matrix of given real numbers."),
         .init(name: "cmatrix", signature: "cmatrix(a, b ; c, d ; ...)", description: "Forms a complex matrix of given real or imaginary numbers."),
         .init(name: "vector", signature: "vector(a ; b ; c ; ...)", description: "Forms a vector of given real numbers."),
@@ -271,10 +273,10 @@ class CalculatorViewModel: ObservableObject {
     private func calculate(expression: String, cursor: NSRange) {
         let helpText = getContextualHelp(expression: expression, cursor: cursor)
         
-        let isMultiRow = (expression.contains("vector(") || expression.contains("matrix(")) && expression.contains(";")
+        let callsTallFunction = expression.contains("vector(") || expression.contains("matrix(") || expression.contains("range(") || expression.contains("linspace(")
         let parts = expression.components(separatedBy: CharacterSet(charactersIn: "+-()"))
         let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
-        let isTall = isMultiRow || hasNestedFraction
+        let isTall = callsTallFunction || hasNestedFraction
         if self.isTallExpression != isTall { self.isTallExpression = isTall }
 
         guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -311,12 +313,37 @@ class CalculatorViewModel: ObservableObject {
                     self.liveLaTeXPreview = expressionLaTeX
                 } else {
                     let resultLaTeX: String
-                    if self.settings.enableLiveRounding {
-                        let liveSettings = UserSettings(); liveSettings.displayMode = .fixed
-                        liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces; liveSettings.decimalSeparator = self.settings.decimalSeparator
-                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
+                    let maxLivePreviewRows = 50 // A reasonable limit for live preview rendering
+
+                    var isResultTooLargeForPreview = false
+                    if case .vector(let v) = value, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                    else if case .matrix(let m) = value, m.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                    else if case .complexVector(let cv) = value, cv.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                    else if case .complexMatrix(let cm) = value, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+
+                    if isResultTooLargeForPreview {
+                        switch value {
+                        case .vector(let v):
+                            resultLaTeX = "\\text{\(v.dimension)-element Vector}"
+                        case .matrix(let m):
+                            resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
+                        case .complexVector(let cv):
+                            resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
+                        case .complexMatrix(let cm):
+                            resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
+                        default:
+                            // Fallback for any other type, though it shouldn't be reached with the current logic
+                            resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                        }
                     } else {
-                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                        // Original logic for generating LaTeX for results that are not too large
+                        if self.settings.enableLiveRounding {
+                            let liveSettings = UserSettings(); liveSettings.displayMode = .fixed
+                            liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces; liveSettings.decimalSeparator = self.settings.decimalSeparator
+                            resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
+                        } else {
+                            resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                        }
                     }
                     self.liveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
                 }
@@ -492,40 +519,142 @@ class CalculatorViewModel: ObservableObject {
         else { return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angle)) rad" }
     }
 
-    private func formatVectorForDisplay(_ vector: Vector) -> String { return (0..<vector.dimension).map { "[ \(formatScalarForDisplay(vector[$0])) ]" }.joined(separator: "\n") }
-    
-    private func formatMatrixForDisplay(_ matrix: Matrix) -> String {
-        if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
-        var columnWidths = [Int](repeating: 0, count: matrix.columns)
-        for c in 0..<matrix.columns {
-            var maxWidth = 0
-            for r in 0..<matrix.rows { let formattedNumber = formatScalarForDisplay(matrix[r, c]); if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count } }
-            columnWidths[c] = maxWidth
+    private func formatVectorForDisplay(_ vector: Vector) -> String {
+        let maxDisplayRows = 10
+        if vector.dimension <= maxDisplayRows {
+            return (0..<vector.dimension).map { "[ \(formatScalarForDisplay(vector[$0])) ]" }.joined(separator: "\n")
+        } else {
+            var lines: [String] = []
+            let headCount = 5
+            let tailCount = 4
+            // First few elements
+            for i in 0..<headCount {
+                lines.append("[ \(formatScalarForDisplay(vector[i])) ]")
+            }
+            // Ellipsis and count
+            let remaining = vector.dimension - (headCount + tailCount)
+            lines.append("... (\(remaining) more items) ...")
+            // Last few elements
+            for i in (vector.dimension - tailCount)..<vector.dimension {
+                lines.append("[ \(formatScalarForDisplay(vector[i])) ]")
+            }
+            return lines.joined(separator: "\n")
         }
-        return (0..<matrix.rows).map { r in
-            let rowContent = (0..<matrix.columns).map { c in
-                let formattedNumber = formatScalarForDisplay(matrix[r, c]); let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
-                return padding + formattedNumber
-            }.joined(separator: "  "); return "[ \(rowContent) ]"
-        }.joined(separator: "\n")
     }
     
-    private func formatComplexVectorForDisplay(_ vector: ComplexVector) -> String { return (0..<vector.dimension).map { "[ \(formatComplexForDisplay(vector[$0])) ]" }.joined(separator: "\n") }
-    
-    private func formatComplexMatrixForDisplay(_ matrix: ComplexMatrix) -> String {
+    private func formatMatrixForDisplay(_ matrix: Matrix) -> String {
+        let maxDisplayRows = 10
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
+
+        // Common formatting logic for a row
+        func formatRow(_ r: Int, columnWidths: [Int]) -> String {
+            let rowContent = (0..<matrix.columns).map { c in
+                let formattedNumber = formatScalarForDisplay(matrix[r, c])
+                let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
+                return padding + formattedNumber
+            }.joined(separator: "  ")
+            return "[ \(rowContent) ]"
+        }
+
+        // Calculate column widths based on all elements for consistent alignment
         var columnWidths = [Int](repeating: 0, count: matrix.columns)
         for c in 0..<matrix.columns {
             var maxWidth = 0
-            for r in 0..<matrix.rows { let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"; if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count } }
+            for r in 0..<matrix.rows {
+                let formattedNumber = formatScalarForDisplay(matrix[r, c])
+                if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count }
+            }
             columnWidths[c] = maxWidth
         }
-        return (0..<matrix.rows).map { r in
+
+        if matrix.rows <= maxDisplayRows {
+            return (0..<matrix.rows).map { r in formatRow(r, columnWidths: columnWidths) }.joined(separator: "\n")
+        } else {
+            var lines: [String] = []
+            let headCount = 5
+            let tailCount = 4
+            // First few rows
+            for r in 0..<headCount {
+                lines.append(formatRow(r, columnWidths: columnWidths))
+            }
+            // Ellipsis and count
+            let remaining = matrix.rows - (headCount + tailCount)
+            lines.append("... (\(remaining) more rows) ...")
+            // Last few rows
+            for r in (matrix.rows - tailCount)..<matrix.rows {
+                lines.append(formatRow(r, columnWidths: columnWidths))
+            }
+            return lines.joined(separator: "\n")
+        }
+    }
+    
+    private func formatComplexVectorForDisplay(_ vector: ComplexVector) -> String {
+        let maxDisplayRows = 10
+        if vector.dimension <= maxDisplayRows {
+            return (0..<vector.dimension).map { "[ \(formatComplexForDisplay(vector[$0])) ]" }.joined(separator: "\n")
+        } else {
+            var lines: [String] = []
+            let headCount = 5
+            let tailCount = 4
+            // First few elements
+            for i in 0..<headCount {
+                lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
+            }
+            // Ellipsis and count
+            let remaining = vector.dimension - (headCount + tailCount)
+            lines.append("... (\(remaining) more items) ...")
+            // Last few elements
+            for i in (vector.dimension - tailCount)..<vector.dimension {
+                lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
+            }
+            return lines.joined(separator: "\n")
+        }
+    }
+    
+    private func formatComplexMatrixForDisplay(_ matrix: ComplexMatrix) -> String {
+        let maxDisplayRows = 10
+        if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
+        
+        // Common formatting logic for a row
+        func formatRow(_ r: Int, columnWidths: [Int]) -> String {
             let rowContent = (0..<matrix.columns).map { c in
-                let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"; let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
+                let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"
+                let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
                 return padding + formattedNumber
-            }.joined(separator: "  "); return "[ \(rowContent) ]"
-        }.joined(separator: "\n")
+            }.joined(separator: "  ")
+            return "[ \(rowContent) ]"
+        }
+
+        // Calculate column widths based on all elements for consistent alignment
+        var columnWidths = [Int](repeating: 0, count: matrix.columns)
+        for c in 0..<matrix.columns {
+            var maxWidth = 0
+            for r in 0..<matrix.rows {
+                let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"
+                if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count }
+            }
+            columnWidths[c] = maxWidth
+        }
+
+        if matrix.rows <= maxDisplayRows {
+            return (0..<matrix.rows).map { r in formatRow(r, columnWidths: columnWidths) }.joined(separator: "\n")
+        } else {
+            var lines: [String] = []
+            let headCount = 5
+            let tailCount = 4
+            // First few rows
+            for r in 0..<headCount {
+                lines.append(formatRow(r, columnWidths: columnWidths))
+            }
+            // Ellipsis and count
+            let remaining = matrix.rows - (headCount + tailCount)
+            lines.append("... (\(remaining) more rows) ...")
+            // Last few rows
+            for r in (matrix.rows - tailCount)..<matrix.rows {
+                lines.append(formatRow(r, columnWidths: columnWidths))
+            }
+            return lines.joined(separator: "\n")
+        }
     }
     
     private func formatScalarForParsing(_ value: Double) -> String {
