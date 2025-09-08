@@ -54,6 +54,7 @@ struct PlotData: Identifiable, Hashable {
     // An array of series, one for each function to be plotted.
     var series: [PlotSeries]
     let plotType: PlotType
+    let explicitYRange: (min: Double, max: Double)?
     
     static func == (lhs: PlotData, rhs: PlotData) -> Bool {
         lhs.id == rhs.id

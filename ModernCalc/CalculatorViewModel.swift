@@ -59,6 +59,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "arg", signature: "arg(complex)", description: "Calculates the argument (phase) of a complex number."),
         .init(name: "asin", signature: "asin(value)", description: "Calculates the inverse sine (arcsin)."),
         .init(name: "atan", signature: "atan(value)", description: "Calculates the inverse tangent (arctan)."),
+        .init(name: "autoplot", signature: "autoplot(y1(x), y2(x), ...) or autoplot(x(t), y(t))", description: "Automatically plots functions over a default range. Use 'x' for standard plots and 't' for parametric plots."),
         .init(name: "avg", signature: "avg(a, b, ...)", description: "Calculates the average of a list of numbers or a vector/matrix."),
         .init(name: "ceil", signature: "ceil(number)", description: "Rounds a number up to the nearest integer."),
         .init(name: "circum_circle", signature: "circum_circle(r)", description: "Circumference of a circle."),
@@ -88,7 +89,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "min", signature: "min(a, b, ...)", description: "Finds the minimum value in a list of numbers or a vector/matrix."),
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
-        .init(name: "plot", signature: "plot(y1(x), y2(x), ...) or plot(x(t), y(t))", description: "Plots one or more functions against x, or a single parametric plot against t."),
+        .init(name: "plot", signature: "plot(expr, var, x_min, x_max, [y_min, y_max])", description: "Plots expressions over a specified range with optional y-axis limits."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
         .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
         .init(name: "range", signature: "range(start, end, [step])", description: "Creates a vector from 'start' to 'end' with an optional 'step' (default is 1)."),
@@ -143,7 +144,7 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
-        .init(title: "Plotting", content: "Create 2D plots using the `plot()` function. \n- **Standard Plots:** `plot(x^2)` will plot a single function. You can plot multiple functions at once by separating them with commas: `plot(sin(x), cos(x))`. The variable must be `x`. \n- **Parametric Plot:** `plot(cos(t), sin(t))` will plot x and y as functions of `t`. The variable must be `t`. \nClicking a plot in the history will reopen its window."),
+        .init(title: "Plotting", content: "Create 2D plots using two functions: `autoplot` for quick graphs and `plot` for detailed control.\n- **Automatic Plotting:** `autoplot(sin(x))` plots over a default range. You can plot multiple functions like `autoplot(sin(x), cos(x))`. Use `t` for parametric plots: `autoplot(cos(t), sin(t))`. \n- **Manual Plotting:** `plot(x^2, x, -5, 5)` plots `x^2` for `x` from -5 to 5. You can optionally set y-axis limits: `plot(x^2, x, -5, 5, 0, 25)`. \nClicking a plot in the history will reopen its window."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
         .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data.")
     ]
@@ -489,7 +490,7 @@ class CalculatorViewModel: ObservableObject {
         case .complexVector(let cv): return "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: ",") }.joined(separator: ";")))"
         case .functionDefinition: return ""; case .polar(let p): return formatPolarForParsing(p); case .regressionResult: return ""
-        case .plot(let plotData): return "plot(\(plotData.expression))"
+        case .plot(let plotData): return "autoplot(\(plotData.expression))"
         }
     }
 
@@ -664,5 +665,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
 

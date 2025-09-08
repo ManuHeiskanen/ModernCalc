@@ -74,12 +74,20 @@ struct IndexedOperationNode: ExpressionNode {
     let scalar: ExpressionNode
     var description: String { "@(\(index.description), \(scalar.description))" }
 }
-// --- NEW NODE FOR PLOTTING ---
+// --- NEW NODES FOR PLOTTING ---
+struct AutoplotNode: ExpressionNode {
+    let expressions: [ExpressionNode]
+    var description: String { "autoplot(\(expressions.map { $0.description }.joined(separator: ", ")))" }
+}
+
 struct PlotNode: ExpressionNode {
     let expressions: [ExpressionNode]
-    // We can add range parameters here later
-    var description: String { "plot(\(expressions.map { $0.description }.joined(separator: ", ")))" }
+    let variable: ConstantNode
+    let xRange: (ExpressionNode, ExpressionNode)
+    let yRange: (ExpressionNode, ExpressionNode)?
+    var description: String { "plot(\(expressions.map { $0.description }.joined(separator: ", ")), for: \(variable.description) in [\(xRange.0.description), \(xRange.1.description)])" }
 }
+
 
 
 // --- PARSER ---
@@ -217,6 +225,7 @@ class Parser {
                 case "cvector": return try parseComplexVector()
                 case "derivative": return try parseDerivative()
                 case "integral": return try parseIntegral()
+                case "autoplot": return try parseAutoplot()
                 case "plot": return try parsePlot()
                 default: return try parseFunctionCall(name: name)
                 }
@@ -261,13 +270,12 @@ class Parser {
         return FunctionCallNode(name: name, arguments: arguments)
     }
     
-    private func parsePlot() throws -> ExpressionNode {
-        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for plot call"))
+    private func parseAutoplot() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for autoplot call"))
         var expressions: [ExpressionNode] = []
         if let nextToken = peek(), case .paren(")") = nextToken.type {
             try advance()
-            // plot() is not valid, must have at least one expression.
-            throw ParserError.incorrectArgumentCount(function: "plot", expected: "at least 1", found: 0)
+            throw ParserError.incorrectArgumentCount(function: "autoplot", expected: "at least 1", found: 0)
         }
         
         repeat {
@@ -277,8 +285,61 @@ class Parser {
             } else { break }
         } while true
         
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for autoplot call"))
+        return AutoplotNode(expressions: expressions)
+    }
+
+    private func parsePlot() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for plot call"))
+        var allArguments: [ExpressionNode] = []
+        
+        if let nextToken = peek(), case .paren(")") = nextToken.type {
+            try advance()
+            throw ParserError.incorrectArgumentCount(function: "plot", expected: "at least 3", found: 0)
+        }
+        
+        repeat {
+            allArguments.append(try parseExpression())
+            if let nextToken = peek(), case .separator(",") = nextToken.type {
+                try advance()
+            } else { break }
+        } while true
+        
         try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for plot call"))
-        return PlotNode(expressions: expressions)
+        
+        // --- Argument Interpretation Logic ---
+        var yRange: (ExpressionNode, ExpressionNode)? = nil
+        let xRange: (ExpressionNode, ExpressionNode)
+        let variableNode: ConstantNode
+        let expressions: [ExpressionNode]
+        
+        // Check for optional y-range: plot(..., var, x_min, x_max, y_min, y_max)
+        if allArguments.count >= 5 && allArguments[allArguments.count - 4] is ConstantNode {
+            let yMax = allArguments.removeLast()
+            let yMin = allArguments.removeLast()
+            yRange = (yMin, yMax)
+        }
+
+        guard allArguments.count >= 3 else {
+            throw ParserError.incorrectArgumentCount(function: "plot", expected: "at least 3 (expr, var, range)", found: allArguments.count)
+        }
+        
+        // The last three arguments must be x_max, x_min, and the variable
+        let xMax = allArguments.removeLast()
+        let xMin = allArguments.removeLast()
+        guard let variable = allArguments.removeLast() as? ConstantNode else {
+            throw ParserError.unexpectedToken(token: nil, expected: "an identifier for the plot variable (e.g., 'x' or 't')")
+        }
+        
+        xRange = (xMin, xMax)
+        variableNode = variable
+        expressions = allArguments
+        
+        if expressions.isEmpty {
+             throw ParserError.incorrectArgumentCount(function: "plot", expected: "at least one expression to plot", found: 0)
+        }
+
+        return PlotNode(expressions: expressions, variable: variableNode, xRange: xRange, yRange: yRange)
     }
 
     private func parseDerivative() throws -> ExpressionNode {
@@ -494,3 +555,4 @@ class Parser {
         try advance()
     }
 }
+

@@ -575,7 +575,7 @@ enum MathValue: Codable {
         case "plot":
             // This should not happen from saved data, but we need to handle it.
             // We'll create an empty plot as a fallback.
-            self = .plot(PlotData(expression: "Empty", series: [], plotType: .line))
+            self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
         }
     }
@@ -601,4 +601,3 @@ extension MathValue {
         return s
     }
 }
-
