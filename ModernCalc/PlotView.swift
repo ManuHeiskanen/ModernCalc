@@ -9,7 +9,7 @@ import SwiftUI
 import Charts
 
 // Predefined list of colors for the chart to cycle through.
-private let chartColors: [Color] = [.green, .orange, .red, .purple, .pink, .teal, .indigo]
+private let chartColors: [Color] = [.blue, .green, .orange, .red, .purple, .pink, .teal, .indigo]
 
 struct PlotView: View {
     @StateObject var viewModel: PlotViewModel
@@ -106,6 +106,7 @@ struct PlotView: View {
     private func scatterPlotContent() -> some ChartContent {
         ForEach(viewModel.plotData.series) { series in
             if series.name == "Linear Fit" {
+                // Trendline
                 ForEach(series.dataPoints) { point in
                     LineMark(
                         x: .value("X", point.x),
@@ -113,16 +114,20 @@ struct PlotView: View {
                     )
                     .interpolationMethod(.linear)
                 }
-                .foregroundStyle(.blue)
                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
+                // Use .value to create a legend entry for the fit
+                .foregroundStyle(by: .value("Data", series.name))
+
             } else {
+                // Raw data points
                 ForEach(series.dataPoints) { point in
                     PointMark(
                         x: .value("X", point.x),
                         y: .value("Y", point.y)
                     )
-                    .foregroundStyle(Color.accentColor)
                 }
+                 // Use .value to create a legend entry for the data points
+                .foregroundStyle(by: .value("Data", series.name))
             }
         }
     }
@@ -130,15 +135,13 @@ struct PlotView: View {
     // Main content builder now just decides which helper to use
     @ChartContentBuilder
     private func chartContent(for plotType: PlotType) -> some ChartContent {
-        let baseColor: Color = .blue
-        
-        if plotType == .vector {
+        switch plotType {
+        case .vector:
             vectorPlotContent()
-        } else if plotType == .scatter {
+        case .scatter:
             scatterPlotContent()
-        } else {
+        case .line, .parametric:
             lineAndParametricPlotContent()
-                .foregroundStyle(baseColor)
         }
     }
     
@@ -151,7 +154,12 @@ struct PlotView: View {
             Chart {
                 chartContent(for: viewModel.plotData.plotType)
             }
-            .chartForegroundStyleScale(domain: viewModel.plotData.series.map { $0.name }, range: chartColors)
+            .chartForegroundStyleScale(
+                // For scatter plots, we want specific styles, not the default color cycle.
+                // For others, we use the predefined chartColors.
+                domain: viewModel.plotData.series.map { $0.name },
+                range: viewModel.plotData.plotType == .scatter ? [.accentColor, .red] : chartColors
+            )
             .chartXScale(domain: viewModel.viewDomainX)
             .chartYScale(domain: viewModel.viewDomainY)
             .chartXAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }

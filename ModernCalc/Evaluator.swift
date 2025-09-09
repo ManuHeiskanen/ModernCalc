@@ -1259,41 +1259,65 @@ struct Evaluator {
     private func evaluateScatterplot(_ node: ScatterplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
         let evaluatedArgs = try node.arguments.map { try _evaluateSingle(node: $0, variables: &variables, functions: &functions, angleMode: .radians).result }
 
-        let dataPoints: [DataPoint]
+        let xVector: Vector
+        let yVector: Vector
         
         if evaluatedArgs.count == 1 {
-            // Case 1: Single Matrix argument
-            guard case .matrix(let matrix) = evaluatedArgs[0] else {
-                throw MathError.typeMismatch(expected: "Matrix", found: evaluatedArgs[0].typeName)
+            guard case .matrix(let matrix) = evaluatedArgs[0] else { throw MathError.typeMismatch(expected: "Matrix", found: evaluatedArgs[0].typeName) }
+            guard matrix.columns == 2 else { throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns.") }
+            guard matrix.rows > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix.") }
+            var xValues: [Double] = []; var yValues: [Double] = []
+            for r in 0..<matrix.rows {
+                xValues.append(matrix[r, 0])
+                yValues.append(matrix[r, 1])
             }
-            guard matrix.columns == 2 else {
-                throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns.")
-            }
-            guard matrix.rows > 0 else {
-                throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix.")
-            }
-            dataPoints = (0..<matrix.rows).map { DataPoint(x: matrix[$0, 0], y: matrix[$0, 1]) }
+            xVector = Vector(values: xValues)
+            yVector = Vector(values: yValues)
             
         } else if evaluatedArgs.count == 2 {
-            // Case 2: Two Vector arguments
-            guard case .vector(let xVector) = evaluatedArgs[0], case .vector(let yVector) = evaluatedArgs[1] else {
+            guard case .vector(let vec1) = evaluatedArgs[0], case .vector(let vec2) = evaluatedArgs[1] else {
                 throw MathError.typeMismatch(expected: "Two Vectors", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName)")
             }
-            guard xVector.dimension == yVector.dimension else {
-                throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension.")
-            }
-             guard xVector.dimension > 0 else {
-                throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors.")
-            }
-            dataPoints = zip(xVector.values, yVector.values).map { DataPoint(x: $0, y: $1) }
+            guard vec1.dimension == vec2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension.") }
+            guard vec1.dimension > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors.") }
+            xVector = vec1
+            yVector = vec2
             
         } else {
              throw MathError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix) or 2 (Vectors)", found: evaluatedArgs.count)
         }
 
-        let series = PlotSeries(name: "Data Series", dataPoints: dataPoints)
-        let plotData = PlotData(expression: node.description, series: [series], plotType: .scatter, explicitYRange: nil)
+        // 1. Create the series for the raw data points
+        let dataPoints = zip(xVector.values, yVector.values).map { DataPoint(x: $0, y: $1) }
+        let dataSeries = PlotSeries(name: "Data Points", dataPoints: dataPoints)
         
+        var allSeries = [dataSeries]
+
+        // 2. Perform linear regression if possible
+        if xVector.dimension >= 2 {
+            let n = Double(xVector.dimension)
+            let sumX = xVector.sum()
+            let sumY = yVector.sum()
+            let sumXY = try xVector.hadamard(with: yVector).sum()
+            let sumX2 = xVector.values.map { $0 * $0 }.reduce(0, +)
+            let denominator = (n * sumX2 - sumX * sumX)
+            
+            if denominator != 0 {
+                let slope = (n * sumXY - sumX * sumY) / denominator
+                let intercept = (sumY - slope * sumX) / n
+
+                // 3. Create the series for the trendline
+                if let minX = xVector.values.min(), let maxX = xVector.values.max() {
+                    let y1 = slope * minX + intercept
+                    let y2 = slope * maxX + intercept
+                    let fitPoints = [DataPoint(x: minX, y: y1), DataPoint(x: maxX, y: y2)]
+                    let fitSeries = PlotSeries(name: "Linear Fit", dataPoints: fitPoints)
+                    allSeries.append(fitSeries)
+                }
+            }
+        }
+        
+        let plotData = PlotData(expression: node.description, series: allSeries, plotType: .scatter, explicitYRange: nil)
         return .plot(plotData)
     }
     
@@ -1401,3 +1425,4 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
+
