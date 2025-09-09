@@ -1069,114 +1069,190 @@ struct Evaluator {
             return leftHalf + rightHalf
         }
     
-    private func evaluateAutoplot(_ node: AutoplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+    // --- START: MODIFIED PLOT LOGIC ---
+    private func findUndeclaredVariables(in node: ExpressionNode, declaredVariables: Set<String>, declaredFunctions: Set<String>) -> Set<String> {
+        var found = Set<String>()
+        // Combine all known named entities
+        let knownConstants = Set(constants.keys).union(Set(siPrefixes.keys)).union(["i", "j", "k"])
 
-        // First, evaluate all arguments to see what they are.
-        var evaluatedArgs: [MathValue] = []
-        for expr in node.expressions {
-            let (val, _) = try _evaluateSingle(node: expr, variables: &variables, functions: &functions, angleMode: .radians) // Use radians for consistency
-            evaluatedArgs.append(val)
+        func traverse(node: ExpressionNode, localScope: Set<String>) {
+            switch node {
+            case let constantNode as ConstantNode:
+                if !declaredVariables.contains(constantNode.name) &&
+                   !knownConstants.contains(constantNode.name) &&
+                   !localScope.contains(constantNode.name) {
+                    found.insert(constantNode.name)
+                }
+            
+            case let funcDefNode as FunctionDefinitionNode:
+                traverse(node: funcDefNode.body, localScope: localScope.union(funcDefNode.parameterNames))
+            case let integralNode as IntegralNode:
+                let newLocalScope = localScope.union([integralNode.variable.name])
+                traverse(node: integralNode.body, localScope: newLocalScope)
+                traverse(node: integralNode.lowerBound, localScope: localScope)
+                traverse(node: integralNode.upperBound, localScope: localScope)
+            case let derivativeNode as DerivativeNode:
+                var newLocalScope = localScope
+                if let variable = derivativeNode.variable {
+                    newLocalScope.formUnion([variable.name])
+                }
+                traverse(node: derivativeNode.body, localScope: newLocalScope)
+                traverse(node: derivativeNode.point, localScope: localScope)
+                traverse(node: derivativeNode.order, localScope: localScope)
+            
+            // Nodes that contain sub-expressions
+            case let binaryNode as BinaryOpNode:
+                traverse(node: binaryNode.left, localScope: localScope)
+                traverse(node: binaryNode.right, localScope: localScope)
+            case let unaryNode as UnaryOpNode:
+                traverse(node: unaryNode.child, localScope: localScope)
+            case let postfixNode as PostfixOpNode:
+                traverse(node: postfixNode.child, localScope: localScope)
+            case let functionCallNode as FunctionCallNode:
+                functionCallNode.arguments.forEach { traverse(node: $0, localScope: localScope) }
+            case let vectorNode as VectorNode:
+                vectorNode.elements.forEach { traverse(node: $0, localScope: localScope) }
+            case let matrixNode as MatrixNode:
+                matrixNode.rows.flatMap { $0 }.forEach { traverse(node: $0, localScope: localScope) }
+            case let cVectorNode as ComplexVectorNode:
+                cVectorNode.elements.forEach { traverse(node: $0, localScope: localScope) }
+            case let cMatrixNode as ComplexMatrixNode:
+                cMatrixNode.rows.flatMap { $0 }.forEach { traverse(node: $0, localScope: localScope) }
+            case let assignmentNode as AssignmentNode:
+                traverse(node: assignmentNode.expression, localScope: localScope)
+            case let primeNode as PrimeDerivativeNode:
+                 traverse(node: primeNode.argument, localScope: localScope)
+            case let indexedOpNode as IndexedOperationNode:
+                traverse(node: indexedOpNode.index, localScope: localScope)
+                traverse(node: indexedOpNode.scalar, localScope: localScope)
+            default:
+                break
+            }
         }
+        
+        traverse(node: node, localScope: Set())
+        return found
+    }
 
-        // Check if all evaluated arguments are 2D vectors.
-        var areAllVectors = !evaluatedArgs.isEmpty
-        var vectorsToPlot: [Vector] = []
-        for arg in evaluatedArgs {
-            if case .vector(let v) = arg, v.dimension == 2 {
-                vectorsToPlot.append(v)
-            } else {
-                areAllVectors = false
+    private func evaluateAutoplot(_ node: AutoplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        // --- ATTEMPT 1: Evaluate as vectors ---
+        var evaluatedArgs: [MathValue] = []
+        var canBeVectors = true
+        for expr in node.expressions {
+            do {
+                var tempVars = variables
+                let (val, _) = try _evaluateSingle(node: expr, variables: &tempVars, functions: &functions, angleMode: .radians)
+                evaluatedArgs.append(val)
+            } catch {
+                canBeVectors = false
                 break
             }
         }
 
-        if areAllVectors {
-            // --- VECTOR PLOTTING LOGIC ---
-            var allSeries: [PlotSeries] = []
-            for vector in vectorsToPlot {
-                let endPoint = DataPoint(x: vector[0], y: vector[1])
-                // Each vector is a series with its endpoint as data.
-                allSeries.append(PlotSeries(name: "v = [\(vector[0]); \(vector[1])]", dataPoints: [endPoint]))
+        if canBeVectors {
+            let vectorsToPlot = evaluatedArgs.compactMap { (arg) -> Vector? in
+                if case .vector(let v) = arg, v.dimension == 2 {
+                    return v
+                }
+                return nil
             }
-            if allSeries.isEmpty { throw MathError.plotError(reason: "No valid 2D vectors provided to plot.")}
+            if vectorsToPlot.count == evaluatedArgs.count && !evaluatedArgs.isEmpty {
+                var allSeries: [PlotSeries] = []
+                for vector in vectorsToPlot {
+                    let endPoint = DataPoint(x: vector[0], y: vector[1])
+                    allSeries.append(PlotSeries(name: "v = [\(vector[0]); \(vector[1])]", dataPoints: [endPoint]))
+                }
+                let plotData = PlotData(expression: node.description, series: allSeries, plotType: .vector, explicitYRange: nil)
+                return .plot(plotData)
+            }
+        }
+
+        // --- ATTEMPT 2: Treat as functions ---
+        let numPoints = 200
+        let defaultRange = -10.0...10.0
+        
+        var isParametric = false
+        if node.expressions.count == 2 {
+            var containsT = false
+            for expr in node.expressions {
+                if expr.description.range(of: #"\bt\b"#, options: .regularExpression) != nil {
+                    containsT = true; break
+                }
+            }
+            isParametric = containsT
+        }
+        
+        if isParametric {
+            let xBody = node.expressions[0]
+            let yBody = node.expressions[1]
+            let varName = "t"
+            var dataPoints: [DataPoint] = []
+            let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
             
-            let plotData = PlotData(expression: node.description, series: allSeries, plotType: .vector, explicitYRange: nil)
+            for i in 0..<numPoints {
+                let t = defaultRange.lowerBound + Double(i) * step
+                do {
+                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
+                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
+                    
+                    if case .scalar(let x) = xValue, case .scalar(let y) = yValue, x.isFinite, y.isFinite {
+                         dataPoints.append(DataPoint(x: x, y: y))
+                    }
+                } catch { }
+            }
+            
+            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+            
+            let seriesName = "(\(xBody.description), \(yBody.description))"
+            let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
+            let plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil)
             return .plot(plotData)
 
         } else {
-            // --- FUNCTION PLOTTING LOGIC (existing logic) ---
-            let numPoints = 200
-            let defaultRange = -10.0...10.0
-            
-            var isParametric = false
-            if node.expressions.count == 2 {
-                var containsT = false
-                for expr in node.expressions {
-                    if expr.description.range(of: #"\bt\b"#, options: .regularExpression) != nil {
-                        containsT = true
-                        break
-                    }
-                }
-                isParametric = containsT
+            var allSeries: [PlotSeries] = []
+            let declaredVariables = Set(variables.keys)
+            let declaredFunctions = Set(functions.keys)
+            var undeclaredVars = Set<String>()
+            for expr in node.expressions {
+                 undeclaredVars.formUnion(findUndeclaredVariables(in: expr, declaredVariables: declaredVariables, declaredFunctions: declaredFunctions))
             }
+            undeclaredVars.remove("t")
             
-            if isParametric {
-                let xBody = node.expressions[0]
-                let yBody = node.expressions[1]
-                let varName = "t"
-                
+            let varName: String
+            if undeclaredVars.count == 1 {
+                varName = undeclaredVars.first!
+            } else if undeclaredVars.isEmpty {
+                varName = "x"
+            } else {
+                throw MathError.plotError(reason: "Multiple unknown variables found: [\(undeclaredVars.joined(separator: ", "))].")
+            }
+
+            for body in node.expressions {
                 var dataPoints: [DataPoint] = []
                 let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
                 
                 for i in 0..<numPoints {
-                    let t = defaultRange.lowerBound + Double(i) * step
+                    let x = defaultRange.lowerBound + Double(i) * step
                     do {
-                        let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
-                        let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &variables, functions: &functions, angleMode: .radians)
-                        
-                        if case .scalar(let x) = xValue, case .scalar(let y) = yValue, x.isFinite, y.isFinite {
-                             dataPoints.append(DataPoint(x: x, y: y))
+                        let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &variables, functions: &functions, angleMode: .radians)
+                        if case .scalar(let y) = yValue, y.isFinite {
+                            dataPoints.append(DataPoint(x: x, y: y))
                         }
                     } catch { }
                 }
                 
-                if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
-                
-                let seriesName = "(\(xBody.description), \(yBody.description))"
-                let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
-                let plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil)
-                return .plot(plotData)
-
-            } else {
-                var allSeries: [PlotSeries] = []
-                let varName = "x"
-                
-                for body in node.expressions {
-                    var dataPoints: [DataPoint] = []
-                    let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
-                    
-                    for i in 0..<numPoints {
-                        let x = defaultRange.lowerBound + Double(i) * step
-                        do {
-                            let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &variables, functions: &functions, angleMode: .radians)
-                            if case .scalar(let y) = yValue, y.isFinite {
-                                dataPoints.append(DataPoint(x: x, y: y))
-                            }
-                        } catch { }
-                    }
-                    
-                    if !dataPoints.isEmpty {
-                        allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints))
-                    }
+                if !dataPoints.isEmpty {
+                    allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints))
                 }
-
-                if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
-                
-                let plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil)
-                return .plot(plotData)
             }
+
+            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
+            
+            let plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil)
+            return .plot(plotData)
         }
     }
+    // --- END: MODIFIED PLOT LOGIC ---
     
     private func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
         
@@ -1280,4 +1356,3 @@ private func performStatisticalOperation(args: [MathValue], on operation: (Vecto
         return .scalar(result)
     }
 }
-
