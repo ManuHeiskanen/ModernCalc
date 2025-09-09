@@ -40,6 +40,10 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
+    // --- CHANGE: Added properties to cache the last calculated state ---
+    private var lastCalculatedExpression: String?
+    private var lastCalculatedAngleMode: AngleMode?
+    
     let siPrefixes: Set<String> = [
         "yotta", "zetta", "exa", "peta", "tera", "giga", "mega", "kilo", "hecto", "deca", "deci",
         "centi", "milli", "micro", "nano", "pico", "femto", "atto", "zepto", "yocto"
@@ -182,9 +186,10 @@ class CalculatorViewModel: ObservableObject {
         ]
         self.constantSymbols = physicalConstants.map { .init(symbol: $0.symbol, name: $0.name, insertionText: $0.symbol) }
         
+        // --- CHANGE: Modified publisher logic to avoid wasteful calculations ---
         Publishers.CombineLatest3($rawExpression, $cursorPosition, $angleMode)
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
-            .sink { [weak self] (expression, position, _) in
+            .sink { [weak self] (expression, position, angle) in
                 guard let self = self else { return }
 
                 guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -192,11 +197,23 @@ class CalculatorViewModel: ObservableObject {
                     self.liveHelpText = ""
                     self.liveErrorText = ""
                     self.liveLaTeXPreview = ""
+                    self.lastCalculatedExpression = nil
+                    self.lastCalculatedAngleMode = nil
+                    return
+                }
+                
+                // If expression and angle are unchanged, only update contextual help and stop.
+                // This prevents re-calculating when only the cursor position changes (e.g., arrow keys).
+                if expression == self.lastCalculatedExpression && angle == self.lastCalculatedAngleMode {
+                    self.liveHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
                     return
                 }
                 
                 Task {
                     await self.calculate(expression: expression, cursor: position)
+                    // Cache the expression and angle mode that were just calculated.
+                    self.lastCalculatedExpression = expression
+                    self.lastCalculatedAngleMode = angle
                 }
             }
             .store(in: &cancellables)
@@ -610,7 +627,7 @@ class CalculatorViewModel: ObservableObject {
             for i in 0..<headCount {
                 lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
             }
-            lines.append("... (\(vector.dimension - (headCount + tailCount)) more items) ...")
+            lines.append("... (\(vector.dimension - tailCount)) more items) ...")
             for i in (vector.dimension - tailCount)..<vector.dimension {
                 lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
             }
@@ -673,4 +690,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
