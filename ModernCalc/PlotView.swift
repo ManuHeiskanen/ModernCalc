@@ -21,6 +21,17 @@ struct PlotView: View {
             (series.name, chartColors[index % chartColors.count])
         })
     }
+    
+    // Generates a user-friendly title based on the plot's content.
+    private var plotTitle: String {
+        switch viewModel.plotData.plotType {
+        case .vector:
+            return "Vector Plot"
+        case .line, .parametric:
+            let functionNames = viewModel.plotData.series.map { $0.name }.joined(separator: ", ")
+            return "Graph of \(functionNames)"
+        }
+    }
 
     // Helper function for creating vector plots
     @ChartContentBuilder
@@ -112,7 +123,7 @@ struct PlotView: View {
     
     private var chartContainer: some View {
         VStack {
-            Text(viewModel.plotData.expression)
+            Text(plotTitle)
                 .font(.title2)
                 .padding(.top)
             
