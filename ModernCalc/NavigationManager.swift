@@ -31,12 +31,13 @@ class NavigationManager: ObservableObject {
             } else {
                 selectedHistoryId = history.last?.id
             }
-            // Reset to the first result part when changing rows.
+            // Revert to selecting the result by default, per user request.
             selectedPart = .result(index: 0)
             
         } else if keys.contains(.downArrow) {
             if let index = currentIndex, index < history.count - 1 {
                 selectedHistoryId = history[index + 1].id
+                // Revert to selecting the result by default.
                 selectedPart = .result(index: 0)
             } else {
                 selectedHistoryId = nil
@@ -76,9 +77,9 @@ class NavigationManager: ObservableObject {
                 return selectedItem.expression.replacingOccurrences(of: " ", with: "")
             }
             
-            // FIX: Add a special case for plot items to show a user-friendly message.
+            // Add a special case for plot items to show a user-friendly message.
             if selectedItem.type == .plot {
-                return "Press enter to \(selectedItem.expression)..."
+                return "Press enter to open plot for \(selectedItem.expression)..."
             }
             
             // Return the specific result from the tuple based on the selected index.
@@ -103,3 +104,4 @@ class NavigationManager: ObservableObject {
         selectedPart = .result(index: 0)
     }
 }
+

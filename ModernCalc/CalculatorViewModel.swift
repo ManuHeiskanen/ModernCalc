@@ -345,23 +345,29 @@ class CalculatorViewModel: ObservableObject {
     }
     
     func commitCalculation() -> PlotData? {
-        if let selectedItem = history.first(where: { $0.id == navigationManager.selectedHistoryId }) {
-            resetNavigation()
-            if selectedItem.type == .plot {
-                if case .plot(let plotData) = selectedItem.result {
-                    requestOpenPlotWindow(for: plotData)
-                    return nil
-                }
-            } else if selectedItem.type == .functionDefinition {
-                self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: ""))
-            } else {
-                if self.navigationManager.selectedPart == .equation {
-                    self.insertTextAtCursor(selectedItem.expression.replacingOccurrences(of: " ", with: ""))
-                } else {
-                    self.insertTextAtCursor(self.formatForParsing(selectedItem.result))
-                }
+        // If a history item is currently selected via keyboard navigation...
+        if let selectedId = navigationManager.selectedHistoryId, let selectedItem = history.first(where: { $0.id == selectedId }) {
+
+            // ACTION 1: Check for a plot. This is a special action that doesn't insert text.
+            if case .plot(let plotData) = selectedItem.result {
+                resetNavigation()
+                requestOpenPlotWindow(for: plotData)
+                return nil // Action is complete.
             }
+
+            // ACTION 2: For everything else, get the text from the preview and insert it.
+            // This ensures that what the user sees highlighted is what gets inserted.
+            let textToInsert = self.previewText
+            resetNavigation()
+            
+            if !textToInsert.isEmpty {
+                self.insertTextAtCursor(textToInsert)
+            }
+            
+            return nil // Action is complete.
+
         } else {
+            // If no history item is selected, proceed with committing the new expression from the input field.
             guard !rawExpression.isEmpty, let valueToCommit = lastSuccessfulValue else { return nil }
             
             var plotDataToReturn: PlotData?
@@ -391,7 +397,6 @@ class CalculatorViewModel: ObservableObject {
             }
             return plotDataToReturn
         }
-        return nil
     }
 
     func handleKeyPress(keys: Set<KeyEquivalent>) -> Bool {
