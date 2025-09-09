@@ -1,0 +1,319 @@
+import Foundation
+
+/// This extension contains the evaluation logic for advanced mathematical operations,
+/// including calculus (derivatives, integrals, gradients) and plotting.
+extension Evaluator {
+
+    // MARK: - Calculus Functions
+    
+    func calculateNthDerivative(bodyNode: ExpressionNode, varName: String, at a: Double, order n: Int, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> Double {
+        if n == 1 {
+            let valPlus = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a + h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let valMinus = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a - h, variables: &variables, functions: &functions, angleMode: angleMode)
+            guard case .scalar(let scalarPlus) = valPlus, case .scalar(let scalarMinus) = valMinus else {
+                throw MathError.typeMismatch(expected: "Scalar expression for differentiation", found: "Non-scalar")
+            }
+            return (scalarPlus - scalarMinus) / (2 * h)
+        }
+        
+        let f_prime_at_a_plus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: a + h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
+        let f_prime_at_a_minus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: a - h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
+        
+        return (f_prime_at_a_plus_h - f_prime_at_a_minus_h) / (2 * h)
+    }
+
+    func evaluateGradFunction(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
+        guard node.arguments.count == 2 else { throw MathError.incorrectArgumentCount(function: "grad", expected: "2", found: node.arguments.count) }
+
+        guard let funcNameNode = node.arguments[0] as? ConstantNode else { throw MathError.typeMismatch(expected: "User function name for gradient", found: node.arguments[0].description) }
+        let funcName = funcNameNode.name
+
+        guard let userFunction = functions[funcName] else { throw MathError.unknownFunction(name: funcName) }
+        let varNames = userFunction.parameterNames
+        guard !varNames.isEmpty else { throw MathError.unsupportedOperation(op: "grad", typeA: "function with no parameters", typeB: nil) }
+
+        let (pointValue, pointUsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
+        guard case .vector(let pointVector) = pointValue else { throw MathError.typeMismatch(expected: "Vector for gradient point", found: pointValue.typeName) }
+        guard pointVector.dimension == varNames.count else { throw MathError.dimensionMismatch(reason: "Point dimension (\(pointVector.dimension)) must match number of function variables (\(varNames.count)).") }
+
+        let capturedVariables = variables
+        let capturedFunctions = functions
+        
+        var partialDerivatives: [Double] = []
+        
+        for (i,_) in varNames.enumerated() {
+            let pointForThisVar = pointVector.values[i]
+            let f: (Double) throws -> Double = { x_perturbed in
+                var tempVars = capturedVariables
+                for (j, otherVarName) in varNames.enumerated() {
+                    tempVars[otherVarName] = .scalar((j == i) ? x_perturbed : pointVector.values[j])
+                }
+                var tempFuncs = capturedFunctions
+                let result = try self._evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode).result
+                guard case .scalar(let scalarResult) = result else { throw MathError.typeMismatch(expected: "Scalar expression for gradient calculation", found: result.typeName) }
+                return scalarResult
+            }
+            
+            let valPlus = try f(pointForThisVar + h)
+            let valMinus = try f(pointForThisVar - h)
+            
+            let derivative = (valPlus - valMinus) / (2 * h)
+            partialDerivatives.append(derivative)
+        }
+        return (.vector(Vector(values: partialDerivatives)), pointUsedAngle)
+    }
+
+    func adaptiveSimpson(f: (Double) throws -> Double, a: Double, b: Double, tolerance: Double) throws -> Double {
+        let c = (a + b) / 2.0; let h = b - a
+        let fa = try f(a); let fb = try f(b); let fc = try f(c)
+        let s = (h / 6.0) * (fa + 4.0 * fc + fb)
+        return try _adaptiveSimpsonRecursive(f: f, a: a, b: b, fa: fa, fb: fb, fc: fc, whole: s, tolerance: tolerance)
+    }
+
+    private func _adaptiveSimpsonRecursive(f: (Double) throws -> Double, a: Double, b: Double, fa: Double, fb: Double, fc: Double, whole: Double, tolerance: Double) throws -> Double {
+        let c = (a + b) / 2.0; let d = (a + c) / 2.0; let e = (c + b) / 2.0
+        let fd = try f(d); let fe = try f(e)
+        let left = (c - a) / 6.0 * (fa + 4.0 * fd + fc)
+        let right = (b - c) / 6.0 * (fc + 4.0 * fe + fb)
+        if abs(left + right - whole) <= 15.0 * tolerance { return left + right + (left + right - whole) / 15.0 }
+        let leftHalf = try _adaptiveSimpsonRecursive(f: f, a: a, b: c, fa: fa, fb: fc, fc: fd, whole: left, tolerance: tolerance / 2.0)
+        let rightHalf = try _adaptiveSimpsonRecursive(f: f, a: c, b: b, fa: fc, fb: fb, fc: fe, whole: right, tolerance: tolerance / 2.0)
+        return leftHalf + rightHalf
+    }
+    
+    // MARK: - Plotting Functions
+    
+    func findUndeclaredVariables(in node: ExpressionNode, declaredVariables: Set<String>, declaredFunctions: Set<String>) -> Set<String> {
+        var found = Set<String>()
+        let knownConstants = Set(Evaluator.constants.keys).union(Set(Evaluator.siPrefixes.keys)).union(["i", "j", "k"])
+
+        func traverse(node: ExpressionNode, localScope: Set<String>) {
+            switch node {
+            case let constantNode as ConstantNode:
+                if !declaredVariables.contains(constantNode.name) && !knownConstants.contains(constantNode.name) && !localScope.contains(constantNode.name) {
+                    found.insert(constantNode.name)
+                }
+            case let funcDefNode as FunctionDefinitionNode: traverse(node: funcDefNode.body, localScope: localScope.union(funcDefNode.parameterNames))
+            case let integralNode as IntegralNode:
+                let newLocalScope = localScope.union([integralNode.variable.name])
+                traverse(node: integralNode.body, localScope: newLocalScope); traverse(node: integralNode.lowerBound, localScope: localScope); traverse(node: integralNode.upperBound, localScope: localScope)
+            case let derivativeNode as DerivativeNode:
+                var newLocalScope = localScope
+                if let variable = derivativeNode.variable { newLocalScope.formUnion([variable.name]) }
+                traverse(node: derivativeNode.body, localScope: newLocalScope); traverse(node: derivativeNode.point, localScope: localScope); traverse(node: derivativeNode.order, localScope: localScope)
+            case let binaryNode as BinaryOpNode: traverse(node: binaryNode.left, localScope: localScope); traverse(node: binaryNode.right, localScope: localScope)
+            case let unaryNode as UnaryOpNode: traverse(node: unaryNode.child, localScope: localScope)
+            case let postfixNode as PostfixOpNode: traverse(node: postfixNode.child, localScope: localScope)
+            case let functionCallNode as FunctionCallNode: functionCallNode.arguments.forEach { traverse(node: $0, localScope: localScope) }
+            case let vectorNode as VectorNode: vectorNode.elements.forEach { traverse(node: $0, localScope: localScope) }
+            case let matrixNode as MatrixNode: matrixNode.rows.flatMap { $0 }.forEach { traverse(node: $0, localScope: localScope) }
+            case let cVectorNode as ComplexVectorNode: cVectorNode.elements.forEach { traverse(node: $0, localScope: localScope) }
+            case let cMatrixNode as ComplexMatrixNode: cMatrixNode.rows.flatMap { $0 }.forEach { traverse(node: $0, localScope: localScope) }
+            case let assignmentNode as AssignmentNode: traverse(node: assignmentNode.expression, localScope: localScope)
+            case let primeNode as PrimeDerivativeNode: traverse(node: primeNode.argument, localScope: localScope)
+            case let indexedOpNode as IndexedOperationNode: traverse(node: indexedOpNode.index, localScope: localScope); traverse(node: indexedOpNode.scalar, localScope: localScope)
+            default: break
+            }
+        }
+        traverse(node: node, localScope: Set())
+        return found
+    }
+
+    func evaluateAutoplot(_ node: AutoplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        var evaluatedArgs: [MathValue] = []; var canBeVectors = true
+        for expr in node.expressions {
+            do { var tempVars = variables; let (val, _) = try _evaluateSingle(node: expr, variables: &tempVars, functions: &functions, angleMode: .radians); evaluatedArgs.append(val) }
+            catch { canBeVectors = false; break }
+        }
+
+        if canBeVectors {
+            let vectorsToPlot = evaluatedArgs.compactMap {
+                if case .vector(let v) = $0, v.dimension == 2 { return v }
+                return nil
+            }
+            if vectorsToPlot.count == evaluatedArgs.count && !evaluatedArgs.isEmpty {
+                var allSeries: [PlotSeries] = []
+                for vector in vectorsToPlot { allSeries.append(PlotSeries(name: "v = [\(vector[0]); \(vector[1])]", dataPoints: [DataPoint(x: vector[0], y: vector[1])])) }
+                let duration = CFAbsoluteTimeGetCurrent() - startTime
+                print("[BENCHMARK] Autoplot (vector) generation time: \(duration * 1000) ms")
+                return .plot(PlotData(expression: node.description, series: allSeries, plotType: .vector, explicitYRange: nil, generationTime: duration))
+            }
+        }
+
+        let numPoints = 200; let defaultRange = -10.0...10.0
+        var isParametric = false
+        if node.expressions.count == 2 { if node.expressions.contains(where: { $0.description.range(of: #"\bt\b"#, options: .regularExpression) != nil }) { isParametric = true } }
+        
+        let plotData: PlotData
+        if isParametric {
+            let xBody = node.expressions[0]; let yBody = node.expressions[1]; let varName = "t"
+            var results = Array<DataPoint?>(repeating: nil, count: numPoints)
+            let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+            let capturedVariables = variables; let capturedFunctions = functions
+
+            DispatchQueue.concurrentPerform(iterations: numPoints) { i in
+                let t = defaultRange.lowerBound + Double(i) * step
+                var localVars = capturedVariables; var localFuncs = capturedFunctions
+                do {
+                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    if case .scalar(let x) = xValue, case .scalar(let y) = yValue, x.isFinite, y.isFinite {
+                        results[i] = DataPoint(x: x, y: y)
+                    }
+                } catch { }
+            }
+            let dataPoints = results.compactMap { $0 }
+            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+            let seriesName = "(\(xBody.description), \(yBody.description))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
+            let duration = CFAbsoluteTimeGetCurrent() - startTime
+            print("[BENCHMARK] Autoplot (parametric) generation time: \(duration * 1000) ms")
+            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil, generationTime: duration)
+        } else {
+            let declaredVariables = Set(variables.keys); let declaredFunctions = Set(functions.keys); var undeclaredVars = Set<String>()
+            for expr in node.expressions { undeclaredVars.formUnion(findUndeclaredVariables(in: expr, declaredVariables: declaredVariables, declaredFunctions: declaredFunctions)) }
+            undeclaredVars.remove("t")
+            
+            let varName: String
+            if undeclaredVars.count == 1 { varName = undeclaredVars.first! }
+            else if undeclaredVars.isEmpty { varName = "x" }
+            else { throw MathError.plotError(reason: "Multiple unknown variables found: [\(undeclaredVars.joined(separator: ", "))].") }
+
+            var allSeries: [PlotSeries] = []
+            for body in node.expressions {
+                var results = Array<DataPoint?>(repeating: nil, count: numPoints)
+                let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+                let capturedVariables = variables; let capturedFunctions = functions
+
+                DispatchQueue.concurrentPerform(iterations: numPoints) { i in
+                    let x = defaultRange.lowerBound + Double(i) * step
+                    var localVars = capturedVariables; var localFuncs = capturedFunctions
+                    do {
+                        let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                        if case .scalar(let y) = yValue, y.isFinite {
+                            results[i] = DataPoint(x: x, y: y)
+                        }
+                    } catch { }
+                }
+                let dataPoints = results.compactMap { $0 }
+                if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints)) }
+            }
+            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
+            let duration = CFAbsoluteTimeGetCurrent() - startTime
+            print("[BENCHMARK] Autoplot (function) generation time: \(duration * 1000) ms")
+            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil, generationTime: duration)
+        }
+        return .plot(plotData)
+    }
+    
+    func evaluateScatterplot(_ node: ScatterplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let evaluatedArgs = try node.arguments.map { try _evaluateSingle(node: $0, variables: &variables, functions: &functions, angleMode: .radians).result }
+        let (xVector, yVector): (Vector, Vector)
+        
+        if evaluatedArgs.count == 1 {
+            guard case .matrix(let matrix) = evaluatedArgs[0] else { throw MathError.typeMismatch(expected: "Matrix", found: evaluatedArgs[0].typeName) }
+            guard matrix.columns == 2 else { throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns.") }
+            guard matrix.rows > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix.") }
+            var xValues: [Double] = []; var yValues: [Double] = []
+            for r in 0..<matrix.rows { xValues.append(matrix[r, 0]); yValues.append(matrix[r, 1]) }
+            xVector = Vector(values: xValues); yVector = Vector(values: yValues)
+        } else if evaluatedArgs.count == 2 {
+            guard case .vector(let vec1) = evaluatedArgs[0], case .vector(let vec2) = evaluatedArgs[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName)") }
+            guard vec1.dimension == vec2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension.") }
+            guard vec1.dimension > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors.") }
+            xVector = vec1; yVector = vec2
+        } else { throw MathError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix) or 2 (Vectors)", found: evaluatedArgs.count) }
+
+        let dataPoints = zip(xVector.values, yVector.values).map { DataPoint(x: $0, y: $1) }
+        var allSeries = [PlotSeries(name: "Data Points", dataPoints: dataPoints)]
+
+        if xVector.dimension >= 2 {
+            let n = Double(xVector.dimension); let sumX = xVector.sum(); let sumY = yVector.sum(); let sumXY = try xVector.hadamard(with: yVector).sum(); let sumX2 = xVector.values.map { $0 * $0 }.reduce(0, +); let denominator = (n * sumX2 - sumX * sumX)
+            if denominator != 0 {
+                let slope = (n * sumXY - sumX * sumY) / denominator; let intercept = (sumY - slope * sumX) / n
+                if let minX = xVector.values.min(), let maxX = xVector.values.max() {
+                    let fitPoints = [DataPoint(x: minX, y: slope * minX + intercept), DataPoint(x: maxX, y: slope * maxX + intercept)]
+                    allSeries.append(PlotSeries(name: "Linear Fit", dataPoints: fitPoints))
+                }
+            }
+        }
+        let duration = CFAbsoluteTimeGetCurrent() - startTime
+        print("[BENCHMARK] Scatterplot generation time: \(duration * 1000) ms")
+        return .plot(PlotData(expression: node.description, series: allSeries, plotType: .scatter, explicitYRange: nil, generationTime: duration))
+    }
+    
+    func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let (xMinVal, _) = try _evaluateSingle(node: node.xRange.0, variables: &variables, functions: &functions, angleMode: .radians)
+        let (xMaxVal, _) = try _evaluateSingle(node: node.xRange.1, variables: &variables, functions: &functions, angleMode: .radians)
+        guard case .scalar(let xMin) = xMinVal, case .scalar(let xMax) = xMaxVal else { throw MathError.plotError(reason: "Plot range must be scalar values.") }
+        guard xMin < xMax else { throw MathError.plotError(reason: "Plot range min must be less than max.") }
+        let plotRange = xMin...xMax
+        var explicitYRange: (min: Double, max: Double)? = nil
+        if let yRangeNodes = node.yRange {
+             let (yMinVal, _) = try _evaluateSingle(node: yRangeNodes.0, variables: &variables, functions: &functions, angleMode: .radians)
+             let (yMaxVal, _) = try _evaluateSingle(node: yRangeNodes.1, variables: &variables, functions: &functions, angleMode: .radians)
+             guard case .scalar(let yMin) = yMinVal, case .scalar(let yMax) = yMaxVal else { throw MathError.plotError(reason: "Y-axis range must be scalar values.") }
+            guard yMin < yMax else { throw MathError.plotError(reason: "Y-axis range min must be less than max.") }
+            explicitYRange = (yMin, yMax)
+        }
+
+        let numPoints = 200; let varName = node.variable.name; let isParametric = node.expressions.count == 2 && varName == "t"
+
+        let plotData: PlotData
+        if isParametric {
+            let xBody = node.expressions[0]; let yBody = node.expressions[1]
+            var results = Array<DataPoint?>(repeating: nil, count: numPoints)
+            let step = (plotRange.upperBound - plotRange.lowerBound) / Double(numPoints - 1)
+            let capturedVariables = variables; let capturedFunctions = functions
+            
+            DispatchQueue.concurrentPerform(iterations: numPoints) { i in
+                let t = plotRange.lowerBound + Double(i) * step
+                var localVars = capturedVariables; var localFuncs = capturedFunctions
+                do {
+                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    if case .scalar(let x) = xValue, case .scalar(let y) = yValue, x.isFinite, y.isFinite {
+                        results[i] = DataPoint(x: x, y: y)
+                    }
+                } catch {}
+            }
+            
+            let dataPoints = results.compactMap { $0 }
+            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+            let seriesName = "(\(xBody.description), \(yBody.description))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
+            let duration = CFAbsoluteTimeGetCurrent() - startTime
+            print("[BENCHMARK] Plot (parametric) generation time: \(duration * 1000) ms")
+            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: explicitYRange, generationTime: duration)
+        } else {
+            var allSeries: [PlotSeries] = []
+            for body in node.expressions {
+                var results = Array<DataPoint?>(repeating: nil, count: numPoints)
+                let step = (plotRange.upperBound - plotRange.lowerBound) / Double(numPoints - 1)
+                let capturedVariables = variables; let capturedFunctions = functions
+
+                DispatchQueue.concurrentPerform(iterations: numPoints) { i in
+                    let x = plotRange.lowerBound + Double(i) * step
+                    var localVars = capturedVariables; var localFuncs = capturedFunctions
+                    do {
+                        let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                        if case .scalar(let y) = yValue, y.isFinite {
+                            results[i] = DataPoint(x: x, y: y)
+                        }
+                    } catch {}
+                }
+                
+                let dataPoints = results.compactMap { $0 }
+                if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints)) }
+            }
+            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
+            let duration = CFAbsoluteTimeGetCurrent() - startTime
+            print("[BENCHMARK] Plot (function) generation time: \(duration * 1000) ms")
+            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: explicitYRange, generationTime: duration)
+        }
+        return .plot(plotData)
+    }
+}
+

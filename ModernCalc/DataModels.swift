@@ -55,6 +55,15 @@ struct PlotData: Identifiable, Hashable {
     var series: [PlotSeries]
     let plotType: PlotType
     let explicitYRange: (min: Double, max: Double)?
+    let generationTime: TimeInterval?
+
+    init(expression: String, series: [PlotSeries], plotType: PlotType, explicitYRange: (min: Double, max: Double)?, generationTime: TimeInterval? = nil) {
+        self.expression = expression
+        self.series = series
+        self.plotType = plotType
+        self.explicitYRange = explicitYRange
+        self.generationTime = generationTime
+    }
     
     static func == (lhs: PlotData, rhs: PlotData) -> Bool {
         lhs.id == rhs.id
@@ -114,3 +123,4 @@ struct HelpTopic: Identifiable, Hashable {
     let title: String
     let content: String
 }
+
