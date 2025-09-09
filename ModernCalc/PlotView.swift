@@ -14,6 +14,14 @@ private let chartColors: [Color] = [.blue, .green, .orange, .red, .purple, .pink
 struct PlotView: View {
     @StateObject var viewModel: PlotViewModel
 
+    // Helper to create a color map for the chart's legend and styles.
+    // This ensures that the color assigned by the chart framework matches our manual color selection.
+    private var colorMap: [String: Color] {
+        Dictionary(uniqueKeysWithValues: viewModel.plotData.series.enumerated().map { (index, series) in
+            (series.name, chartColors[index % chartColors.count])
+        })
+    }
+
     // Helper function for creating vector plots
     @ChartContentBuilder
     private func vectorPlotContent() -> some ChartContent {
@@ -26,51 +34,54 @@ struct PlotView: View {
             .lineStyle(StrokeStyle(lineWidth: 1))
             
         // Enumerate the series to get an index for manual color selection
-        ForEach(Array(viewModel.plotData.series.enumerated()), id: \.element.id) { index, series in
-            // Determine the color for this vector
-            let color = chartColors[index % chartColors.count]
+        ForEach(viewModel.plotData.series, id: \.id) { series in
+            // By grouping all marks for a single vector within a `Plot` container,
+            // we ensure that chart styling modifiers apply to the entire group consistently.
+            Plot {
+                // *** FIX: Look up the color from the map using the series name. ***
+                // This ensures the arrowhead color is derived from the same source as the line color.
+                let color = colorMap[series.name] ?? .primary
 
-            if let point = series.dataPoints.first {
-                let lineSegmentData = [DataPoint(x: 0, y: 0), point]
-                
-                // 1. Draw the line for the series.
-                ForEach(lineSegmentData) { segmentPoint in
-                    LineMark(
-                        x: .value("X", segmentPoint.x),
-                        y: .value("Y", segmentPoint.y)
+                if let point = series.dataPoints.first {
+                    let lineSegmentData = [DataPoint(x: 0, y: 0), point]
+                    
+                    // 1. Draw the line for the series.
+                    ForEach(lineSegmentData) { segmentPoint in
+                        LineMark(
+                            x: .value("X", segmentPoint.x),
+                            y: .value("Y", segmentPoint.y)
+                        )
+                    }
+
+                    // 2. Draw an invisible point at the end to anchor the arrowhead annotation.
+                    PointMark(
+                        x: .value("X", point.x),
+                        y: .value("Y", point.y)
                     )
-                }
-                // Use foregroundStyle(by:) for the legend and automatic color grouping
-                .foregroundStyle(by: .value("Vector", series.name))
-                // Use a second foregroundStyle to force the specific color
-                .foregroundStyle(color)
+                    .symbolSize(0)
+                    .annotation(position: .overlay) {
+                        // The vector's true mathematical angle.
+                        let vectorAngle = atan2(point.y, point.x)
+                        
+                        // The logic to correct for the chart's coordinate system remains necessary.
+                        // Start angle (UP) - Target Angle.
+                        let rotationInRadians = .pi / 2 - vectorAngle
 
-                // 2. Draw an invisible point at the end to anchor the arrowhead annotation.
-                PointMark(
-                    x: .value("X", point.x),
-                    y: .value("Y", point.y)
-                )
-                .symbolSize(0)
-                .annotation(position: .overlay) {
-                    // This new approach draws the arrowhead manually to bypass the SwiftUI bug.
-                    
-                    // The vector's true mathematical angle.
-                    let vectorAngle = atan2(point.y, point.x)
-                    
-                    // The logic to correct for the chart's coordinate system remains necessary.
-                    // Start angle (UP) - Target Angle.
-                    let rotationInRadians = .pi / 2 - vectorAngle
-
-                    // Use our custom Arrowhead shape.
-                    Arrowhead()
-                        .fill(color)
-                        .frame(width: 8, height: 10) // The size of the arrowhead
-                        // We must first offset the shape so the tip is at the anchor point.
-                        .offset(y: -5)
-                        // Now, we rotate our custom view. This is much more stable than rotating an Image.
-                        .rotationEffect(.radians(rotationInRadians))
+                        // Use our custom Arrowhead shape.
+                        Arrowhead()
+                            .fill(color) // The arrowhead is filled with the correctly looked-up color.
+                            .frame(width: 8, height: 10) // The size of the arrowhead
+                            // We must first offset the shape so the tip is at the anchor point.
+                            .offset(y: -5)
+                            // Now, we rotate our custom view. This is much more stable than rotating an Image.
+                            .rotationEffect(.radians(rotationInRadians))
+                    }
                 }
             }
+            // Use foregroundStyle(by:) for the legend. The color will be sourced from the
+            // .chartForegroundStyleScale modifier on the Chart view, ensuring consistency.
+            // Applying this to the `Plot` group ensures all marks within it are associated with the series.
+            .foregroundStyle(by: .value("Vector", series.name))
         }
     }
 
@@ -108,6 +119,9 @@ struct PlotView: View {
             Chart {
                 chartContent(for: viewModel.plotData.plotType)
             }
+            // *** FIX: Use the domain/range overload to avoid type inference errors. ***
+            // We explicitly provide the series names as the domain and our colors as the range.
+            .chartForegroundStyleScale(domain: viewModel.plotData.series.map { $0.name }, range: chartColors)
             .chartXScale(domain: viewModel.viewDomainX)
             .chartYScale(domain: viewModel.viewDomainY)
             .chartXAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
@@ -182,3 +196,4 @@ struct Arrowhead: Shape {
         return path
     }
 }
+
