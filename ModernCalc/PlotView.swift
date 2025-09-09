@@ -137,11 +137,11 @@ struct PlotView: View {
             .chartYScale(domain: viewModel.viewDomainY)
             .chartXAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
             .chartYAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
-            .aspectRatio(1, contentMode: .fit) // Forces the graph to a square aspect ratio
             .chartPlotStyle { plotArea in
                 plotArea
                     .background(Color.gray.opacity(0.1))
                     .border(Color.primary.opacity(0.5), width: 1)
+                    .aspectRatio(1, contentMode: .fit) // This ensures the plot area itself is square.
             }
             .padding()
         }
