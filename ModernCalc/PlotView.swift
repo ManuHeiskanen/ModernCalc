@@ -9,7 +9,7 @@ import SwiftUI
 import Charts
 
 // Predefined list of colors for the chart to cycle through.
-private let chartColors: [Color] = [.blue, .green, .orange, .red, .purple, .pink, .teal, .indigo]
+private let chartColors: [Color] = [.green, .orange, .red, .purple, .pink, .teal, .indigo]
 
 struct PlotView: View {
     @StateObject var viewModel: PlotViewModel
@@ -27,6 +27,8 @@ struct PlotView: View {
         switch viewModel.plotData.plotType {
         case .vector:
             return "Vector Plot"
+        case .scatter:
+            return "Scatter Plot"
         case .line, .parametric:
             let functionNames = viewModel.plotData.series.map { $0.name }.joined(separator: ", ")
             return "Graph of \(functionNames)"
@@ -49,8 +51,6 @@ struct PlotView: View {
             // By grouping all marks for a single vector within a `Plot` container,
             // we ensure that chart styling modifiers apply to the entire group consistently.
             Plot {
-                // *** FIX: Look up the color from the map using the series name. ***
-                // This ensures the arrowhead color is derived from the same source as the line color.
                 let color = colorMap[series.name] ?? .primary
 
                 if let point = series.dataPoints.first {
@@ -71,27 +71,17 @@ struct PlotView: View {
                     )
                     .symbolSize(0)
                     .annotation(position: .overlay) {
-                        // The vector's true mathematical angle.
                         let vectorAngle = atan2(point.y, point.x)
-                        
-                        // The logic to correct for the chart's coordinate system remains necessary.
-                        // Start angle (UP) - Target Angle.
                         let rotationInRadians = .pi / 2 - vectorAngle
 
-                        // Use our custom Arrowhead shape.
                         Arrowhead()
-                            .fill(color) // The arrowhead is filled with the correctly looked-up color.
-                            .frame(width: 8, height: 10) // The size of the arrowhead
-                            // We must first offset the shape so the tip is at the anchor point.
+                            .fill(color)
+                            .frame(width: 8, height: 10)
                             .offset(y: -5)
-                            // Now, we rotate our custom view. This is much more stable than rotating an Image.
                             .rotationEffect(.radians(rotationInRadians))
                     }
                 }
             }
-            // Use foregroundStyle(by:) for the legend. The color will be sourced from the
-            // .chartForegroundStyleScale modifier on the Chart view, ensuring consistency.
-            // Applying this to the `Plot` group ensures all marks within it are associated with the series.
             .foregroundStyle(by: .value("Vector", series.name))
         }
     }
@@ -110,14 +100,45 @@ struct PlotView: View {
             .foregroundStyle(by: .value("Function", series.name))
         }
     }
+    
+    // Helper function for creating scatter plots
+    @ChartContentBuilder
+    private func scatterPlotContent() -> some ChartContent {
+        ForEach(viewModel.plotData.series) { series in
+            if series.name == "Linear Fit" {
+                ForEach(series.dataPoints) { point in
+                    LineMark(
+                        x: .value("X", point.x),
+                        y: .value("Y", point.y)
+                    )
+                    .interpolationMethod(.linear)
+                }
+                .foregroundStyle(.blue)
+                .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
+            } else {
+                ForEach(series.dataPoints) { point in
+                    PointMark(
+                        x: .value("X", point.x),
+                        y: .value("Y", point.y)
+                    )
+                    .foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+    }
 
     // Main content builder now just decides which helper to use
     @ChartContentBuilder
     private func chartContent(for plotType: PlotType) -> some ChartContent {
+        let baseColor: Color = .blue
+        
         if plotType == .vector {
             vectorPlotContent()
+        } else if plotType == .scatter {
+            scatterPlotContent()
         } else {
             lineAndParametricPlotContent()
+                .foregroundStyle(baseColor)
         }
     }
     
@@ -130,8 +151,6 @@ struct PlotView: View {
             Chart {
                 chartContent(for: viewModel.plotData.plotType)
             }
-            // *** FIX: Use the domain/range overload to avoid type inference errors. ***
-            // We explicitly provide the series names as the domain and our colors as the range.
             .chartForegroundStyleScale(domain: viewModel.plotData.series.map { $0.name }, range: chartColors)
             .chartXScale(domain: viewModel.viewDomainX)
             .chartYScale(domain: viewModel.viewDomainY)
@@ -141,7 +160,7 @@ struct PlotView: View {
                 plotArea
                     .background(Color.gray.opacity(0.1))
                     .border(Color.primary.opacity(0.5), width: 1)
-                    .aspectRatio(1, contentMode: .fit) // This ensures the plot area itself is square.
+                    .aspectRatio(1, contentMode: .fit)
             }
             .padding()
         }

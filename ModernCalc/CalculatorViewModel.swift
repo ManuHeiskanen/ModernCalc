@@ -96,6 +96,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "real", signature: "real(complex)", description: "Extracts the real part of a complex number."),
         .init(name: "root", signature: "root(number, degree)", description: "Calculates the nth root of a number."),
         .init(name: "round", signature: "round(number)", description: "Rounds a number to the nearest integer."),
+        .init(name: "scatterplot", signature: "scatterplot(x_values, y_values)", description: "Creates a scatter plot from two vectors of x and y coordinates, or a single two-column matrix."),
         .init(name: "side", signature: "side(hyp, sideA)", description: "Calculates the missing side of a right triangle."),
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
@@ -144,7 +145,7 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
-        .init(title: "Plotting", content: "Create 2D plots for functions or vectors. \n- **Automatic Plotting (`autoplot`):** For quick graphs. `autoplot(sin(x))` plots a function. `autoplot(vector(3;4), vector(-1;2))` plots 2D vectors from the origin. `autoplot(cos(t), sin(t))` creates a parametric plot. \n- **Manual Plotting (`plot`):** For detailed control. `plot(x^2, x, -5, 5)` plots `x^2` for `x` from -5 to 5. You can optionally set y-axis limits: `plot(x^2, x, -5, 5, 0, 25)`. \nClicking a plot in the history will reopen its window."),
+        .init(title: "Plotting", content: "Create 2D plots for functions or vectors. \n- **Automatic Plotting (`autoplot`):** For quick graphs. `autoplot(sin(x))` plots a function. `autoplot(vector(3;4), vector(-1;2))` plots 2D vectors from the origin. `autoplot(cos(t), sin(t))` creates a parametric plot. \n- **Manual Plotting (`plot`):** For detailed control. `plot(x^2, x, -5, 5)` plots `x^2` for `x` from -5 to 5. You can optionally set y-axis limits: `plot(x^2, x, -5, 5, 0, 25)`. \n- **Scatter Plots (`scatterplot`):** Visualize data points with `scatterplot(x_vector, y_vector)` or `scatterplot(2_column_matrix)`. \nClicking a plot in the history will reopen its window."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
         .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data.")
     ]
@@ -665,4 +666,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-

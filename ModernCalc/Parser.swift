@@ -88,6 +88,11 @@ struct PlotNode: ExpressionNode {
     var description: String { "plot(\(expressions.map { $0.description }.joined(separator: ", ")), for: \(variable.description) in [\(xRange.0.description), \(xRange.1.description)])" }
 }
 
+struct ScatterplotNode: ExpressionNode {
+    let arguments: [ExpressionNode]
+    var description: String { "scatterplot(\(arguments.map { $0.description }.joined(separator: ", ")))" }
+}
+
 
 
 // --- PARSER ---
@@ -227,6 +232,7 @@ class Parser {
                 case "integral": return try parseIntegral()
                 case "autoplot": return try parseAutoplot()
                 case "plot": return try parsePlot()
+                case "scatterplot": return try parseScatterplot()
                 default: return try parseFunctionCall(name: name)
                 }
             } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
@@ -340,6 +346,30 @@ class Parser {
         }
 
         return PlotNode(expressions: expressions, variable: variableNode, xRange: xRange, yRange: yRange)
+    }
+    
+    private func parseScatterplot() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for scatterplot call"))
+        var arguments: [ExpressionNode] = []
+        if let nextToken = peek(), case .paren(")") = nextToken.type {
+            try advance()
+             throw ParserError.incorrectArgumentCount(function: "scatterplot", expected: "1 or 2", found: 0)
+        }
+        
+        repeat {
+            arguments.append(try parseExpression())
+            if let nextToken = peek(), case .separator(",") = nextToken.type {
+                try advance()
+            } else { break }
+        } while true
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for scatterplot call"))
+        
+        guard !arguments.isEmpty && arguments.count <= 2 else {
+            throw ParserError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix) or 2 (Vectors)", found: arguments.count)
+        }
+        
+        return ScatterplotNode(arguments: arguments)
     }
 
     private func parseDerivative() throws -> ExpressionNode {
@@ -555,4 +585,3 @@ class Parser {
         try advance()
     }
 }
-

@@ -650,6 +650,9 @@ struct Evaluator {
         case let plotNode as PlotNode:
             return try (evaluatePlot(plotNode, variables: &variables, functions: &functions), false)
 
+        case let scatterNode as ScatterplotNode:
+            return try (evaluateScatterplot(scatterNode, variables: &variables, functions: &functions), false)
+
         default:
             throw MathError.invalidNode
         }
@@ -1252,6 +1255,48 @@ struct Evaluator {
             return .plot(plotData)
         }
     }
+    
+    private func evaluateScatterplot(_ node: ScatterplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        let evaluatedArgs = try node.arguments.map { try _evaluateSingle(node: $0, variables: &variables, functions: &functions, angleMode: .radians).result }
+
+        let dataPoints: [DataPoint]
+        
+        if evaluatedArgs.count == 1 {
+            // Case 1: Single Matrix argument
+            guard case .matrix(let matrix) = evaluatedArgs[0] else {
+                throw MathError.typeMismatch(expected: "Matrix", found: evaluatedArgs[0].typeName)
+            }
+            guard matrix.columns == 2 else {
+                throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns.")
+            }
+            guard matrix.rows > 0 else {
+                throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix.")
+            }
+            dataPoints = (0..<matrix.rows).map { DataPoint(x: matrix[$0, 0], y: matrix[$0, 1]) }
+            
+        } else if evaluatedArgs.count == 2 {
+            // Case 2: Two Vector arguments
+            guard case .vector(let xVector) = evaluatedArgs[0], case .vector(let yVector) = evaluatedArgs[1] else {
+                throw MathError.typeMismatch(expected: "Two Vectors", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName)")
+            }
+            guard xVector.dimension == yVector.dimension else {
+                throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension.")
+            }
+             guard xVector.dimension > 0 else {
+                throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors.")
+            }
+            dataPoints = zip(xVector.values, yVector.values).map { DataPoint(x: $0, y: $1) }
+            
+        } else {
+             throw MathError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix) or 2 (Vectors)", found: evaluatedArgs.count)
+        }
+
+        let series = PlotSeries(name: "Data Series", dataPoints: dataPoints)
+        let plotData = PlotData(expression: node.description, series: [series], plotType: .scatter, explicitYRange: nil)
+        
+        return .plot(plotData)
+    }
+    
     // --- END: MODIFIED PLOT LOGIC ---
     
     private func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {

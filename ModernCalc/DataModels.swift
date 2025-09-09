@@ -76,6 +76,7 @@ enum PlotType {
     case line
     case parametric
     case vector
+    case scatter
 }
 
 
@@ -113,4 +114,3 @@ struct HelpTopic: Identifiable, Hashable {
     let title: String
     let content: String
 }
-
