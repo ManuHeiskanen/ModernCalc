@@ -244,6 +244,13 @@ struct Evaluator {
             case .complexMatrix(let cm): return .complex(try cm.trace())
             default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
             }
+        },
+        "randv": { arg in
+            guard case .scalar(let size_s) = arg else { throw MathError.typeMismatch(expected: "Scalar for size", found: arg.typeName) }
+            guard size_s > 0, size_s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "randv", typeA: "size must be a positive integer", typeB: nil) }
+            let size = Int(size_s)
+            let values = (0..<size).map { _ in Double.random(in: 0...1) }
+            return .vector(Vector(values: values))
         }
     ]
     
@@ -366,7 +373,17 @@ struct Evaluator {
                     return .complex(Complex(real: 0, imaginary: real))
                 }
                 return .scalar(pow(x, 1/n))
+        },
+        "randm": { a, b in
+            guard case .scalar(let rows_s) = a, case .scalar(let cols_s) = b else { throw MathError.typeMismatch(expected: "Two Scalars for dimensions", found: "\(a.typeName), \(b.typeName)") }
+            guard rows_s > 0, cols_s > 0, rows_s.truncatingRemainder(dividingBy: 1) == 0, cols_s.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.unsupportedOperation(op: "randm", typeA: "dimensions must be positive integers", typeB: nil)
             }
+            let rows = Int(rows_s)
+            let cols = Int(cols_s)
+            let values = (0..<(rows * cols)).map { _ in Double.random(in: 0...1) }
+            return .matrix(Matrix(values: values, rows: rows, columns: cols))
+        }
     ]
 
     private func evaluateWithTempVar(node: ExpressionNode, varName: String, varValue: Double, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {

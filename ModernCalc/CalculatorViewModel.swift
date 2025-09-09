@@ -92,6 +92,8 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "plot", signature: "plot(expr, var, x_min, x_max, [y_min, y_max])", description: "Plots expressions over a specified range with optional y-axis limits."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
         .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
+        .init(name: "randm", signature: "randm(rows, cols)", description: "Creates a matrix with the specified dimensions, filled with random numbers between 0 and 1."),
+        .init(name: "randv", signature: "randv(size)", description: "Creates a vector of the specified size, filled with random numbers between 0 and 1."),
         .init(name: "range", signature: "range(start, end, [step])", description: "Creates a vector from 'start' to 'end' with an optional 'step' (default is 1)."),
         .init(name: "real", signature: "real(complex)", description: "Extracts the real part of a complex number."),
         .init(name: "root", signature: "root(number, degree)", description: "Calculates the nth root of a number."),
@@ -147,7 +149,7 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
         .init(title: "Plotting", content: "Create 2D plots for functions or vectors. \n- **Automatic Plotting (`autoplot`):** For quick graphs. `autoplot(sin(x))` plots a function. `autoplot(vector(3;4), vector(-1;2))` plots 2D vectors from the origin. `autoplot(cos(t), sin(t))` creates a parametric plot. \n- **Manual Plotting (`plot`):** For detailed control. `plot(x^2, x, -5, 5)` plots `x^2` for `x` from -5 to 5. You can optionally set y-axis limits: `plot(x^2, x, -5, 5, 0, 25)`. \n- **Scatter Plots (`scatterplot`):** Visualize data points with `scatterplot(x_vector, y_vector)` or `scatterplot(2_column_matrix)`. \nClicking a plot in the history will reopen its window."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
-        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function, which can create single random numbers or entire vectors of random data.")
+        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function. You can also create random vectors and matrices with `randv(size)` and `randm(rows, cols)`.")
     ]
 
 
@@ -666,3 +668,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+

@@ -179,8 +179,8 @@ class Lexer {
     private func lexIdentifier() -> Token {
         let startIndex = currentIndex
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
-        // Removed ' from the valid characters
-        while let char = peek(), char.isLetter || greekLetters.contains(char) || char == "_" {
+        // Allow numbers in identifiers, but not as the first character (this is checked in the main tokenize loop)
+        while let char = peek(), char.isLetter || char.isNumber || greekLetters.contains(char) || char == "_" {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
@@ -207,4 +207,3 @@ class Lexer {
         return char
     }
 }
-
