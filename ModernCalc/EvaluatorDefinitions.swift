@@ -37,7 +37,15 @@ extension Evaluator {
         "median": { args in try performStatisticalOperation(args: args, on: { $0.median() }) },
         "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) },
         "variance": { args in try performStatisticalOperation(args: args, on: { $0.variance() }) },
-        "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp() }) }
+        "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp() }) },
+        "gcd": { args in try performAggregateIntegerOperation(args: args, initialValue: 0, operation: performGcd) },
+        "lcm": { args in
+            let lcmOp = { (a: Double, b: Double) -> Double in
+                if a == 0 || b == 0 { return 0 }
+                return abs(a * b) / performGcd(a, b)
+            }
+            return try performAggregateIntegerOperation(args: args, initialValue: 1, operation: lcmOp)
+        }
     ]
     
     static let multiArgumentFunctions: [String: ([MathValue]) throws -> MathValue] = [
@@ -235,17 +243,14 @@ extension Evaluator {
             return .scalar(n1 - n2 * floor(n1 / n2))
         },
         "gcd": { a, b in
-            guard case .scalar(let n1) = a, case .scalar(let n2) = b, n1.truncatingRemainder(dividingBy: 1) == 0, n2.truncatingRemainder(dividingBy: 1) == 0 else {
-                throw MathError.unsupportedOperation(op: "gcd", typeA: "arguments must be integers", typeB: nil)
-            }
-            return .scalar(performGcd(abs(n1), abs(n2)))
+            return try performElementWiseIntegerOp(a, b, opName: "gcd", operation: performGcd)
         },
         "lcm": { a, b in
-            guard case .scalar(let n1) = a, case .scalar(let n2) = b, n1.truncatingRemainder(dividingBy: 1) == 0, n2.truncatingRemainder(dividingBy: 1) == 0 else {
-                throw MathError.unsupportedOperation(op: "lcm", typeA: "arguments must be integers", typeB: nil)
+            let lcmOp = { (n1: Double, n2: Double) -> Double in
+                if n1 == 0 || n2 == 0 { return 0 }
+                return abs(n1 * n2) / performGcd(abs(n1), abs(n2))
             }
-            if n1 == 0 || n2 == 0 { return .scalar(0) }
-            return .scalar(abs(n1 * n2) / performGcd(abs(n1), abs(n2)))
+            return try performElementWiseIntegerOp(a, b, opName: "lcm", operation: lcmOp)
         }
     ]
 
@@ -528,3 +533,63 @@ fileprivate func performGcd(_ a: Double, _ b: Double) -> Double {
         return abs(b)
     }
 }
+
+fileprivate func performAggregateIntegerOperation(args: [MathValue], initialValue: Double, operation: (Double, Double) -> Double) throws -> MathValue {
+    let extractIntegers: ([MathValue]) throws -> [Double] = { values in
+        var integers: [Double] = []
+        for value in values {
+            switch value {
+            case .scalar(let s):
+                guard s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "Integer", typeA: "arguments must be integers", typeB: nil) }
+                integers.append(s)
+            case .vector(let v):
+                guard v.values.allSatisfy({ $0.truncatingRemainder(dividingBy: 1) == 0 }) else { throw MathError.unsupportedOperation(op: "Integer", typeA: "vector elements must be integers", typeB: nil) }
+                integers.append(contentsOf: v.values)
+            case .matrix(let m):
+                guard m.values.allSatisfy({ $0.truncatingRemainder(dividingBy: 1) == 0 }) else { throw MathError.unsupportedOperation(op: "Integer", typeA: "matrix elements must be integers", typeB: nil) }
+                integers.append(contentsOf: m.values)
+            default:
+                throw MathError.typeMismatch(expected: "Scalars, a Vector, or a Matrix", found: value.typeName)
+            }
+        }
+        return integers
+    }
+
+    let integers = try extractIntegers(args)
+    guard !integers.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Integer operation") }
+
+    let result = integers.reduce(initialValue, operation)
+    return .scalar(result)
+}
+
+
+fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opName: String, operation: (Double, Double) -> Double) throws -> MathValue {
+    let checkInt: (Double) throws -> Double = { val in
+        guard val.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: opName, typeA: "arguments must be integers", typeB: nil) }
+        return val
+    }
+    
+    switch (a, b) {
+    case (.scalar(let n1), .scalar(let n2)):
+        return .scalar(operation(try checkInt(n1), try checkInt(n2)))
+        
+    case (.vector(let v), .scalar(let s)):
+        let checkedS = try checkInt(s)
+        let results = try v.values.map { operation(try checkInt($0), checkedS) }
+        return .vector(Vector(values: results))
+        
+    case (.scalar(let s), .vector(let v)):
+        let checkedS = try checkInt(s)
+        let results = try v.values.map { operation(checkedS, try checkInt($0)) }
+        return .vector(Vector(values: results))
+        
+    case (.vector(let v1), .vector(let v2)):
+        guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for element-wise \(opName).") }
+        let results = try zip(v1.values, v2.values).map { operation(try checkInt($0), try checkInt($1)) }
+        return .vector(Vector(values: results))
+
+    default:
+        throw MathError.typeMismatch(expected: "Scalars or Vectors of integers", found: "\(a.typeName), \(b.typeName)")
+    }
+}
+
