@@ -22,7 +22,11 @@ extension Evaluator {
     
     // MARK: - Function Dictionaries
     
-    static let scalarFunctions: [String: (Double) -> Double] = ["ln": log, "lg": log10, "log": log10]
+    static let scalarFunctions: [String: (Double) -> Double] = [
+        "ln": log, "lg": log10, "log": log10,
+        "sinh": sinh, "cosh": cosh, "tanh": tanh,
+        "asinh": asinh, "acosh": acosh, "atanh": atanh
+    ]
     
     static let variadicFunctions: [String: ([MathValue]) throws -> MathValue] = [
         "sum": { args in try performStatisticalOperation(args: args, on: { $0.sum() }) },
@@ -148,16 +152,41 @@ extension Evaluator {
         }
     ]
     
-    static let angleAwareFunctions: [String: (MathValue, AngleMode) throws -> MathValue] = [
-        "sin": { arg, mode in guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }; return .scalar(sin(mode == .degrees ? s * .pi / 180 : s)) },
-        "cos": { arg, mode in guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }; return .scalar(cos(mode == .degrees ? s * .pi / 180 : s)) },
-        "tan": { arg, mode in guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }; return .scalar(tan(mode == .degrees ? s * .pi / 180 : s)) },
-        "asin": { arg, mode in guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }; let a = asin(s); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
-        "acos": { arg, mode in guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }; let a = acos(s); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
-        "atan": { arg, mode in guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }; let a = atan(s); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
-        "arg": { arg, mode in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; let a = c.argument(); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
-        "angle": { arg, mode in
-             guard case .tuple(let values) = arg, values.count == 2, case .vector(let v1) = values[0], case .vector(let v2) = values[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "other") }
+    static let angleAwareFunctions: [String: ([MathValue], AngleMode) throws -> MathValue] = [
+        "sin": { args, mode in
+            guard args.count == 1, case .scalar(let s) = args[0] else { throw MathError.typeMismatch(expected: "Scalar", found: args.first?.typeName ?? "none") }
+            return .scalar(sin(mode == .degrees ? s * .pi / 180 : s))
+        },
+        "cos": { args, mode in
+            guard args.count == 1, case .scalar(let s) = args[0] else { throw MathError.typeMismatch(expected: "Scalar", found: args.first?.typeName ?? "none") }
+            return .scalar(cos(mode == .degrees ? s * .pi / 180 : s))
+        },
+        "tan": { args, mode in
+            guard args.count == 1, case .scalar(let s) = args[0] else { throw MathError.typeMismatch(expected: "Scalar", found: args.first?.typeName ?? "none") }
+            return .scalar(tan(mode == .degrees ? s * .pi / 180 : s))
+        },
+        "asin": { args, mode in
+            guard args.count == 1, case .scalar(let s) = args[0] else { throw MathError.typeMismatch(expected: "Scalar", found: args.first?.typeName ?? "none") }
+            let a = asin(s); return .scalar(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "acos": { args, mode in
+            guard args.count == 1, case .scalar(let s) = args[0] else { throw MathError.typeMismatch(expected: "Scalar", found: args.first?.typeName ?? "none") }
+            let a = acos(s); return .scalar(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "atan": { args, mode in
+            guard args.count == 1, case .scalar(let s) = args[0] else { throw MathError.typeMismatch(expected: "Scalar", found: args.first?.typeName ?? "none") }
+            let a = atan(s); return .scalar(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "atan2": { args, mode in
+            guard args.count == 2, case .scalar(let y) = args[0], case .scalar(let x) = args[1] else { throw MathError.typeMismatch(expected: "Two Scalars (y, x)", found: "other") }
+            let a = Foundation.atan2(y, x); return .scalar(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "arg": { args, mode in
+            guard args.count == 1, case .complex(let c) = args[0] else { throw MathError.typeMismatch(expected: "Complex", found: args.first?.typeName ?? "none") }
+            let a = c.argument(); return .scalar(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "angle": { args, mode in
+            guard args.count == 2, case .vector(let v1) = args[0], case .vector(let v2) = args[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "other") }
             let angleRad = try v1.angle(with: v2)
             return .scalar(mode == .degrees ? angleRad * 180 / .pi : angleRad)
         }
@@ -199,6 +228,24 @@ extension Evaluator {
             let rows = Int(rows_s); let cols = Int(cols_s)
             let values = (0..<(rows * cols)).map { _ in Double.random(in: 0...1) }
             return .matrix(Matrix(values: values, rows: rows, columns: cols))
+        },
+        "mod": { a, b in
+            guard case .scalar(let n1) = a, case .scalar(let n2) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }
+            guard n2 != 0 else { throw MathError.divisionByZero }
+            return .scalar(n1 - n2 * floor(n1 / n2))
+        },
+        "gcd": { a, b in
+            guard case .scalar(let n1) = a, case .scalar(let n2) = b, n1.truncatingRemainder(dividingBy: 1) == 0, n2.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.unsupportedOperation(op: "gcd", typeA: "arguments must be integers", typeB: nil)
+            }
+            return .scalar(performGcd(abs(n1), abs(n2)))
+        },
+        "lcm": { a, b in
+            guard case .scalar(let n1) = a, case .scalar(let n2) = b, n1.truncatingRemainder(dividingBy: 1) == 0, n2.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.unsupportedOperation(op: "lcm", typeA: "arguments must be integers", typeB: nil)
+            }
+            if n1 == 0 || n2 == 0 { return .scalar(0) }
+            return .scalar(abs(n1 * n2) / performGcd(abs(n1), abs(n2)))
         }
     ]
 
@@ -208,12 +255,15 @@ extension Evaluator {
         var usedAngle = false
         if node.name == "grad" { return try evaluateGradFunction(node, variables: &variables, functions: &functions, angleMode: angleMode) }
         
-        if node.name == "angle" {
-            guard node.arguments.count == 2 else { throw MathError.incorrectArgumentCount(function: "angle", expected: "2", found: node.arguments.count) }
-            let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
-            let (arg2, arg2UsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
-            let result = try Evaluator.angleAwareFunctions["angle"]?(.tuple([arg1, arg2]), angleMode)
-            return (result!, true || arg1UsedAngle || arg2UsedAngle)
+        if let angleFunc = Evaluator.angleAwareFunctions[node.name] {
+            var args: [MathValue] = []
+            var argsUsedAngle = false
+            for argNode in node.arguments {
+                let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
+                args.append(arg)
+                argsUsedAngle = argsUsedAngle || argUsedAngle
+            }
+            return (try angleFunc(args, angleMode), true || argsUsedAngle)
         }
 
         if let variadicFunc = Evaluator.variadicFunctions[node.name] {
@@ -245,12 +295,6 @@ extension Evaluator {
             return (try twoArgFunc(arg1, arg2), arg1UsedAngle || arg2UsedAngle)
         }
         
-        if let angleFunc = Evaluator.angleAwareFunctions[node.name] {
-            guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "1", found: node.arguments.count) }
-            let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
-            return (try angleFunc(arg, angleMode), true || argUsedAngle)
-        }
-
         if let scalarFunc = Evaluator.scalarFunctions[node.name] {
             guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "1", found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
@@ -427,7 +471,7 @@ extension Evaluator {
         switch op { case "+": return try l + r; case "-": return try l - r; case "*": return try l * r; case ".*": return try l.hadamard(with: r); case "./": return try l.hadamardDivision(with: r); default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Matrix") }
     }
     private func performComplexVectorComplexOp(_ op: String, _ v: ComplexVector, _ c: Complex, reversed: Bool = false) throws -> ComplexVector {
-        if reversed {
+         if reversed {
             switch op { case "+": return ComplexVector(values: v.values.map { c + $0 }); case "*": return ComplexVector(values: v.values.map { c * $0 }); case "-": return ComplexVector(values: v.values.map { c - $0 }); default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex") }
         } else {
             switch op { case "+": return v + c; case "*": return v * c; case "-": return v - c; case "/": return try v / c; default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex") }
@@ -475,3 +519,12 @@ fileprivate func performStatisticalOperation(args: [MathValue], on operation: (V
     }
 }
 
+/// Helper function for gcd, using Euclidean algorithm.
+fileprivate func performGcd(_ a: Double, _ b: Double) -> Double {
+    let r = a.truncatingRemainder(dividingBy: b)
+    if r != 0 {
+        return performGcd(b, r)
+    } else {
+        return abs(b)
+    }
+}
