@@ -520,15 +520,16 @@ struct ComplexMatrix: Equatable, Codable {
     static func / (lhs: ComplexMatrix, rhs: Complex) throws -> ComplexMatrix { return try ComplexMatrix(values: lhs.values.map { try $0 / rhs }, rows: lhs.rows, columns: lhs.columns) }
 }
 
-enum MathValue: Codable {
+enum MathValue: Codable, Equatable {
     case scalar(Double); case complex(Complex); case vector(Vector); case matrix(Matrix); case tuple([MathValue]); case functionDefinition(String); case complexVector(ComplexVector); case complexMatrix(ComplexMatrix); case polar(Complex)
     case regressionResult(slope: Double, intercept: Double)
-    case polynomialFit(coefficients: Vector) // New case for polyfit results
+    case polynomialFit(coefficients: Vector)
     case plot(PlotData)
+    case triggerCSVImport // This is a non-codable, transient value used as a signal.
 
     var typeName: String {
         switch self {
-        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"
+        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"
         }
     }
     
@@ -555,6 +556,9 @@ enum MathValue: Codable {
             try container.encode(coeffs, forKey: .coefficients)
         case .plot:
             try container.encode("plot", forKey: .type)
+        case .triggerCSVImport:
+            // This case should not be encoded. If it is, something is wrong.
+            throw EncodingError.invalidValue(self, .init(codingPath: [], debugDescription: "triggerCSVImport is a transient value and should not be saved."))
         }
     }
 
@@ -590,8 +594,16 @@ enum MathValue: Codable {
         case (.scalar(let a), .scalar(let b)): return a == b
         case (.complex(let a), .complex(let b)): return a == b
         case (.vector(let a), .vector(let b)): return a == b
-        // ... other cases
-        case (.plot, .plot): return false // Or compare based on content if needed
+        case (.matrix(let a), .matrix(let b)): return a == b
+        case (.tuple(let a), .tuple(let b)): return a == b
+        case (.functionDefinition(let a), .functionDefinition(let b)): return a == b
+        case (.complexVector(let a), .complexVector(let b)): return a == b
+        case (.complexMatrix(let a), .complexMatrix(let b)): return a == b
+        case (.polar(let a), .polar(let b)): return a == b
+        case (.regressionResult(let s1, let i1), .regressionResult(let s2, let i2)): return s1 == s2 && i1 == i2
+        case (.polynomialFit(let c1), .polynomialFit(let c2)): return c1 == c2
+        case (.plot(let d1), .plot(let d2)): return d1 == d2
+        case (.triggerCSVImport, .triggerCSVImport): return true
         default: return false
         }
     }
@@ -605,3 +617,4 @@ extension MathValue {
         return s
     }
 }
+

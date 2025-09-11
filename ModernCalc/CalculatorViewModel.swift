@@ -32,6 +32,10 @@ class CalculatorViewModel: ObservableObject {
     @Published var plotViewModels: [PlotViewModel] = []
     @Published var plotToShow: PlotData.ID? = nil
     
+    // For managing CSV import window
+    @Published var csvViewModel: CSVViewModel? = nil
+    @Published var showCSVView: Bool = false
+    
     private var settings: UserSettings
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
@@ -40,7 +44,6 @@ class CalculatorViewModel: ObservableObject {
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
-    // --- CHANGE: Added properties to cache the last calculated state ---
     private var lastCalculatedExpression: String?
     private var lastCalculatedAngleMode: AngleMode?
     
@@ -87,6 +90,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "grad", signature: "grad(f, pointVector)", description: "Calculates the gradient of a multivariable function 'f' at a specific point."),
         .init(name: "hypot", signature: "hypot(sideA, sideB)", description: "Calculates the hypotenuse of a right triangle."),
         .init(name: "imag", signature: "imag(complex)", description: "Extracts the imaginary part of a complex number."),
+        .init(name: "importcsv", signature: "importcsv()", description: "Opens a file dialog to import data from a CSV file."),
         .init(name: "integral", signature: "integral(expr, var, from, to)", description: "Calculates the total area under a function's curve between two points."),
         .init(name: "inv", signature: "inv(matrix)", description: "Calculates the inverse of a square matrix."),
         .init(name: "isprime", signature: "isprime(integer)", description: "Checks if an integer is a prime number. Returns 1 for true, 0 for false."),
@@ -166,7 +170,7 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
         .init(title: "Linear Algebra", content: "Solve systems of linear equations of the form `Ax = b` with `linsolve(A, b)`. Standard matrix operations like inverse (`inv`), determinant (`det`), and trace (`trace`) are also available."),
-        .init(title: "Plotting & Data Analysis", content: "**Function Plotting:** Use `autoplot(sin(x))` for quick graphs, or `plot(expr, var, x_min, x_max)` for detailed control. \n**Scatter Plots:** Visualize data with `scatterplot(x_vector, y_vector)`. You can add an optional third argument for the degree of a polynomial fit, e.g., `scatterplot(x, y, 1)` for a linear fit or `scatterplot(x, y, 2)` for a quadratic fit. \n**Regression:** Use `polyfit(x_vector, y_vector, degree)` to get the coefficients of a best-fit polynomial."),
+        .init(title: "Plotting & Data Analysis", content: "**Function Plotting:** Use `autoplot(sin(x))` for quick graphs, or `plot(expr, var, x_min, x_max)` for detailed control. \n**Scatter Plots:** Visualize data with `scatterplot(x_vector, y_vector)`. You can add an optional third argument for the degree of a polynomial fit, e.g., `scatterplot(x, y, 1)` for a linear fit or `scatterplot(x, y, 2)` for a quadratic fit. \n**Data Import:** Use `importcsv()` to open a file dialog and import numerical data into an interactive table. From there, you can assign columns or the entire dataset to variables.\n**Regression:** Use `polyfit(x_vector, y_vector, degree)` to get the coefficients of a best-fit polynomial."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
         .init(title: "Statistics & Number Theory", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, and `variance`. Generate datasets using `range` or `linspace`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
     ]
@@ -201,7 +205,6 @@ class CalculatorViewModel: ObservableObject {
         ]
         self.constantSymbols = physicalConstants.map { .init(symbol: $0.symbol, name: $0.name, insertionText: $0.symbol) }
         
-        // --- CHANGE: Modified publisher logic to avoid wasteful calculations ---
         Publishers.CombineLatest3($rawExpression, $cursorPosition, $angleMode)
             .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
             .sink { [weak self] (expression, position, angle) in
@@ -217,8 +220,6 @@ class CalculatorViewModel: ObservableObject {
                     return
                 }
                 
-                // If expression and angle are unchanged, only update contextual help and stop.
-                // This prevents re-calculating when only the cursor position changes (e.g., arrow keys).
                 if expression == self.lastCalculatedExpression && angle == self.lastCalculatedAngleMode {
                     self.liveHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
                     return
@@ -226,7 +227,6 @@ class CalculatorViewModel: ObservableObject {
                 
                 Task {
                     await self.calculate(expression: expression, cursor: position)
-                    // Cache the expression and angle mode that were just calculated.
                     self.lastCalculatedExpression = expression
                     self.lastCalculatedAngleMode = angle
                 }
@@ -377,18 +377,14 @@ class CalculatorViewModel: ObservableObject {
     }
     
     func commitCalculation() -> PlotData? {
-        // If a history item is currently selected via keyboard navigation...
         if let selectedId = navigationManager.selectedHistoryId, let selectedItem = history.first(where: { $0.id == selectedId }) {
 
-            // ACTION 1: Check for a plot. This is a special action that doesn't insert text.
             if case .plot(let plotData) = selectedItem.result {
                 resetNavigation()
                 requestOpenPlotWindow(for: plotData)
-                return nil // Action is complete.
+                return nil
             }
 
-            // ACTION 2: For everything else, get the text from the preview and insert it.
-            // This ensures that what the user sees highlighted is what gets inserted.
             let textToInsert = self.previewText
             resetNavigation()
             
@@ -396,11 +392,15 @@ class CalculatorViewModel: ObservableObject {
                 self.insertTextAtCursor(textToInsert)
             }
             
-            return nil // Action is complete.
+            return nil
 
         } else {
-            // If no history item is selected, proceed with committing the new expression from the input field.
-            guard !rawExpression.isEmpty, let valueToCommit = lastSuccessfulValue else { return nil }
+            guard !rawExpression.isEmpty, let valueToCommit = lastSuccessfulValue else {
+                 if rawExpression == "importcsv()" {
+                     _ = openCSVFile()
+                 }
+                return nil
+            }
             
             var plotDataToReturn: PlotData?
             let calcType: CalculationType
@@ -409,6 +409,9 @@ class CalculatorViewModel: ObservableObject {
                 calcType = .plot
                 addPlotViewModel(for: plotData)
                 plotDataToReturn = plotData
+            } else if case .triggerCSVImport = valueToCommit {
+                openCSVFile()
+                return nil
             } else if valueToCommit.typeName == "FunctionDefinition" {
                 calcType = .functionDefinition
             } else if rawExpression.contains(":=") {
@@ -430,6 +433,34 @@ class CalculatorViewModel: ObservableObject {
             return plotDataToReturn
         }
     }
+    
+    private func openCSVFile() -> Bool {
+         let openPanel = NSOpenPanel()
+         openPanel.allowedContentTypes = [.commaSeparatedText]
+         openPanel.allowsMultipleSelection = false
+         openPanel.canChooseDirectories = false
+         openPanel.canChooseFiles = true
+
+         if openPanel.runModal() == .OK {
+             if let url = openPanel.url {
+                 do {
+                     let content = try String(contentsOf: url, encoding: .utf8)
+                     let parser = CSVParser(content: content)
+                     let (headers, grid) = try parser.parse()
+                     let csvData = CSVData(fileName: url.lastPathComponent, headers: headers, grid: grid)
+                     
+                     self.csvViewModel = CSVViewModel(csvData: csvData, mainViewModel: self)
+                     self.showCSVView = true
+                     
+                 } catch {
+                     // In a real app, you would show this error to the user.
+                     print("Error reading or parsing CSV file: \(error.localizedDescription)")
+                 }
+                 return true
+             }
+         }
+         return false
+     }
 
     func handleKeyPress(keys: Set<KeyEquivalent>) -> Bool {
         if let selectedText = navigationManager.handleKeyPress(keys: keys, history: history, viewModel: self) {
@@ -513,26 +544,36 @@ class CalculatorViewModel: ObservableObject {
 
     func formatForHistory(_ value: MathValue) -> String {
         switch value {
-        case .scalar(let d): return formatScalarForDisplay(d); case .complex(let c): return formatComplexForDisplay(c); case .vector(let v): return formatVectorForDisplay(v)
-        case .matrix(let m): return formatMatrixForDisplay(m); case .tuple(let t): return t.map { formatForHistory($0) }.joined(separator: " OR ")
-        case .complexVector(let cv): return formatComplexVectorForDisplay(cv); case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm)
-        case .functionDefinition: return ""; case .polar(let p): return formatPolarForDisplay(p); case .regressionResult(let s, let i): return "m = \(formatScalarForDisplay(s)), b = \(formatScalarForDisplay(i))"
+        case .scalar(let d): return formatScalarForDisplay(d)
+        case .complex(let c): return formatComplexForDisplay(c)
+        case .vector(let v): return formatVectorForDisplay(v)
+        case .matrix(let m): return formatMatrixForDisplay(m)
+        case .tuple(let t): return t.map { formatForHistory($0) }.joined(separator: " OR ")
+        case .complexVector(let cv): return formatComplexVectorForDisplay(cv)
+        case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm)
+        case .functionDefinition: return ""
+        case .polar(let p): return formatPolarForDisplay(p)
+        case .regressionResult(let s, let i): return "m = \(formatScalarForDisplay(s)), b = \(formatScalarForDisplay(i))"
         case .polynomialFit(let coeffs): return DisplayFormatter.formatPolynomialEquation(coeffs: coeffs)
         case .plot(let plotData): return "Plot: \(plotData.expression)"
+        case .triggerCSVImport: return "Importing CSV..."
         }
     }
     
     func formatForParsing(_ value: MathValue) -> String {
         switch value {
-        case .scalar(let d): return formatScalarForParsing(d); case .complex(let c): return formatComplexForParsing(c)
+        case .scalar(let d): return formatScalarForParsing(d)
+        case .complex(let c): return formatComplexForParsing(c)
         case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
         case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: ",") }.joined(separator: ";")))"
         case .tuple(let t): return t.map { formatForParsing($0) }.first ?? ""
         case .complexVector(let cv): return "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: ",") }.joined(separator: ";")))"
-        case .functionDefinition: return ""; case .polar(let p): return formatPolarForParsing(p)
+        case .functionDefinition: return ""
+        case .polar(let p): return formatPolarForParsing(p)
         case .regressionResult, .polynomialFit: return "" // Not meant to be parsed back
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
+        case .triggerCSVImport: return "importcsv()"
         }
     }
 

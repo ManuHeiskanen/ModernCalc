@@ -93,6 +93,10 @@ struct ScatterplotNode: ExpressionNode {
     var description: String { "scatterplot(\(arguments.map { $0.description }.joined(separator: ", ")))" }
 }
 
+struct ImportCSVNode: ExpressionNode {
+    var description: String { "importcsv()" }
+}
+
 
 
 // --- PARSER ---
@@ -233,6 +237,7 @@ class Parser {
                 case "autoplot": return try parseAutoplot()
                 case "plot": return try parsePlot()
                 case "scatterplot": return try parseScatterplot()
+                case "importcsv": return try parseImportCSV()
                 default: return try parseFunctionCall(name: name)
                 }
             } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
@@ -370,6 +375,18 @@ class Parser {
         }
         
         return ScatterplotNode(arguments: arguments)
+    }
+
+    private func parseImportCSV() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for importcsv call"))
+        
+        // Ensure there are no arguments inside the parentheses.
+        if let nextToken = peek(), nextToken.type != .paren(")") {
+             throw ParserError.incorrectArgumentCount(function: "importcsv", expected: "0", found: 1)
+        }
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' for importcsv call"))
+        return ImportCSVNode()
     }
 
     private func parseDerivative() throws -> ExpressionNode {
@@ -585,3 +602,4 @@ class Parser {
         try advance()
     }
 }
+

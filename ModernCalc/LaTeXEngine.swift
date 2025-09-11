@@ -225,6 +225,9 @@ struct LaTeXEngine {
         case let plotNode as PlotNode:
             let expressions = plotNode.expressions.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: ", ")
             return "\\text{plot}(\(expressions))"
+            
+        case is ImportCSVNode:
+             return "\\text{importcsv()}"
 
         case is TupleNode:
             return ""
@@ -287,6 +290,8 @@ struct LaTeXEngine {
         case .plot(let plotData):
             let expression = plotData.expression.replacingOccurrences(of: "*", with: "\\cdot")
             return "\\text{Plot: \(expression)}"
+        case .triggerCSVImport:
+            return "\\text{...}"
         }
     }
 

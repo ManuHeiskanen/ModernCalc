@@ -299,6 +299,9 @@ struct Evaluator {
         case let scatterNode as ScatterplotNode:
             return try (evaluateScatterplot(scatterNode, variables: &variables, functions: &functions), false)
 
+        case is ImportCSVNode:
+            return (.triggerCSVImport, false)
+
         default:
             throw MathError.invalidNode
         }

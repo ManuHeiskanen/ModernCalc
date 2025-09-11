@@ -11,7 +11,6 @@ struct ContentView: View {
     @StateObject var viewModel: CalculatorViewModel
     
     @FocusState private var isInputFocused: Bool
-    // This state remains to control the sheet, a new environment variable handles windows.
     @State private var isShowingSheet = false
     @Environment(\.openWindow) private var openWindow
     
@@ -39,7 +38,6 @@ struct ContentView: View {
                 errorText: viewModel.liveErrorText,
                 greekSymbols: viewModel.greekSymbols
             )
-            // --- CHANGE: Use the new 'isTallExpression' property for dynamic height ---
             .frame(height: viewModel.isTallExpression ? 100 : 60)
             .animation(.easeInOut(duration: 0.25), value: viewModel.isTallExpression)
             Divider()
@@ -78,6 +76,13 @@ struct ContentView: View {
             }
             .sheet(isPresented: $isShowingSheet) {
                 VariableEditorView(viewModel: viewModel, settings: settings)
+            }
+            // --- ADDED: Sheet modifier for the CSV view ---
+            .sheet(isPresented: $viewModel.showCSVView) {
+                if let csvViewModel = viewModel.csvViewModel {
+                    // Present the CSVView with its dedicated view model.
+                    CSVView(viewModel: csvViewModel)
+                }
             }
         }
         .frame(minWidth: 410, minHeight: 300)
@@ -121,6 +126,7 @@ struct HistoryView: View {
     
     @Binding var isShowingSheet: Bool
     @State private var isHoveringOnMenuButton = false
+    @State private var isHoveringOnCSVButton = false // --- ADDED: Hover state for new button ---
     
     @State private var lastAddedId: UUID?
     @State private var hoveredItem: (id: UUID, part: SelectionPart)?
@@ -260,8 +266,8 @@ struct HistoryView: View {
             }
             .frame(maxHeight: .infinity)
             
-            VStack {
-                HStack {
+            VStack(alignment: .leading) {
+                HStack(spacing: 8) {
                     Button(action: { isShowingSheet = true }) {
                         Image(systemName: "ellipsis.circle.fill")
                             .font(.system(size: 24))
@@ -277,11 +283,35 @@ struct HistoryView: View {
                             isHoveringOnMenuButton = hovering
                         }
                     }
-                    .padding(.leading, 8)
-                    .padding(.top, 6)
                     
-                    Spacer()
+                    // --- ADDED: CSV Import Button ---
+                    Button(action: {
+                        viewModel.rawExpression = "importcsv()"
+                        _ = viewModel.commitCalculation()
+                    }) {
+                        Text(".csv")
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color.primary.opacity(isHoveringOnCSVButton ? 0.1 : 0))
+                    .cornerRadius(8)
+                    .scaleEffect(isHoveringOnCSVButton ? 1.05 : 1.0)
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isHoveringOnCSVButton = hovering
+                        }
+                    }
                 }
+                .padding(.leading, 8)
+                .padding(.top, 6)
+                
                 Spacer()
             }
 

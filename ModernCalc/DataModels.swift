@@ -37,9 +37,9 @@ struct Calculation: Identifiable, Hashable {
     }
 }
 
-// MARK: - Plotting Models (Updated for Multiple Functions)
+// MARK: - Plotting Models
 
-// Represents a single function line on the chart.
+// Represents a single function line or data series on a chart.
 struct PlotSeries: Identifiable {
     let id = UUID()
     let name: String
@@ -56,9 +56,7 @@ struct PlotSeries: Identifiable {
 // Represents the complete set of data for a plot window.
 struct PlotData: Identifiable, Hashable {
     let id = UUID()
-    // The original, full expression string like "plot(x^2, sin(x))"
     let expression: String
-    // An array of series, one for each function to be plotted.
     var series: [PlotSeries]
     let plotType: PlotType
     let explicitYRange: (min: Double, max: Double)?
@@ -93,6 +91,16 @@ enum PlotType {
     case parametric
     case vector
     case scatter
+}
+
+// MARK: - CSV Data Model
+
+// Represents the entire state of an imported CSV file.
+struct CSVData: Identifiable {
+    let id = UUID()
+    let fileName: String
+    let headers: [String]
+    let grid: [[String]] // A 2D array of the raw string data from the file.
 }
 
 
