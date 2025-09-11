@@ -109,8 +109,7 @@ struct ContentView: View {
                     }
                     
                     Button(action: {
-                        viewModel.rawExpression = "importcsv()"
-                        _ = viewModel.commitCalculation()
+                        viewModel.triggerCSVImport()
                     }) {
                         Text(".csv")
                             .font(.system(size: 14, weight: .bold, design: .monospaced))

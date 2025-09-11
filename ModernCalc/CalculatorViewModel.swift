@@ -236,6 +236,10 @@ class CalculatorViewModel: ObservableObject {
         loadState()
     }
     
+    func triggerCSVImport() {
+        _ = openCSVFile()
+    }
+    
     func addPlotViewModel(for plotData: PlotData) {
         if !plotViewModels.contains(where: { $0.plotData.id == plotData.id }) {
             let newPlotViewModel = PlotViewModel(plotData: plotData)
