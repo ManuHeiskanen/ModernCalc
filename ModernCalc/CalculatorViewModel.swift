@@ -414,7 +414,10 @@ class CalculatorViewModel: ObservableObject {
                 addPlotViewModel(for: plotData)
                 plotDataToReturn = plotData
             } else if case .triggerCSVImport = valueToCommit {
-                openCSVFile()
+                Task {
+                    self.rawExpression = ""
+                    _ = openCSVFile() // this is needed for opencsv() command
+                }
                 return nil
             } else if valueToCommit.typeName == "FunctionDefinition" {
                 calcType = .functionDefinition

@@ -23,31 +23,39 @@ class CSVViewModel: ObservableObject {
     // --- UI State Properties ---
     @Published var matrixVariableName: String = ""
     @Published var selectedColumns: [Bool]
-    @Published var useFirstRowAsHeader: Bool = true {
-        didSet { updateInfoMessage() }
-    }
+    @Published var useFirstRowAsHeader: Bool = true
+    @Published var errorMessage: String? = nil
+    
+    // --- MODIFIED: Row properties now use didSet for robust validation ---
     @Published var startRow: Int = 1 {
         didSet {
-            // Ensure start row is not greater than end row
-            if startRow > endRow { endRow = startRow }
-            updateInfoMessage()
+            // After startRow changes, ensure it's at least 1.
+            if startRow <= 0 {
+                startRow = 1
+            }
+            // If the new startRow is greater than endRow, endRow must be adjusted.
+            if startRow > endRow {
+                endRow = startRow
+            }
         }
     }
     @Published var endRow: Int {
         didSet {
-            // Ensure end row is not less than start row
-            if endRow < startRow { startRow = endRow }
-            updateInfoMessage()
+            // After endRow changes, ensure it's not less than startRow.
+            // If it is, revert to the previous valid value to prevent an invalid state.
+            if endRow < startRow {
+                endRow = oldValue
+            }
         }
     }
-    @Published var infoMessage: String = ""
-
-    // --- Computed Properties for TextField Bindings ---
-    // These act as a bridge between the Int model values and the String UI values.
+    
+    // --- MODIFIED: Computed properties are now simpler bridges ---
     var startRowString: String {
         get { "\(startRow)" }
         set {
-            if let value = Int(newValue), value > 0 {
+            // The setter now just attempts to update the underlying Int property.
+            // The validation logic is handled by the property's `didSet` observer.
+            if let value = Int(newValue) {
                 startRow = value
             }
         }
@@ -56,7 +64,7 @@ class CSVViewModel: ObservableObject {
     var endRowString: String {
         get { "\(endRow)" }
         set {
-            if let value = Int(newValue), value >= startRow {
+            if let value = Int(newValue) {
                 endRow = value
             }
         }
@@ -72,9 +80,6 @@ class CSVViewModel: ObservableObject {
         // Initialize state properties
         self.endRow = totalRows
         self.selectedColumns = Array(repeating: true, count: csvData.headers.count)
-        
-        // Set the initial info message
-        updateInfoMessage()
     }
     
     // --- Computed Properties for Display ---
@@ -101,7 +106,7 @@ class CSVViewModel: ObservableObject {
         
         let slicedGrid = Array(fullGrid[startIndex..<endIndex])
         
-        // --- FIX: Apply formatting to the sliced data ---
+        // Apply formatting to the sliced data
         return slicedGrid.map { row in
             row.map { cell in
                 formatCell(cell) // Format each cell before displaying it
@@ -109,24 +114,44 @@ class CSVViewModel: ObservableObject {
         }
     }
     
+    /// A computed property for the informational message at the bottom of the view.
+    var infoMessage: String {
+        // If there's an error message, display it instead of the info message.
+        if let error = errorMessage {
+            return error
+        }
+        
+        let fullGrid = useFirstRowAsHeader ? sourceData.grid : [sourceData.headers] + sourceData.grid
+        
+        let validStart = max(1, startRow)
+        let validEnd = min(fullGrid.count, endRow)
+        
+        let rowsToImport = max(0, (validEnd - validStart) + 1)
+        return "Will import \(rowsToImport) rows."
+    }
+    
     // MARK: - Intents
     
     /// Assigns the selected columns as a single matrix to the main calculator view model.
     func assignMatrix() {
+        // Clear any previous error messages when trying to assign again.
+        errorMessage = nil
+        
         guard let mainVM = mainViewModel else {
-            infoMessage = "Error: Could not access calculator."
+            // This is a programmatic error.
+            print("Error: Could not access calculator.")
             return
         }
         
         let trimmedVarName = matrixVariableName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedVarName.isEmpty else {
-            infoMessage = "Error: Please enter a name for the matrix."
+            errorMessage = "Error: Please enter a matrix name."
             return
         }
 
         let numberOfSelectedColumns = selectedColumns.filter { $0 }.count
         guard numberOfSelectedColumns > 0 else {
-            infoMessage = "Error: No columns selected for the matrix."
+            errorMessage = "Error: No columns selected."
             return
         }
 
@@ -136,7 +161,7 @@ class CSVViewModel: ObservableObject {
         let endIndex = min(dataToProcess.count, endRow)
         
         guard startIndex < endIndex else {
-            infoMessage = "Error: Invalid row range."
+            errorMessage = "Error: Invalid row range."
             return
         }
         
@@ -163,26 +188,12 @@ class CSVViewModel: ObservableObject {
         let matrix = Matrix(values: matrixValues, rows: slicedRows.count, columns: numberOfSelectedColumns)
         mainVM.variables[trimmedVarName] = .matrix(matrix)
         
-        infoMessage = "Assigned \(trimmedVarName) as a \(matrix.rows)x\(matrix.columns) matrix."
-        
         // Hide the window after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             mainVM.showCSVView = false
         }
     }
     
-    /// Updates the informational message at the bottom of the view.
-    private func updateInfoMessage() {
-        let fullGrid = useFirstRowAsHeader ? sourceData.grid : [sourceData.headers] + sourceData.grid
-        
-        let validStart = max(1, startRow)
-        let validEnd = min(fullGrid.count, endRow)
-        
-        let rowsToImport = max(0, (validEnd - validStart) + 1)
-        infoMessage = "Will import \(rowsToImport) rows."
-    }
-    
-    // --- FIX: New helper function to format cell values based on settings ---
     /// Formats a string value from a cell if it's a number and rounding is enabled.
     private func formatCell(_ value: String) -> String {
         guard settings.enableCSVRounding,
