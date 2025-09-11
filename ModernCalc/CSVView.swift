@@ -42,21 +42,45 @@ struct CSVView: View {
     }
     
     /// A computed property for the main data grid's content.
-    /// Breaking this out helps the Swift compiler avoid "unable to type-check" errors.
+    /// This has been updated to use a single ForEach loop to prevent duplicate view IDs.
+    @ViewBuilder
     private var gridContent: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: cellMinWidth)), count: viewModel.headers.count), spacing: 0) {
-            // Iterate over the rows of the displayable grid data.
-            ForEach(0..<viewModel.displayGrid.count, id: \.self) { rowIndex in
-                // For each row, iterate over the columns.
-                let row = viewModel.displayGrid[rowIndex]
-                ForEach(0..<row.count, id: \.self) { colIndex in
-                    Text(row[colIndex])
-                        .padding(cellPadding)
-                        .frame(minWidth: cellMinWidth, alignment: .leading)
-                        .background(rowIndex % 2 == 0 ? Color.clear : Color.primary.opacity(0.05))
-                        .border(Color.gray.opacity(0.2), width: 0.5)
+        let columnCount = viewModel.headers.count
+        
+        // A LazyVGrid requires a non-zero number of columns to be initialized.
+        if columnCount > 0 {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: cellMinWidth)), count: columnCount), spacing: 0) {
+                let rowCount = viewModel.displayGrid.count
+                
+                // We iterate over a single, unique range from 0 to the total number of cells.
+                // This provides a unique ID (\.self, i.e., the index) for each cell view,
+                // which resolves the "ID used by multiple child views" error.
+                ForEach(0..<(rowCount * columnCount), id: \.self) { index in
+                    // Calculate the row and column from the flat index.
+                    let rowIndex = index / columnCount
+                    let colIndex = index % columnCount
+                    
+                    // This defensive check handles jagged data (rows with inconsistent column counts)
+                    // and prevents the app from crashing.
+                    if rowIndex < viewModel.displayGrid.count && colIndex < viewModel.displayGrid[rowIndex].count {
+                        Text(viewModel.displayGrid[rowIndex][colIndex])
+                            .padding(cellPadding)
+                            .frame(minWidth: cellMinWidth, alignment: .leading)
+                            .background(rowIndex % 2 == 0 ? Color.clear : Color.primary.opacity(0.05))
+                            .border(Color.gray.opacity(0.2), width: 0.5)
+                    } else {
+                        // If data is missing for a cell, display an empty placeholder
+                        // to keep the grid aligned correctly.
+                        Text("")
+                            .padding(cellPadding)
+                            .frame(minWidth: cellMinWidth, alignment: .leading)
+                            .border(Color.gray.opacity(0.2), width: 0.5)
+                    }
                 }
             }
+        } else {
+            Text("No data to display.")
+                .padding()
         }
     }
     
@@ -118,3 +142,4 @@ struct CSVView: View {
         .background(.bar)
     }
 }
+
