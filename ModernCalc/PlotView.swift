@@ -105,17 +105,16 @@ struct PlotView: View {
     @ChartContentBuilder
     private func scatterPlotContent() -> some ChartContent {
         ForEach(viewModel.plotData.series) { series in
-            if series.name == "Linear Fit" {
+            if series.name.contains("Fit") {
                 // Trendline
                 ForEach(series.dataPoints) { point in
                     LineMark(
                         x: .value("X", point.x),
                         y: .value("Y", point.y)
                     )
-                    .interpolationMethod(.linear)
+                    .interpolationMethod(.catmullRom) // Use CatmullRom for smooth curves
                 }
                 .lineStyle(StrokeStyle(lineWidth: 2, dash: [5, 5]))
-                // Use .value to create a legend entry for the fit
                 .foregroundStyle(by: .value("Data", series.name))
 
             } else {
@@ -126,7 +125,6 @@ struct PlotView: View {
                         y: .value("Y", point.y)
                     )
                 }
-                 // Use .value to create a legend entry for the data points
                 .foregroundStyle(by: .value("Data", series.name))
             }
         }
@@ -155,10 +153,8 @@ struct PlotView: View {
                 chartContent(for: viewModel.plotData.plotType)
             }
             .chartForegroundStyleScale(
-                // For scatter plots, we want specific styles, not the default color cycle.
-                // For others, we use the predefined chartColors.
                 domain: viewModel.plotData.series.map { $0.name },
-                range: viewModel.plotData.plotType == .scatter ? [.accentColor, .red] : chartColors
+                range: chartColors
             )
             .chartXScale(domain: viewModel.viewDomainX)
             .chartYScale(domain: viewModel.viewDomainY)
@@ -234,4 +230,3 @@ struct Arrowhead: Shape {
         return path
     }
 }
-

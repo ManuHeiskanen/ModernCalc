@@ -523,15 +523,16 @@ struct ComplexMatrix: Equatable, Codable {
 enum MathValue: Codable {
     case scalar(Double); case complex(Complex); case vector(Vector); case matrix(Matrix); case tuple([MathValue]); case functionDefinition(String); case complexVector(ComplexVector); case complexMatrix(ComplexMatrix); case polar(Complex)
     case regressionResult(slope: Double, intercept: Double)
-    case plot(PlotData) // New case for holding plot data
+    case polynomialFit(coefficients: Vector) // New case for polyfit results
+    case plot(PlotData)
 
     var typeName: String {
         switch self {
-        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .plot: return "Plot"
+        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"
         }
     }
     
-    enum CodingKeys: String, CodingKey { case type, value, slope, intercept, plotData }
+    enum CodingKeys: String, CodingKey { case type, value, slope, intercept, coefficients, plotData }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -549,8 +550,10 @@ enum MathValue: Codable {
             try container.encode("regressionResult", forKey: .type)
             try container.encode(slope, forKey: .slope)
             try container.encode(intercept, forKey: .intercept)
+        case .polynomialFit(let coeffs):
+            try container.encode("polynomialFit", forKey: .type)
+            try container.encode(coeffs, forKey: .coefficients)
         case .plot:
-            // Plot data is not meant to be saved, so we encode a placeholder.
             try container.encode("plot", forKey: .type)
         }
     }
@@ -572,9 +575,10 @@ enum MathValue: Codable {
             let slope = try container.decode(Double.self, forKey: .slope)
             let intercept = try container.decode(Double.self, forKey: .intercept)
             self = .regressionResult(slope: slope, intercept: intercept)
+        case "polynomialFit":
+            let coeffs = try container.decode(Vector.self, forKey: .coefficients)
+            self = .polynomialFit(coefficients: coeffs)
         case "plot":
-            // This should not happen from saved data, but we need to handle it.
-            // We'll create an empty plot as a fallback.
             self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
         }

@@ -74,6 +74,15 @@ extension Evaluator {
             for i in 0..<count { values.append(start + step * Double(i)) }
             return .vector(Vector(values: values))
         },
+        "polyfit": { args in
+            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "polyfit", expected: "3", found: args.count) }
+            guard case .vector(let xVec) = args[0], case .vector(let yVec) = args[1] else {
+                throw MathError.typeMismatch(expected: "Vector, Vector, Scalar", found: "\(args[0].typeName), \(args[1].typeName), \(args[2].typeName)")
+            }
+            let degree = try args[2].asScalar()
+            let coeffs = try performPolynomialFit(x: xVec, y: yVec, degree: degree)
+            return .polynomialFit(coefficients: coeffs)
+        },
         "random": { args in
             switch args.count {
             case 0: return .scalar(Double.random(in: 0...1))
@@ -608,55 +617,6 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
 }
 
 // MARK: - New Algorithms
-
-/// Solves a system of linear equations Ax = b using Gaussian elimination with partial pivoting.
-fileprivate func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
-    guard A.rows == A.columns else { throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve.") }
-    let n = A.rows
-    guard b.dimension == n else { throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A.") }
-
-    var augmentedMatrix: [[Double]] = []
-    for i in 0..<n {
-        var row = (0..<n).map { A[i, $0] }
-        row.append(b[i])
-        augmentedMatrix.append(row)
-    }
-
-    // Forward elimination with partial pivoting
-    for i in 0..<n {
-        var maxRow = i
-        for k in (i + 1)..<n {
-            if abs(augmentedMatrix[k][i]) > abs(augmentedMatrix[maxRow][i]) {
-                maxRow = k
-            }
-        }
-        augmentedMatrix.swapAt(i, maxRow)
-
-        guard abs(augmentedMatrix[i][i]) > 1e-12 else {
-            throw MathError.unsupportedOperation(op: "linsolve", typeA: "Matrix is singular or nearly singular.", typeB: nil)
-        }
-
-        for k in (i + 1)..<n {
-            let factor = augmentedMatrix[k][i] / augmentedMatrix[i][i]
-            augmentedMatrix[k][i] = 0
-            for j in (i + 1)...n {
-                augmentedMatrix[k][j] -= factor * augmentedMatrix[i][j]
-            }
-        }
-    }
-
-    // Back substitution
-    var x = [Double](repeating: 0, count: n)
-    for i in (0..<n).reversed() {
-        var sum = 0.0
-        for j in (i + 1)..<n {
-            sum += augmentedMatrix[i][j] * x[j]
-        }
-        x[i] = (augmentedMatrix[i][n] - sum) / augmentedMatrix[i][i]
-    }
-
-    return Vector(values: x)
-}
 
 /// Checks if an integer is prime using optimized trial division.
 fileprivate func performIsPrime(_ n: Double) throws -> Bool {

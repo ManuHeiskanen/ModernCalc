@@ -106,6 +106,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
         .init(name: "plot", signature: "plot(expr, var, x_min, x_max, [y_min, y_max])", description: "Plots expressions over a specified range with optional y-axis limits."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
+        .init(name: "polyfit", signature: "polyfit(x_vec, y_vec, degree)", description: "Fits a polynomial of the given degree to the data points and returns the coefficients."),
         .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
         .init(name: "randm", signature: "randm(rows, cols)", description: "Creates a matrix with the specified dimensions, filled with random numbers between 0 and 1."),
         .init(name: "randv", signature: "randv(size)", description: "Creates a vector of the specified size, filled with random numbers between 0 and 1."),
@@ -113,7 +114,7 @@ class CalculatorViewModel: ObservableObject {
         .init(name: "real", signature: "real(complex)", description: "Extracts the real part of a complex number."),
         .init(name: "root", signature: "root(number, degree)", description: "Calculates the nth root of a number."),
         .init(name: "round", signature: "round(number)", description: "Rounds a number to the nearest integer."),
-        .init(name: "scatterplot", signature: "scatterplot(x_values, y_values)", description: "Creates a scatter plot from two vectors of x and y coordinates, or a single two-column matrix."),
+        .init(name: "scatterplot", signature: "scatterplot(x, y, [degree])", description: "Creates a scatter plot. Optionally fits a polynomial of the given degree (e.g., 1 for linear)."),
         .init(name: "side", signature: "side(hyp, sideA)", description: "Calculates the missing side of a right triangle."),
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
         .init(name: "sinh", signature: "sinh(value)", description: "Calculates the hyperbolic sine."),
@@ -165,9 +166,9 @@ class CalculatorViewModel: ObservableObject {
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
         .init(title: "Linear Algebra", content: "Solve systems of linear equations of the form `Ax = b` with `linsolve(A, b)`. Standard matrix operations like inverse (`inv`), determinant (`det`), and trace (`trace`) are also available."),
-        .init(title: "Plotting", content: "Create 2D plots for functions or vectors. \n- **Automatic Plotting (`autoplot`):** For quick graphs. `autoplot(sin(x))` plots a function. `autoplot(vector(3;4), vector(-1;2))` plots 2D vectors from the origin. `autoplot(cos(t), sin(t))` creates a parametric plot. \n- **Manual Plotting (`plot`):** For detailed control. `plot(x^2, x, -5, 5)` plots `x^2` for `x` from -5 to 5. You can optionally set y-axis limits: `plot(x^2, x, -5, 5, 0, 25)`. \n- **Scatter Plots (`scatterplot`):** Visualize data points with `scatterplot(x_vector, y_vector)` or `scatterplot(2_column_matrix)`. \nClicking a plot in the history will reopen its window."),
+        .init(title: "Plotting & Data Analysis", content: "**Function Plotting:** Use `autoplot(sin(x))` for quick graphs, or `plot(expr, var, x_min, x_max)` for detailed control. \n**Scatter Plots:** Visualize data with `scatterplot(x_vector, y_vector)`. You can add an optional third argument for the degree of a polynomial fit, e.g., `scatterplot(x, y, 1)` for a linear fit or `scatterplot(x, y, 2)` for a quadratic fit. \n**Regression:** Use `polyfit(x_vector, y_vector, degree)` to get the coefficients of a best-fit polynomial."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
-        .init(title: "Statistics & Random Data", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, and `linreg(x, y)`. Generate datasets using `range`, `linspace`, or the versatile `random()` function. You can also create random vectors and matrices with `randv(size)` and `randm(rows, cols)`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
+        .init(title: "Statistics & Number Theory", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, and `variance`. Generate datasets using `range` or `linspace`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
     ]
 
 
@@ -516,6 +517,7 @@ class CalculatorViewModel: ObservableObject {
         case .matrix(let m): return formatMatrixForDisplay(m); case .tuple(let t): return t.map { formatForHistory($0) }.joined(separator: " OR ")
         case .complexVector(let cv): return formatComplexVectorForDisplay(cv); case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm)
         case .functionDefinition: return ""; case .polar(let p): return formatPolarForDisplay(p); case .regressionResult(let s, let i): return "m = \(formatScalarForDisplay(s)), b = \(formatScalarForDisplay(i))"
+        case .polynomialFit(let coeffs): return formatPolyFitForDisplay(coeffs)
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         }
     }
@@ -528,7 +530,8 @@ class CalculatorViewModel: ObservableObject {
         case .tuple(let t): return t.map { formatForParsing($0) }.first ?? ""
         case .complexVector(let cv): return "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
         case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: ",") }.joined(separator: ";")))"
-        case .functionDefinition: return ""; case .polar(let p): return formatPolarForParsing(p); case .regressionResult: return ""
+        case .functionDefinition: return ""; case .polar(let p): return formatPolarForParsing(p)
+        case .regressionResult, .polynomialFit: return "" // Not meant to be parsed back
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         }
     }
@@ -569,6 +572,31 @@ class CalculatorViewModel: ObservableObject {
         let magnitude = value.abs(); let angle = value.argument()
         if self.angleMode == .degrees { let angleDegrees = angle * (180.0 / .pi); return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angleDegrees))°" }
         else { return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angle)) rad" }
+    }
+    
+    private func formatPolyFitForDisplay(_ coeffs: Vector) -> String {
+        var result = "y = "
+        for (i, coeff) in coeffs.values.enumerated().reversed() {
+            if abs(coeff) < 1e-9 && coeffs.dimension > 1 { continue } // Skip negligible coefficients
+
+            let isFirstTerm = (result == "y = ")
+            let sign = (coeff < 0) ? "-" : (isFirstTerm ? "" : "+ ")
+            let absCoeff = abs(coeff)
+
+            result += "\(sign) "
+
+            if abs(absCoeff - 1.0) > 1e-9 || i == 0 {
+                 result += "\(formatScalarForDisplay(absCoeff))"
+            }
+            
+            if i > 0 { // Power of x
+                result += "x"
+                if i > 1 {
+                    result += "^\(i)"
+                }
+            }
+        }
+        return result.replacingOccurrences(of: "+ -", with: "-")
     }
 
     private func formatVectorForDisplay(_ vector: Vector) -> String {
@@ -704,3 +732,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+

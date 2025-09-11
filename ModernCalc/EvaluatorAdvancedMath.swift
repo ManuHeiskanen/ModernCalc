@@ -210,35 +210,61 @@ extension Evaluator {
     func evaluateScatterplot(_ node: ScatterplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
         let startTime = CFAbsoluteTimeGetCurrent()
         let evaluatedArgs = try node.arguments.map { try _evaluateSingle(node: $0, variables: &variables, functions: &functions, angleMode: .radians).result }
-        let (xVector, yVector): (Vector, Vector)
         
-        if evaluatedArgs.count == 1 {
+        let xVector: Vector
+        let yVector: Vector
+        var fitDegree: Double? = nil
+        
+        // --- Argument Parsing Logic ---
+        switch evaluatedArgs.count {
+        case 1:
             guard case .matrix(let matrix) = evaluatedArgs[0] else { throw MathError.typeMismatch(expected: "Matrix", found: evaluatedArgs[0].typeName) }
             guard matrix.columns == 2 else { throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns.") }
             guard matrix.rows > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix.") }
             var xValues: [Double] = []; var yValues: [Double] = []
             for r in 0..<matrix.rows { xValues.append(matrix[r, 0]); yValues.append(matrix[r, 1]) }
             xVector = Vector(values: xValues); yVector = Vector(values: yValues)
-        } else if evaluatedArgs.count == 2 {
+
+        case 2:
             guard case .vector(let vec1) = evaluatedArgs[0], case .vector(let vec2) = evaluatedArgs[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName)") }
-            guard vec1.dimension == vec2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension.") }
-            guard vec1.dimension > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors.") }
             xVector = vec1; yVector = vec2
-        } else { throw MathError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix) or 2 (Vectors)", found: evaluatedArgs.count) }
+
+        case 3:
+            guard case .vector(let vec1) = evaluatedArgs[0], case .vector(let vec2) = evaluatedArgs[1] else { throw MathError.typeMismatch(expected: "Vector, Vector, Scalar", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName), ...") }
+            xVector = vec1; yVector = vec2
+            fitDegree = try evaluatedArgs[2].asScalar()
+
+        default:
+            throw MathError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix), 2 (Vectors), or 3 (Vectors, Degree)", found: evaluatedArgs.count)
+        }
+        
+        guard xVector.dimension == yVector.dimension else { throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension.") }
+        guard xVector.dimension > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors.") }
 
         let dataPoints = zip(xVector.values, yVector.values).map { DataPoint(x: $0, y: $1) }
         var allSeries = [PlotSeries(name: "Data Points", dataPoints: dataPoints)]
 
-        if xVector.dimension >= 2 {
-            let n = Double(xVector.dimension); let sumX = xVector.sum(); let sumY = yVector.sum(); let sumXY = try xVector.hadamard(with: yVector).sum(); let sumX2 = xVector.values.map { $0 * $0 }.reduce(0, +); let denominator = (n * sumX2 - sumX * sumX)
-            if denominator != 0 {
-                let slope = (n * sumXY - sumX * sumY) / denominator; let intercept = (sumY - slope * sumX) / n
-                if let minX = xVector.values.min(), let maxX = xVector.values.max() {
-                    let fitPoints = [DataPoint(x: minX, y: slope * minX + intercept), DataPoint(x: maxX, y: slope * maxX + intercept)]
-                    allSeries.append(PlotSeries(name: "Linear Fit", dataPoints: fitPoints))
+        // --- Fit Generation Logic ---
+        if let degree = fitDegree {
+            let coeffs = try performPolynomialFit(x: xVector, y: yVector, degree: degree)
+            
+            let minX = xVector.values.min()!
+            let maxX = xVector.values.max()!
+            let numFitPoints = 100
+            let step = (maxX - minX) / Double(numFitPoints - 1)
+            
+            let fitPoints = (0..<numFitPoints).map { i -> DataPoint in
+                let x = minX + Double(i) * step
+                let y = (0...Int(degree)).reduce(0.0) { acc, power in
+                    acc + coeffs[power] * pow(x, Double(power))
                 }
+                return DataPoint(x: x, y: y)
             }
+            
+            let fitName = (degree == 1) ? "Linear Fit" : "Poly Fit (deg=\(Int(degree)))"
+            allSeries.append(PlotSeries(name: fitName, dataPoints: fitPoints))
         }
+        
         let duration = CFAbsoluteTimeGetCurrent() - startTime
         print("[BENCHMARK] Scatterplot generation time: \(duration * 1000) ms")
         return .plot(PlotData(expression: node.description, series: allSeries, plotType: .scatter, explicitYRange: nil, generationTime: duration))
@@ -317,3 +343,83 @@ extension Evaluator {
     }
 }
 
+/// Performs a polynomial regression using the method of least squares.
+func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector {
+    guard degree >= 1 && degree.truncatingRemainder(dividingBy: 1) == 0 else {
+        throw MathError.unsupportedOperation(op: "polyfit", typeA: "degree must be an integer >= 1", typeB: nil)
+    }
+    guard x.dimension == y.dimension else {
+        throw MathError.dimensionMismatch(reason: "x and y vectors must have the same number of elements.")
+    }
+    let numPoints = x.dimension
+    let degreeInt = Int(degree)
+    guard numPoints > degreeInt else {
+        throw MathError.unsupportedOperation(op: "polyfit", typeA: "number of data points must be greater than the polynomial degree", typeB: nil)
+    }
+    
+    // Construct the Vandermonde matrix X
+    var xMatrixValues = [Double](repeating: 0, count: numPoints * (degreeInt + 1))
+    for i in 0..<numPoints {
+        for j in 0...degreeInt {
+            xMatrixValues[i * (degreeInt + 1) + j] = pow(x[i], Double(j))
+        }
+    }
+    let xMatrix = Matrix(values: xMatrixValues, rows: numPoints, columns: degreeInt + 1)
+    
+    // Solve the normal equation: (X^T * X) * c = X^T * y
+    let xT = xMatrix.transpose()
+    let aMatrix = try xT * xMatrix
+    let bVector = try xT * y
+    
+    let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
+    return coefficients
+}
+
+/// Solves a system of linear equations Ax = b using Gaussian elimination with partial pivoting.
+func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
+    guard A.rows == A.columns else { throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve.") }
+    let n = A.rows
+    guard b.dimension == n else { throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A.") }
+
+    var augmentedMatrix: [[Double]] = []
+    for i in 0..<n {
+        var row = (0..<n).map { A[i, $0] }
+        row.append(b[i])
+        augmentedMatrix.append(row)
+    }
+
+    // Forward elimination with partial pivoting
+    for i in 0..<n {
+        var maxRow = i
+        for k in (i + 1)..<n {
+            if abs(augmentedMatrix[k][i]) > abs(augmentedMatrix[maxRow][i]) {
+                maxRow = k
+            }
+        }
+        augmentedMatrix.swapAt(i, maxRow)
+
+        guard abs(augmentedMatrix[i][i]) > 1e-12 else {
+            throw MathError.unsupportedOperation(op: "linsolve", typeA: "Matrix is singular or nearly singular.", typeB: nil)
+        }
+
+        for k in (i + 1)..<n {
+            let factor = augmentedMatrix[k][i] / augmentedMatrix[i][i]
+            augmentedMatrix[k][i] = 0
+            for j in (i + 1)...n {
+                augmentedMatrix[k][j] -= factor * augmentedMatrix[i][j]
+            }
+        }
+    }
+
+    // Back substitution
+    var x = [Double](repeating: 0, count: n)
+    for i in (0..<n).reversed() {
+        var sum = 0.0
+        for j in (i + 1)..<n {
+            sum += augmentedMatrix[i][j] * x[j]
+        }
+        x[i] = (augmentedMatrix[i][n] - sum) / augmentedMatrix[i][i]
+    }
+
+    return Vector(values: x)
+}

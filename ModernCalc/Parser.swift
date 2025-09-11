@@ -353,7 +353,7 @@ class Parser {
         var arguments: [ExpressionNode] = []
         if let nextToken = peek(), case .paren(")") = nextToken.type {
             try advance()
-             throw ParserError.incorrectArgumentCount(function: "scatterplot", expected: "1 or 2", found: 0)
+             throw ParserError.incorrectArgumentCount(function: "scatterplot", expected: "1, 2, or 3", found: 0)
         }
         
         repeat {
@@ -365,8 +365,8 @@ class Parser {
         
         try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for scatterplot call"))
         
-        guard !arguments.isEmpty && arguments.count <= 2 else {
-            throw ParserError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix) or 2 (Vectors)", found: arguments.count)
+        guard !arguments.isEmpty && arguments.count <= 3 else {
+            throw ParserError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix), 2 (Vectors), or 3 (Vectors, Degree)", found: arguments.count)
         }
         
         return ScatterplotNode(arguments: arguments)

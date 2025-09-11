@@ -282,6 +282,8 @@ struct LaTeXEngine {
             let m = formatScalar(slope, settings: settings)
             let b = formatScalar(intercept, settings: settings)
             return "\\text{m = } \(m), \\text{ b = } \(b)"
+        case .polynomialFit(let coeffs):
+            return formatPolyFitForLaTeX(coeffs, settings: settings)
         case .plot(let plotData):
             let expression = plotData.expression.replacingOccurrences(of: "*", with: "\\cdot")
             return "\\text{Plot: \(expression)}"
@@ -335,6 +337,37 @@ struct LaTeXEngine {
             return formattedString.replacingOccurrences(of: ".", with: "{,}")
         }
         return formattedString
+    }
+    
+    private static func formatPolyFitForLaTeX(_ coeffs: Vector, settings: UserSettings) -> String {
+        var result = "y = "
+        for (i, coeff) in coeffs.values.enumerated().reversed() {
+            if abs(coeff) < 1e-9 && coeffs.dimension > 1 { continue }
+
+            let isFirstTerm = (result == "y = ")
+            let formattedCoeff = formatScalar(abs(coeff), settings: settings)
+            
+            // Sign
+            if !isFirstTerm {
+                result += (coeff < 0) ? " - " : " + "
+            } else if coeff < 0 {
+                result += "- "
+            }
+            
+            // Coefficient
+            if abs(abs(coeff) - 1.0) > 1e-9 || i == 0 {
+                result += formattedCoeff
+            }
+            
+            // Variable and power
+            if i > 0 {
+                result += "x"
+                if i > 1 {
+                    result += "^{\(i)}"
+                }
+            }
+        }
+        return result
     }
 
     private static func formatScientificNotation(fromString scientificString: String, using settings: UserSettings) -> String {
