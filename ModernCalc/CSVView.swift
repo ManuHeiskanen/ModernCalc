@@ -20,7 +20,7 @@ struct CSVView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // --- Header row with variable name input fields ---
+            // --- Header row with column selection toggles ---
             headerView
             
             Divider()
@@ -84,7 +84,7 @@ struct CSVView: View {
         }
     }
     
-    /// The view for the column headers and variable assignment text fields.
+    /// The view for the column headers and selection toggles.
     private var headerView: some View {
         HStack(spacing: 0) {
             ForEach(0..<viewModel.headers.count, id: \.self) { index in
@@ -93,9 +93,8 @@ struct CSVView: View {
                         .font(.headline)
                         .padding(.top, cellPadding)
                     
-                    TextField("Variable Name", text: $viewModel.columnVariableNames[index])
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding(.horizontal, 4)
+                    Toggle("Include", isOn: $viewModel.selectedColumns[index])
+                        .labelsHidden()
                         .padding(.bottom, cellPadding)
                 }
                 .frame(minWidth: cellMinWidth)
@@ -115,9 +114,11 @@ struct CSVView: View {
                 
                 Text("Import Rows:")
                 TextField("Start", text: $viewModel.startRowString)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
                     .frame(width: 50)
                 Text("to")
                 TextField("End", text: $viewModel.endRowString)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
                     .frame(width: 50)
             }
             .padding()
@@ -128,12 +129,16 @@ struct CSVView: View {
                 
                 Spacer()
 
+                TextField("Matrix Name", text: $viewModel.matrixVariableName)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(width: 150)
+
                 Button("Cancel") {
                     dismiss()
                 }
                 
-                Button("Assign Variables") {
-                    viewModel.assignVariables()
+                Button("Assign Matrix") {
+                    viewModel.assignMatrix()
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -142,4 +147,3 @@ struct CSVView: View {
         .background(.bar)
     }
 }
-

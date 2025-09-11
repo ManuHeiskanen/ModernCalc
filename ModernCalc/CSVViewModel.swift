@@ -21,7 +21,8 @@ class CSVViewModel: ObservableObject {
     private weak var mainViewModel: CalculatorViewModel?
     
     // --- UI State Properties ---
-    @Published var columnVariableNames: [String]
+    @Published var matrixVariableName: String = ""
+    @Published var selectedColumns: [Bool]
     @Published var useFirstRowAsHeader: Bool = true {
         didSet { updateInfoMessage() }
     }
@@ -70,7 +71,7 @@ class CSVViewModel: ObservableObject {
         
         // Initialize state properties
         self.endRow = totalRows
-        self.columnVariableNames = Array(repeating: "", count: csvData.headers.count)
+        self.selectedColumns = Array(repeating: true, count: csvData.headers.count)
         
         // Set the initial info message
         updateInfoMessage()
@@ -110,53 +111,63 @@ class CSVViewModel: ObservableObject {
     
     // MARK: - Intents
     
-    /// Assigns the selected columns as vectors to the main calculator view model.
-    func assignVariables() {
+    /// Assigns the selected columns as a single matrix to the main calculator view model.
+    func assignMatrix() {
         guard let mainVM = mainViewModel else {
             infoMessage = "Error: Could not access calculator."
             return
         }
         
-        var assignedCount = 0
-        // Determine the correct data source based on whether the first row is a header.
+        let trimmedVarName = matrixVariableName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedVarName.isEmpty else {
+            infoMessage = "Error: Please enter a name for the matrix."
+            return
+        }
+
+        let numberOfSelectedColumns = selectedColumns.filter { $0 }.count
+        guard numberOfSelectedColumns > 0 else {
+            infoMessage = "Error: No columns selected for the matrix."
+            return
+        }
+
         let dataToProcess = useFirstRowAsHeader ? sourceData.grid : [sourceData.headers] + sourceData.grid
         
-        for (colIndex, varName) in columnVariableNames.enumerated() {
-            let trimmedVarName = varName.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedVarName.isEmpty else { continue }
-            
-            let startIndex = max(0, startRow - 1)
-            let endIndex = min(dataToProcess.count, endRow)
-            
-            guard startIndex < endIndex else {
-                infoMessage = "Error: Invalid row range."
-                return
-            }
-            
-            // Extract the numerical data for the current column from the specified range.
-            let columnData = dataToProcess[startIndex..<endIndex].compactMap { row -> Double? in
-                guard colIndex < row.count else { return nil }
-                // Use the original string for conversion, not the formatted one
-                let originalCell = row[colIndex].trimmingCharacters(in: .whitespaces)
-                if settings.decimalSeparator == .comma {
-                    return Double(originalCell.replacingOccurrences(of: ",", with: "."))
-                }
-                return Double(originalCell)
-            }
-
-            let vector = Vector(values: columnData)
-            mainVM.variables[trimmedVarName] = .vector(vector)
-            assignedCount += 1
+        let startIndex = max(0, startRow - 1)
+        let endIndex = min(dataToProcess.count, endRow)
+        
+        guard startIndex < endIndex else {
+            infoMessage = "Error: Invalid row range."
+            return
         }
         
-        if assignedCount > 0 {
-            infoMessage = "Assigned \(assignedCount) variable(s)."
-            // Hide the window after a short delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                mainVM.showCSVView = false
+        let slicedRows = dataToProcess[startIndex..<endIndex]
+        var matrixValues: [Double] = []
+        
+        for row in slicedRows {
+            for (colIndex, cell) in row.enumerated() {
+                // Only include the cell if its column is selected
+                if colIndex < selectedColumns.count && selectedColumns[colIndex] {
+                    let originalCell = cell.trimmingCharacters(in: .whitespaces)
+                    let doubleValue: Double?
+                    if settings.decimalSeparator == .comma {
+                        doubleValue = Double(originalCell.replacingOccurrences(of: ",", with: "."))
+                    } else {
+                        doubleValue = Double(originalCell)
+                    }
+                    // If a cell isn't a valid number, use 0.0 as a default.
+                    matrixValues.append(doubleValue ?? 0.0)
+                }
             }
-        } else {
-            infoMessage = "Error: No variable names entered."
+        }
+        
+        let matrix = Matrix(values: matrixValues, rows: slicedRows.count, columns: numberOfSelectedColumns)
+        mainVM.variables[trimmedVarName] = .matrix(matrix)
+        
+        infoMessage = "Assigned \(trimmedVarName) as a \(matrix.rows)x\(matrix.columns) matrix."
+        
+        // Hide the window after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+            mainVM.showCSVView = false
         }
     }
     
@@ -175,7 +186,7 @@ class CSVViewModel: ObservableObject {
     /// Formats a string value from a cell if it's a number and rounding is enabled.
     private func formatCell(_ value: String) -> String {
         guard settings.enableCSVRounding,
-              let number = Double(value.trimmingCharacters(in: .whitespaces)) else {
+              let number = Double(value.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")) else {
             return value
         }
         
@@ -190,3 +201,4 @@ class CSVViewModel: ObservableObject {
         return formattedString
     }
 }
+
