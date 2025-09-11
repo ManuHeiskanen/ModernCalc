@@ -59,6 +59,19 @@ class UserSettings: ObservableObject {
         }
     }
     
+    // --- NEW PROPERTIES FOR CSV ROUNDING ---
+    @Published var enableCSVRounding: Bool {
+        didSet {
+            UserDefaults.standard.set(enableCSVRounding, forKey: "enableCSVRounding")
+        }
+    }
+    
+    @Published var csvDecimalPlaces: Int {
+        didSet {
+            UserDefaults.standard.set(csvDecimalPlaces, forKey: "csvDecimalPlaces")
+        }
+    }
+    
     init() {
         let defaults = UserDefaults.standard
         
@@ -75,6 +88,10 @@ class UserSettings: ObservableObject {
         
         self.livePreviewDecimalPlaces = defaults.integer(forKey: "livePreviewDecimalPlaces")
         
+        self.enableCSVRounding = defaults.bool(forKey: "enableCSVRounding")
+        self.csvDecimalPlaces = defaults.integer(forKey: "csvDecimalPlaces")
+
+        
         // --- Phase 2: After 'self' is initialized, check and apply default values ---
         if self.fixedDecimalPlaces == 0 {
             self.fixedDecimalPlaces = 4 // Default to 4 if not set
@@ -82,6 +99,10 @@ class UserSettings: ObservableObject {
         
         if self.livePreviewDecimalPlaces == 0 {
             self.livePreviewDecimalPlaces = 2 // Default to 2 if not set
+        }
+        
+        if self.csvDecimalPlaces == 0 {
+            self.csvDecimalPlaces = 4 // Default to 4 if not set
         }
     }
 }

@@ -449,7 +449,7 @@ class CalculatorViewModel: ObservableObject {
                      let (headers, grid) = try parser.parse()
                      let csvData = CSVData(fileName: url.lastPathComponent, headers: headers, grid: grid)
                      
-                     self.csvViewModel = CSVViewModel(csvData: csvData, mainViewModel: self)
+                     self.csvViewModel = CSVViewModel(csvData: csvData, mainViewModel: self, settings: self.settings)
                      self.showCSVView = true
                      
                  } catch {

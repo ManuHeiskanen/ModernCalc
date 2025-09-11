@@ -14,6 +14,9 @@ class CSVViewModel: ObservableObject {
     // The raw data from the CSV file.
     let sourceData: CSVData
     
+    // The user's settings, passed in to control formatting.
+    let settings: UserSettings
+    
     // A weak reference to the main view model to assign variables back to it.
     private weak var mainViewModel: CalculatorViewModel?
     
@@ -58,9 +61,10 @@ class CSVViewModel: ObservableObject {
         }
     }
 
-    init(csvData: CSVData, mainViewModel: CalculatorViewModel) {
+    init(csvData: CSVData, mainViewModel: CalculatorViewModel, settings: UserSettings) {
         self.sourceData = csvData
         self.mainViewModel = mainViewModel
+        self.settings = settings
         
         let totalRows = csvData.grid.count + (csvData.headers.isEmpty ? 0 : 1)
         
@@ -94,7 +98,14 @@ class CSVViewModel: ObservableObject {
         
         guard startIndex < endIndex else { return [] }
         
-        return Array(fullGrid[startIndex..<endIndex])
+        let slicedGrid = Array(fullGrid[startIndex..<endIndex])
+        
+        // --- FIX: Apply formatting to the sliced data ---
+        return slicedGrid.map { row in
+            row.map { cell in
+                formatCell(cell) // Format each cell before displaying it
+            }
+        }
     }
     
     // MARK: - Intents
@@ -125,7 +136,12 @@ class CSVViewModel: ObservableObject {
             // Extract the numerical data for the current column from the specified range.
             let columnData = dataToProcess[startIndex..<endIndex].compactMap { row -> Double? in
                 guard colIndex < row.count else { return nil }
-                return Double(row[colIndex].trimmingCharacters(in: .whitespaces))
+                // Use the original string for conversion, not the formatted one
+                let originalCell = row[colIndex].trimmingCharacters(in: .whitespaces)
+                if settings.decimalSeparator == .comma {
+                    return Double(originalCell.replacingOccurrences(of: ",", with: "."))
+                }
+                return Double(originalCell)
             }
 
             let vector = Vector(values: columnData)
@@ -153,5 +169,24 @@ class CSVViewModel: ObservableObject {
         
         let rowsToImport = max(0, (validEnd - validStart) + 1)
         infoMessage = "Will import \(rowsToImport) rows."
+    }
+    
+    // --- FIX: New helper function to format cell values based on settings ---
+    /// Formats a string value from a cell if it's a number and rounding is enabled.
+    private func formatCell(_ value: String) -> String {
+        guard settings.enableCSVRounding,
+              let number = Double(value.trimmingCharacters(in: .whitespaces)) else {
+            return value
+        }
+        
+        // Format the number to the correct number of decimal places.
+        let formattedString = String(format: "%.\(settings.csvDecimalPlaces)f", number)
+        
+        // Apply the correct decimal separator.
+        if settings.decimalSeparator == .comma {
+            return formattedString.replacingOccurrences(of: ".", with: ",")
+        }
+        
+        return formattedString
     }
 }

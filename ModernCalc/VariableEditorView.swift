@@ -199,12 +199,19 @@ struct VariableEditorView: View {
                     .pickerStyle(.segmented)
                 }
                 
-                // --- NEW: UI for live preview rounding ---
                 Section(header: Text("Live Preview Formatting")) {
                     Toggle("Round live result", isOn: $settings.enableLiveRounding.animation())
                     
                     if settings.enableLiveRounding {
                         Stepper("Decimal Places: \(settings.livePreviewDecimalPlaces)", value: $settings.livePreviewDecimalPlaces, in: 0...10)
+                    }
+                }
+                
+                Section(header: Text("CSV Import Formatting")) {
+                    Toggle("Round displayed values", isOn: $settings.enableCSVRounding.animation())
+                    
+                    if settings.enableCSVRounding {
+                        Stepper("Decimal Places: \(settings.csvDecimalPlaces)", value: $settings.csvDecimalPlaces, in: 0...10)
                     }
                 }
             }
