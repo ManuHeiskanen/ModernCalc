@@ -14,6 +14,10 @@ struct ContentView: View {
     @State private var isShowingSheet = false
     @Environment(\.openWindow) private var openWindow
     
+    // --- ADDED: State for toolbar button hover effects ---
+    @State private var isHoveringOnMenuButton = false
+    @State private var isHoveringOnCSVButton = false
+    
     init(settings: UserSettings, viewModel: CalculatorViewModel) {
         self.settings = settings
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -26,8 +30,8 @@ struct ContentView: View {
                 history: viewModel.history,
                 rawExpression: $viewModel.rawExpression,
                 selectedHistoryId: viewModel.selectedHistoryId,
-                selectedHistoryPart: viewModel.selectedHistoryPart,
-                isShowingSheet: $isShowingSheet
+                selectedHistoryPart: viewModel.selectedHistoryPart
+                // --- REMOVED: isShowingSheet binding no longer needed here ---
             )
             Divider()
             
@@ -77,16 +81,59 @@ struct ContentView: View {
             .sheet(isPresented: $isShowingSheet) {
                 VariableEditorView(viewModel: viewModel, settings: settings)
             }
-            // --- ADDED: Sheet modifier for the CSV view ---
             .sheet(isPresented: $viewModel.showCSVView) {
                 if let csvViewModel = viewModel.csvViewModel {
-                    // Present the CSVView with its dedicated view model.
                     CSVView(viewModel: csvViewModel)
                 }
             }
         }
         .frame(minWidth: 410, minHeight: 300)
         .toolbar {
+            // --- MOVED: CSV and Menu buttons are now in the toolbar's principal (center) area ---
+            ToolbarItemGroup(placement: .principal) {
+                HStack(spacing: 12) {
+                    Button(action: { isShowingSheet = true }) {
+                        Image(systemName: "ellipsis.circle.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(8)
+                    .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
+                    .cornerRadius(8)
+                    .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isHoveringOnMenuButton = hovering
+                        }
+                    }
+                    
+                    Button(action: {
+                        viewModel.rawExpression = "importcsv()"
+                        _ = viewModel.commitCalculation()
+                    }) {
+                        Text(".csv")
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .background(Color.primary.opacity(isHoveringOnCSVButton ? 0.1 : 0))
+                    .cornerRadius(8)
+                    .scaleEffect(isHoveringOnCSVButton ? 1.05 : 1.0)
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isHoveringOnCSVButton = hovering
+                        }
+                    }
+                }
+            }
+            
             ToolbarItemGroup {
                 HStack(spacing: 0) {
                     Button("DEG") {
@@ -124,9 +171,7 @@ struct HistoryView: View {
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
     
-    @Binding var isShowingSheet: Bool
-    @State private var isHoveringOnMenuButton = false
-    @State private var isHoveringOnCSVButton = false // --- ADDED: Hover state for new button ---
+    // --- REMOVED: State and bindings for buttons that have been moved ---
     
     @State private var lastAddedId: UUID?
     @State private var hoveredItem: (id: UUID, part: SelectionPart)?
@@ -266,54 +311,7 @@ struct HistoryView: View {
             }
             .frame(maxHeight: .infinity)
             
-            VStack(alignment: .leading) {
-                HStack(spacing: 8) {
-                    Button(action: { isShowingSheet = true }) {
-                        Image(systemName: "ellipsis.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(10)
-                    .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
-                    .cornerRadius(8)
-                    .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isHoveringOnMenuButton = hovering
-                        }
-                    }
-                    
-                    // --- ADDED: CSV Import Button ---
-                    Button(action: {
-                        viewModel.rawExpression = "importcsv()"
-                        _ = viewModel.commitCalculation()
-                    }) {
-                        Text(".csv")
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color.primary.opacity(isHoveringOnCSVButton ? 0.1 : 0))
-                    .cornerRadius(8)
-                    .scaleEffect(isHoveringOnCSVButton ? 1.05 : 1.0)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isHoveringOnCSVButton = hovering
-                        }
-                    }
-                }
-                .padding(.leading, 8)
-                .padding(.top, 6)
-                
-                Spacer()
-            }
+            // --- REMOVED: The VStack containing the menu and CSV buttons ---
 
             if showCopyMessage { Text("Copied to Clipboard").padding(.horizontal, 16).padding(.vertical, 10).background(.ultraThickMaterial).cornerRadius(12).transition(.opacity.animation(.easeInOut)) }
         }
