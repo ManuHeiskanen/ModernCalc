@@ -157,6 +157,14 @@ extension Evaluator {
             let size = Int(size_s)
             let values = (0..<size).map { _ in Double.random(in: 0...1) }
             return .vector(Vector(values: values))
+        },
+        "isprime": { arg in
+            guard case .scalar(let n) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .scalar(try performIsPrime(n) ? 1.0 : 0.0)
+        },
+        "factor": { arg in
+            guard case .scalar(let n) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
+            return .vector(Vector(values: try performFactor(n)))
         }
     ]
     
@@ -210,6 +218,12 @@ extension Evaluator {
             let slope = (n * sumXY - sumX * sumY) / denominator
             let intercept = (sumY - slope * sumX) / n
             return .regressionResult(slope: slope, intercept: intercept)
+        },
+        "linsolve": { a, b in
+            guard case .matrix(let matrixA) = a, case .vector(let vectorB) = b else {
+                throw MathError.typeMismatch(expected: "Matrix, Vector", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .vector(try solveLinearSystem(A: matrixA, b: vectorB))
         },
         "dot": { a, b in
             if case .vector(let v1) = a, case .vector(let v2) = b { return .scalar(try v1.dot(with: v2)) }
@@ -593,3 +607,104 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
     }
 }
 
+// MARK: - New Algorithms
+
+/// Solves a system of linear equations Ax = b using Gaussian elimination with partial pivoting.
+fileprivate func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
+    guard A.rows == A.columns else { throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve.") }
+    let n = A.rows
+    guard b.dimension == n else { throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A.") }
+
+    var augmentedMatrix: [[Double]] = []
+    for i in 0..<n {
+        var row = (0..<n).map { A[i, $0] }
+        row.append(b[i])
+        augmentedMatrix.append(row)
+    }
+
+    // Forward elimination with partial pivoting
+    for i in 0..<n {
+        var maxRow = i
+        for k in (i + 1)..<n {
+            if abs(augmentedMatrix[k][i]) > abs(augmentedMatrix[maxRow][i]) {
+                maxRow = k
+            }
+        }
+        augmentedMatrix.swapAt(i, maxRow)
+
+        guard abs(augmentedMatrix[i][i]) > 1e-12 else {
+            throw MathError.unsupportedOperation(op: "linsolve", typeA: "Matrix is singular or nearly singular.", typeB: nil)
+        }
+
+        for k in (i + 1)..<n {
+            let factor = augmentedMatrix[k][i] / augmentedMatrix[i][i]
+            augmentedMatrix[k][i] = 0
+            for j in (i + 1)...n {
+                augmentedMatrix[k][j] -= factor * augmentedMatrix[i][j]
+            }
+        }
+    }
+
+    // Back substitution
+    var x = [Double](repeating: 0, count: n)
+    for i in (0..<n).reversed() {
+        var sum = 0.0
+        for j in (i + 1)..<n {
+            sum += augmentedMatrix[i][j] * x[j]
+        }
+        x[i] = (augmentedMatrix[i][n] - sum) / augmentedMatrix[i][i]
+    }
+
+    return Vector(values: x)
+}
+
+/// Checks if an integer is prime using optimized trial division.
+fileprivate func performIsPrime(_ n: Double) throws -> Bool {
+    guard n.truncatingRemainder(dividingBy: 1) == 0 else {
+        throw MathError.unsupportedOperation(op: "isprime", typeA: "argument must be an integer", typeB: nil)
+    }
+    let num = Int(n)
+    guard num >= 2 else { return false }
+    if num == 2 || num == 3 { return true }
+    if num % 2 == 0 || num % 3 == 0 { return false }
+    
+    var i = 5
+    while i * i <= num {
+        if num % i == 0 || num % (i + 2) == 0 {
+            return false
+        }
+        i += 6
+    }
+    return true
+}
+
+/// Returns a vector of prime factors of an integer.
+fileprivate func performFactor(_ n: Double) throws -> [Double] {
+    guard n.truncatingRemainder(dividingBy: 1) == 0 else {
+        throw MathError.unsupportedOperation(op: "factor", typeA: "argument must be an integer", typeB: nil)
+    }
+    var num = Int(abs(n))
+    guard num >= 2 else { return [n] }
+    
+    var factors: [Double] = []
+    
+    while num % 2 == 0 {
+        factors.append(2)
+        num /= 2
+    }
+    
+    var i = 3
+    while i * i <= num {
+        while num % i == 0 {
+            factors.append(Double(i))
+            num /= i
+        }
+        i += 2
+    }
+    
+    if num > 1 {
+        factors.append(Double(num))
+    }
+    
+    return factors
+}
