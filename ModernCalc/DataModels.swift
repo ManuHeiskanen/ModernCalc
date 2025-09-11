@@ -44,6 +44,13 @@ struct PlotSeries: Identifiable {
     let id = UUID()
     let name: String
     let dataPoints: [DataPoint]
+    let equation: String?
+
+    init(name: String, dataPoints: [DataPoint], equation: String? = nil) {
+        self.name = name
+        self.dataPoints = dataPoints
+        self.equation = equation
+    }
 }
 
 // Represents the complete set of data for a plot window.

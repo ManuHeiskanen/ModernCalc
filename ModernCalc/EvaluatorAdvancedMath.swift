@@ -262,7 +262,8 @@ extension Evaluator {
             }
             
             let fitName = (degree == 1) ? "Linear Fit" : "Poly Fit (deg=\(Int(degree)))"
-            allSeries.append(PlotSeries(name: fitName, dataPoints: fitPoints))
+            let equationString = DisplayFormatter.formatPolynomialEquation(coeffs: coeffs)
+            allSeries.append(PlotSeries(name: fitName, dataPoints: fitPoints, equation: equationString))
         }
         
         let duration = CFAbsoluteTimeGetCurrent() - startTime
@@ -343,38 +344,6 @@ extension Evaluator {
     }
 }
 
-/// Performs a polynomial regression using the method of least squares.
-func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector {
-    guard degree >= 1 && degree.truncatingRemainder(dividingBy: 1) == 0 else {
-        throw MathError.unsupportedOperation(op: "polyfit", typeA: "degree must be an integer >= 1", typeB: nil)
-    }
-    guard x.dimension == y.dimension else {
-        throw MathError.dimensionMismatch(reason: "x and y vectors must have the same number of elements.")
-    }
-    let numPoints = x.dimension
-    let degreeInt = Int(degree)
-    guard numPoints > degreeInt else {
-        throw MathError.unsupportedOperation(op: "polyfit", typeA: "number of data points must be greater than the polynomial degree", typeB: nil)
-    }
-    
-    // Construct the Vandermonde matrix X
-    var xMatrixValues = [Double](repeating: 0, count: numPoints * (degreeInt + 1))
-    for i in 0..<numPoints {
-        for j in 0...degreeInt {
-            xMatrixValues[i * (degreeInt + 1) + j] = pow(x[i], Double(j))
-        }
-    }
-    let xMatrix = Matrix(values: xMatrixValues, rows: numPoints, columns: degreeInt + 1)
-    
-    // Solve the normal equation: (X^T * X) * c = X^T * y
-    let xT = xMatrix.transpose()
-    let aMatrix = try xT * xMatrix
-    let bVector = try xT * y
-    
-    let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
-    return coefficients
-}
-
 /// Solves a system of linear equations Ax = b using Gaussian elimination with partial pivoting.
 func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
     guard A.rows == A.columns else { throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve.") }
@@ -423,3 +392,36 @@ func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
 
     return Vector(values: x)
 }
+
+/// Performs a polynomial regression using the method of least squares.
+func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector {
+    guard degree >= 1 && degree.truncatingRemainder(dividingBy: 1) == 0 else {
+        throw MathError.unsupportedOperation(op: "polyfit", typeA: "degree must be an integer >= 1", typeB: nil)
+    }
+    guard x.dimension == y.dimension else {
+        throw MathError.dimensionMismatch(reason: "x and y vectors must have the same number of elements.")
+    }
+    let numPoints = x.dimension
+    let degreeInt = Int(degree)
+    guard numPoints > degreeInt else {
+        throw MathError.unsupportedOperation(op: "polyfit", typeA: "number of data points must be greater than the polynomial degree", typeB: nil)
+    }
+    
+    // Construct the Vandermonde matrix X
+    var xMatrixValues = [Double](repeating: 0, count: numPoints * (degreeInt + 1))
+    for i in 0..<numPoints {
+        for j in 0...degreeInt {
+            xMatrixValues[i * (degreeInt + 1) + j] = pow(x[i], Double(j))
+        }
+    }
+    let xMatrix = Matrix(values: xMatrixValues, rows: numPoints, columns: degreeInt + 1)
+    
+    // Solve the normal equation: (X^T * X) * c = X^T * y
+    let xT = xMatrix.transpose()
+    let aMatrix = try xT * xMatrix
+    let bVector = try xT * y
+    
+    let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
+    return coefficients
+}
+

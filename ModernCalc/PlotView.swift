@@ -166,6 +166,21 @@ struct PlotView: View {
                     .border(Color.primary.opacity(0.5), width: 1)
                     .aspectRatio(1, contentMode: .fit)
             }
+            .chartOverlay { proxy in
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(viewModel.plotData.series) { series in
+                        if let equation = series.equation {
+                            Text(equation)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .padding(6)
+                                .background(.background.opacity(0.7), in: RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
             .padding()
         }
     }
@@ -230,3 +245,4 @@ struct Arrowhead: Shape {
         return path
     }
 }
+

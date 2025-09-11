@@ -517,7 +517,7 @@ class CalculatorViewModel: ObservableObject {
         case .matrix(let m): return formatMatrixForDisplay(m); case .tuple(let t): return t.map { formatForHistory($0) }.joined(separator: " OR ")
         case .complexVector(let cv): return formatComplexVectorForDisplay(cv); case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm)
         case .functionDefinition: return ""; case .polar(let p): return formatPolarForDisplay(p); case .regressionResult(let s, let i): return "m = \(formatScalarForDisplay(s)), b = \(formatScalarForDisplay(i))"
-        case .polynomialFit(let coeffs): return formatPolyFitForDisplay(coeffs)
+        case .polynomialFit(let coeffs): return DisplayFormatter.formatPolynomialEquation(coeffs: coeffs)
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         }
     }
@@ -572,31 +572,6 @@ class CalculatorViewModel: ObservableObject {
         let magnitude = value.abs(); let angle = value.argument()
         if self.angleMode == .degrees { let angleDegrees = angle * (180.0 / .pi); return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angleDegrees))°" }
         else { return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angle)) rad" }
-    }
-    
-    private func formatPolyFitForDisplay(_ coeffs: Vector) -> String {
-        var result = "y = "
-        for (i, coeff) in coeffs.values.enumerated().reversed() {
-            if abs(coeff) < 1e-9 && coeffs.dimension > 1 { continue } // Skip negligible coefficients
-
-            let isFirstTerm = (result == "y = ")
-            let sign = (coeff < 0) ? "-" : (isFirstTerm ? "" : "+ ")
-            let absCoeff = abs(coeff)
-
-            result += "\(sign) "
-
-            if abs(absCoeff - 1.0) > 1e-9 || i == 0 {
-                 result += "\(formatScalarForDisplay(absCoeff))"
-            }
-            
-            if i > 0 { // Power of x
-                result += "x"
-                if i > 1 {
-                    result += "^\(i)"
-                }
-            }
-        }
-        return result.replacingOccurrences(of: "+ -", with: "-")
     }
 
     private func formatVectorForDisplay(_ vector: Vector) -> String {
