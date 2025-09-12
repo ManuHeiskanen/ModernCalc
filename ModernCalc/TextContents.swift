@@ -24,8 +24,12 @@ struct TextContents {
         .init(name: "circum_circle", signature: "circum_circle(r)", description: "Circumference of a circle."),
         .init(name: "cmatrix", signature: "cmatrix(a, b ; c, d ; ...)", description: "Forms a complex matrix of given real or imaginary numbers."),
         .init(name: "conj", signature: "conj(complex)", description: "Calculates the complex conjugate."),
+        .init(name: "corr", signature: "corr(vectorX, vectorY)", description: "Calculates the Pearson correlation coefficient between two datasets."),
         .init(name: "cos", signature: "cos(angle)", description: "Calculates the cosine of an angle."),
         .init(name: "cosh", signature: "cosh(value)", description: "Calculates the hyperbolic cosine."),
+        .init(name: "count", signature: "count(data, value)", description: "Counts occurrences of a specific value in a vector or matrix."),
+        .init(name: "countabove", signature: "countabove(data, threshold)", description: "Counts elements greater than a specific value."),
+        .init(name: "countbelow", signature: "countbelow(data, threshold)", description: "Counts elements less than a specific value."),
         .init(name: "cross", signature: "cross(vectorA, vectorB)", description: "Calculates the cross product of two 3D vectors."),
         .init(name: "cvector", signature: "cvector(a ; b ; c ; ...)", description: "Forms a complex vector of given real or imaginary numbers."),
         .init(name: "derivative", signature: "derivative(expr, var, point, [order])", description: "Finds the instantaneous rate of change (slope). Can calculate higher-order derivatives (e.g., order 2 for concavity)."),
@@ -33,9 +37,11 @@ struct TextContents {
         .init(name: "dot", signature: "dot(vectorA, vectorB)", description: "Calculates the dot product of two vectors (real or complex)."),
         .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),
         .init(name: "factor", signature: "factor(integer)", description: "Returns a vector containing the prime factors of an integer."),
+        .init(name: "find", signature: "find(data, value)", description: "Returns a vector of 1-based indices for all occurrences of a value."),
         .init(name: "floor", signature: "floor(number)", description: "Rounds a number down to the nearest integer."),
         .init(name: "gcd", signature: "gcd(a, b)", description: "Finds the greatest common divisor of two integers."),
         .init(name: "getcolumn", signature: "getcolumn(matrix, index)", description: "Extracts a column from a matrix as a vector. Note: Index is 1-based."),
+        .init(name: "getrow", signature: "getrow(matrix, index)", description: "Extracts a row from a matrix as a vector. Note: Index is 1-based."),
         .init(name: "grad", signature: "grad(f, pointVector)", description: "Calculates the gradient of a multivariable function 'f' at a specific point."),
         .init(name: "hypot", signature: "hypot(sideA, sideB)", description: "Calculates the hypotenuse of a right triangle."),
         .init(name: "imag", signature: "imag(complex)", description: "Extracts the imaginary part of a complex number."),
@@ -57,6 +63,7 @@ struct TextContents {
         .init(name: "mod", signature: "mod(a, b)", description: "Calculates the mathematical modulo (remainder of division)."),
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
+        .init(name: "percentile", signature: "percentile(data, p)", description: "Calculates the p-th percentile of a dataset (e.g., percentile(data, 75))."),
         .init(name: "plot", signature: "plot(expr, var, x_min, x_max, [y_min, y_max])", description: "Plots expressions over a specified range with optional y-axis limits."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
         .init(name: "polyfit", signature: "polyfit(x_vec, y_vec, degree)", description: "Fits a polynomial of the given degree to the data points and returns the coefficients."),
@@ -71,6 +78,7 @@ struct TextContents {
         .init(name: "side", signature: "side(hyp, sideA)", description: "Calculates the missing side of a right triangle."),
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
         .init(name: "sinh", signature: "sinh(value)", description: "Calculates the hyperbolic sine."),
+        .init(name: "sort", signature: "sort(vector, [\"asc\"|\"desc\"])", description: "Sorts a vector in ascending (default) or descending order."),
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
         .init(name: "stddev", signature: "stddev(a, b, ...)", description: "Calculates the sample standard deviation."),
         .init(name: "stddevp", signature: "stddevp(a, b, ...)", description: "Calculates the population standard deviation."),
@@ -79,6 +87,7 @@ struct TextContents {
         .init(name: "tanh", signature: "tanh(value)", description: "Calculates the hyperbolic tangent."),
         .init(name: "trace", signature: "trace(matrix)", description: "Calculates the trace of a square matrix (sum of diagonal elements)."),
         .init(name: "transpose", signature: "transpose(matrix)", description: "Transposes a matrix (rows become columns). For complex matrices, this is not the conjugate transpose."),
+        .init(name: "unique", signature: "unique(data)", description: "Returns a vector of the unique elements from a vector or matrix."),
         .init(name: "unit", signature: "unit(vector)", description: "Returns the unit vector (vector with magnitude 1)."),
         .init(name: "variance", signature: "variance(a, b, ...)", description: "Calculates the sample variance."),
         .init(name: "vector", signature: "vector(a ; b ; c ; ...)", description: "Forms a vector of given real numbers."),
@@ -120,9 +129,10 @@ struct TextContents {
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
         .init(title: "Linear Algebra", content: "Solve systems of linear equations of the form `Ax = b` with `linsolve(A, b)`. Standard matrix operations like inverse (`inv`), determinant (`det`), and trace (`trace`) are also available."),
         .init(title: "Plotting & Data Analysis", content: "**Function Plotting:** Use `autoplot(sin(x))` for quick graphs, or `plot(expr, var, x_min, x_max)` for detailed control. \n**Scatter Plots:** Visualize data with `scatterplot(x_vector, y_vector)`. You can add an optional third argument for the degree of a polynomial fit, e.g., `scatterplot(x, y, 1)` for a linear fit or `scatterplot(x, y, 2)` for a quadratic fit. \n**Regression:** Use `polyfit(x_vector, y_vector, degree)` to get the coefficients of a best-fit polynomial."),
-        .init(title: "CSV Import & Data Handling", content: "Use the `importcsv()` command or the \".csv\" button to open a file dialog. The interactive window allows you to select which rows and columns to import, and then assign the selected data to a matrix variable. \nOnce your data is in a matrix, you can extract a specific column into a vector using the `getcolumn(matrix, index)` function. For example, `ages := getcolumn(my_data, 2)` would extract the second column from the `my_data` matrix and assign it to the `ages` variable. **Note:** The column index is 1-based."),
+        .init(title: "Data Querying", content: "Ask questions about your data with functions like `count`, `countabove`, `countbelow`, and `find`. For example, `count(my_data, 5)` finds the number of 5s, and `find(my_data, 5)` returns their indices."),
+        .init(title: "CSV Import & Data Handling", content: "Use the `importcsv()` command or the \".csv\" button to open a file dialog. The interactive window allows you to select which rows and columns to import, and then assign the selected data to a matrix variable. \nOnce your data is in a matrix, you can extract a specific column or row into a vector using the `getcolumn(matrix, index)` and `getrow(matrix, index)` functions. **Note:** All indices are 1-based."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
-        .init(title: "Statistics & Number Theory", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, and `variance`. Generate datasets using `range` or `linspace`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
+        .init(title: "Statistics & Number Theory", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, `median`, `percentile`, `corr`, and `sort`. Generate datasets using `range` or `linspace`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
     ]
     
     static let siPrefixes: Set<String> = [
@@ -157,3 +167,4 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
+

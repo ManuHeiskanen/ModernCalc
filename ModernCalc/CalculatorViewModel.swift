@@ -425,6 +425,7 @@ class CalculatorViewModel: ObservableObject {
         case .polynomialFit(let coeffs): return DisplayFormatter.formatPolynomialEquation(coeffs: coeffs)
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         case .triggerCSVImport: return "Importing CSV..."
+        case .constant(let s): return s
         }
     }
     
@@ -443,6 +444,7 @@ class CalculatorViewModel: ObservableObject {
         case .regressionResult, .polynomialFit: return "" // Not meant to be parsed back directly
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
+        case .constant(let s): return s
         }
     }
 

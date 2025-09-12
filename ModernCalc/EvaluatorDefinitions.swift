@@ -102,6 +102,18 @@ extension Evaluator {
                 return .vector(Vector(values: values))
             default: throw MathError.incorrectArgumentCount(function: "random", expected: "0, 1, 2, or 3", found: args.count)
             }
+        },
+        "sort": { args in
+            guard args.count == 1 || args.count == 2 else { throw MathError.incorrectArgumentCount(function: "sort", expected: "1 or 2", found: args.count) }
+            let values = try extractDoubles(from: args[0])
+            var descending = false
+            if args.count == 2 {
+                guard case .constant(let direction) = args[1] else { throw MathError.typeMismatch(expected: "String 'asc' or 'desc'", found: args[1].typeName) }
+                if direction.lowercased() == "desc" { descending = true }
+                else if direction.lowercased() != "asc" { throw MathError.unsupportedOperation(op: "sort", typeA: "direction must be 'asc' or 'desc'", typeB: nil) }
+            }
+            let sortedValues = descending ? values.sorted(by: >) : values.sorted(by: <)
+            return .vector(Vector(values: sortedValues))
         }
     ]
 
@@ -174,6 +186,11 @@ extension Evaluator {
         "factor": { arg in
             guard case .scalar(let n) = arg else { throw MathError.typeMismatch(expected: "Scalar", found: arg.typeName) }
             return .vector(Vector(values: try performFactor(n)))
+        },
+        "unique": { arg in
+            let values = try extractDoubles(from: arg)
+            let uniqueValues = Array(Set(values)).sorted()
+            return .vector(Vector(values: uniqueValues))
         }
     ]
     
@@ -218,6 +235,42 @@ extension Evaluator {
     ]
     
     static let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
+        "corr": { a, b in
+            guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for correlation.") }
+            let n = Double(xVec.dimension)
+            let sumX = xVec.sum(); let sumY = yVec.sum()
+            let sumXY = try xVec.hadamard(with: yVec).sum()
+            let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
+            let sumY2 = yVec.values.map { $0 * $0 }.reduce(0, +)
+            
+            let numerator = n * sumXY - sumX * sumY
+            let denominator = sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY))
+            
+            guard denominator != 0 else { throw MathError.unsupportedOperation(op: "corr", typeA: "Cannot calculate correlation, denominator is zero.", typeB: nil) }
+            return .scalar(numerator / denominator)
+        },
+        "count": { data, value in
+            let values = try extractDoubles(from: data)
+            let target = try value.asScalar()
+            return .scalar(Double(values.filter { $0 == target }.count))
+        },
+        "countabove": { data, threshold in
+            let values = try extractDoubles(from: data)
+            let target = try threshold.asScalar()
+            return .scalar(Double(values.filter { $0 > target }.count))
+        },
+        "countbelow": { data, threshold in
+            let values = try extractDoubles(from: data)
+            let target = try threshold.asScalar()
+            return .scalar(Double(values.filter { $0 < target }.count))
+        },
+        "find": { data, value in
+            let values = try extractDoubles(from: data)
+            let target = try value.asScalar()
+            let indices = values.indices.filter { values[$0] == target }.map { Double($0 + 1) }
+            return .vector(Vector(values: indices))
+        },
         "linreg": { a, b in
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for linear regression.") }
@@ -241,17 +294,18 @@ extension Evaluator {
         },
         "cross": { a, b in guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)") }; return .vector(try v1.cross(with: v2)) },
         "getcolumn": { a, b in
-            guard case .matrix(let matrix) = a else {
-                throw MathError.typeMismatch(expected: "Matrix", found: a.typeName)
-            }
-            guard case .scalar(let indexScalar) = b else {
-                throw MathError.typeMismatch(expected: "Scalar for column index", found: b.typeName)
-            }
-            guard indexScalar.truncatingRemainder(dividingBy: 1) == 0 else {
-                throw MathError.typeMismatch(expected: "Integer for column index", found: "Non-integer scalar")
-            }
+            guard case .matrix(let matrix) = a else { throw MathError.typeMismatch(expected: "Matrix", found: a.typeName) }
+            guard case .scalar(let indexScalar) = b else { throw MathError.typeMismatch(expected: "Scalar for column index", found: b.typeName) }
+            guard indexScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Integer for column index", found: "Non-integer scalar") }
             let index = Int(indexScalar)
             return .vector(try matrix.getcolumn(index: index))
+        },
+        "getrow": { a, b in
+            guard case .matrix(let matrix) = a else { throw MathError.typeMismatch(expected: "Matrix", found: a.typeName) }
+            guard case .scalar(let indexScalar) = b else { throw MathError.typeMismatch(expected: "Scalar for row index", found: b.typeName) }
+            guard indexScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Integer for row index", found: "Non-integer scalar") }
+            let index = Int(indexScalar)
+            return .vector(try matrix.getrow(index: index))
         },
         "nPr": { a, b in guard case .scalar(let n) = a, case .scalar(let k) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }; return .scalar(try permutations(n: n, k: k)) },
         "nCr": { a, b in guard case .scalar(let n) = a, case .scalar(let k) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }; return .scalar(try combinations(n: n, k: k)) },
@@ -277,6 +331,26 @@ extension Evaluator {
             guard case .scalar(let n1) = a, case .scalar(let n2) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }
             guard n2 != 0 else { throw MathError.divisionByZero }
             return .scalar(n1 - n2 * floor(n1 / n2))
+        },
+        "percentile": { data, p_val in
+            let values = try extractDoubles(from: data).sorted()
+            guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "percentile") }
+            let p = try p_val.asScalar()
+            guard p >= 0 && p <= 100 else { throw MathError.unsupportedOperation(op: "percentile", typeA: "p must be between 0 and 100", typeB: nil) }
+            
+            if p == 100 { return .scalar(values.last!) }
+            
+            let rank = (p / 100.0) * Double(values.count - 1)
+            let lowerIndex = Int(floor(rank))
+            let upperIndex = Int(ceil(rank))
+            
+            if lowerIndex == upperIndex {
+                return .scalar(values[lowerIndex])
+            } else {
+                let lowerValue = values[lowerIndex]
+                let upperValue = values[upperIndex]
+                return .scalar(lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue))
+            }
         },
         "gcd": { a, b in
             return try performElementWiseIntegerOp(a, b, opName: "gcd", operation: performGcd)
@@ -316,9 +390,22 @@ extension Evaluator {
         }
         
         if let multiArgFunc = Evaluator.multiArgumentFunctions[node.name] {
-            var args: [MathValue] = []; for argNode in node.arguments {
-                let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
-                usedAngle = usedAngle || argUsedAngle; args.append(arg)
+            var args: [MathValue] = []
+            // Special case for sort: second argument is a raw string constant, not an evaluated MathValue
+            if node.name == "sort" && node.arguments.count == 2 {
+                let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
+                usedAngle = usedAngle || arg1UsedAngle
+                args.append(arg1)
+                if let constNode = node.arguments[1] as? ConstantNode {
+                    args.append(.constant(constNode.name))
+                } else {
+                    throw MathError.typeMismatch(expected: "String literal 'asc' or 'desc'", found: "expression")
+                }
+            } else {
+                for argNode in node.arguments {
+                    let (arg, argUsedAngle) = try _evaluateSingle(node: argNode, variables: &variables, functions: &functions, angleMode: angleMode)
+                    usedAngle = usedAngle || argUsedAngle; args.append(arg)
+                }
             }
             return (try multiArgFunc(args), usedAngle)
         }
@@ -538,6 +625,20 @@ extension Evaluator {
     }
 }
 
+/// Helper function to extract all scalar values from a MathValue.
+fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
+    switch data {
+    case .scalar(let s):
+        return [s]
+    case .vector(let v):
+        return v.values
+    case .matrix(let m):
+        return m.values
+    default:
+        throw MathError.typeMismatch(expected: "Vector, Matrix, or Scalar", found: data.typeName)
+    }
+}
+
 /// Helper function for variadic statistical functions like sum(), avg(), etc.
 fileprivate func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
     if args.count == 1, case .vector(let v) = args[0] {
@@ -681,3 +782,4 @@ fileprivate func performFactor(_ n: Double) throws -> [Double] {
     
     return factors
 }
+

@@ -309,6 +309,21 @@ struct Matrix: Equatable, Codable {
         return Vector(values: columnValues)
     }
     
+    /// Extracts a single row from the matrix as a vector.
+    /// - Parameter index: The 1-based index of the row to extract.
+    /// - Returns: A `Vector` containing the elements of the specified row.
+    func getrow(index: Int) throws -> Vector {
+        let zeroBasedIndex = index - 1
+        guard zeroBasedIndex >= 0 && zeroBasedIndex < rows else {
+            throw MathError.dimensionMismatch(reason: "Row index \(index) is out of bounds for a matrix with \(rows) rows.")
+        }
+        var rowValues: [Double] = []
+        for c in 0..<columns {
+            rowValues.append(self[zeroBasedIndex, c])
+        }
+        return Vector(values: rowValues)
+    }
+    
     // --- Matrix-Matrix Operators ---
     static func + (lhs: Matrix, rhs: Matrix) throws -> Matrix {
         guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else {
@@ -536,7 +551,7 @@ struct ComplexMatrix: Equatable, Codable {
 }
 
 enum MathValue: Codable, Equatable {
-    case scalar(Double); case complex(Complex); case vector(Vector); case matrix(Matrix); case tuple([MathValue]); case functionDefinition(String); case complexVector(ComplexVector); case complexMatrix(ComplexMatrix); case polar(Complex)
+    case scalar(Double); case complex(Complex); case vector(Vector); case matrix(Matrix); case tuple([MathValue]); case functionDefinition(String); case complexVector(ComplexVector); case complexMatrix(ComplexMatrix); case polar(Complex); case constant(String)
     case regressionResult(slope: Double, intercept: Double)
     case polynomialFit(coefficients: Vector)
     case plot(PlotData)
@@ -544,7 +559,7 @@ enum MathValue: Codable, Equatable {
 
     var typeName: String {
         switch self {
-        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"
+        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"
         }
     }
     
@@ -569,6 +584,9 @@ enum MathValue: Codable, Equatable {
         case .polynomialFit(let coeffs):
             try container.encode("polynomialFit", forKey: .type)
             try container.encode(coeffs, forKey: .coefficients)
+        case .constant(let s):
+            try container.encode("constant", forKey: .type)
+            try container.encode(s, forKey: .value)
         case .plot:
             try container.encode("plot", forKey: .type)
         case .triggerCSVImport:
@@ -597,6 +615,8 @@ enum MathValue: Codable, Equatable {
         case "polynomialFit":
             let coeffs = try container.decode(Vector.self, forKey: .coefficients)
             self = .polynomialFit(coefficients: coeffs)
+        case "constant":
+             self = .constant(try container.decode(String.self, forKey: .value))
         case "plot":
             self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
@@ -619,6 +639,7 @@ enum MathValue: Codable, Equatable {
         case (.polynomialFit(let c1), .polynomialFit(let c2)): return c1 == c2
         case (.plot(let d1), .plot(let d2)): return d1 == d2
         case (.triggerCSVImport, .triggerCSVImport): return true
+        case (.constant(let a), .constant(let b)): return a == b
         default: return false
         }
     }

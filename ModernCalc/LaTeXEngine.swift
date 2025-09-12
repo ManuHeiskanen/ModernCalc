@@ -292,6 +292,8 @@ struct LaTeXEngine {
             return "\\text{Plot: \(expression)}"
         case .triggerCSVImport:
             return "\\text{...}"
+        case .constant(let s):
+            return "\\text{\(s)}"
         }
     }
 
@@ -397,4 +399,3 @@ struct LaTeXEngine {
         return latex
     }
 }
-
