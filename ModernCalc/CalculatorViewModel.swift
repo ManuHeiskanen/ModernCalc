@@ -20,7 +20,7 @@ class CalculatorViewModel: ObservableObject {
     @Published var previewText: String = ""
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
-    @Published var isTallExpression: Bool = false
+    @Published var livePreviewHeight: CGFloat = 60.0
     
     @Published var angleMode: AngleMode = .degrees {
         didSet { saveState() }
@@ -77,6 +77,7 @@ class CalculatorViewModel: ObservableObject {
                     self.liveLaTeXPreview = ""
                     self.lastCalculatedExpression = nil
                     self.lastCalculatedAngleMode = nil
+                    self.livePreviewHeight = 60.0
                     return
                 }
                 
@@ -156,11 +157,6 @@ class CalculatorViewModel: ObservableObject {
     private func calculate(expression: String, cursor: NSRange) async {
         let helpText = getContextualHelp(expression: expression, cursor: cursor)
 
-        let callsTallFunction = expression.contains("vector(") || expression.contains("matrix(") || expression.contains("range(") || expression.contains("linspace(")
-        let parts = expression.components(separatedBy: CharacterSet(charactersIn: "+-()"))
-        let hasNestedFraction = parts.contains { $0.filter { $0 == "/" }.count >= 2 }
-        let newIsTallExpression = callsTallFunction || hasNestedFraction
-
         var tempVars = self.variables
         var tempFuncs = self.functions
         
@@ -232,13 +228,38 @@ class CalculatorViewModel: ObservableObject {
             finalLiveLaTeXPreview = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
         }
         
+        // --- MODIFIED: Dynamic height calculation logic ---
+        let contentForHeightCheck: String
+        if !finalLiveErrorText.isEmpty {
+            contentForHeightCheck = finalLiveErrorText
+        } else if !finalLiveHelpText.isEmpty {
+            contentForHeightCheck = finalLiveHelpText
+        } else {
+            contentForHeightCheck = finalLiveLaTeXPreview
+        }
+
+        let latexNewlines = contentForHeightCheck.components(separatedBy: "\\\\").count - 1
+        let textNewlines = contentForHeightCheck.components(separatedBy: "\n").count - 1
+        let fractionCount = contentForHeightCheck.components(separatedBy: "\\frac").count - 1
+        let verticalityScore = max(latexNewlines, textNewlines) + fractionCount
+
+        let baseHeight: CGFloat = 60.0
+        let heightPerUnit: CGFloat = 20.0
+        let maxHeight: CGFloat = 180.0
+        
+        var calculatedHeight = baseHeight + (CGFloat(verticalityScore) * heightPerUnit)
+
+        // Keep the check for long single-line expressions
+        if verticalityScore == 0 && contentForHeightCheck.count > 80 {
+            calculatedHeight = 100.0
+        }
+
+        self.livePreviewHeight = min(calculatedHeight, maxHeight)
+        // --- END of dynamic height logic ---
+        
         self.liveHelpText = finalLiveHelpText
         self.liveErrorText = finalLiveErrorText
         self.liveLaTeXPreview = finalLiveLaTeXPreview
-        
-        if self.isTallExpression != newIsTallExpression {
-            self.isTallExpression = newIsTallExpression
-        }
     }
     
     func commitCalculation() -> PlotData? {

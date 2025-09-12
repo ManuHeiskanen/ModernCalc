@@ -42,8 +42,8 @@ struct ContentView: View {
                 errorText: viewModel.liveErrorText,
                 greekSymbols: viewModel.greekSymbols
             )
-            .frame(height: viewModel.isTallExpression ? 100 : 60)
-            .animation(.easeInOut(duration: 0.25), value: viewModel.isTallExpression)
+            .frame(height: viewModel.livePreviewHeight) // --- MODIFIED: Use dynamic height ---
+            .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight) // --- MODIFIED: Animate based on dynamic height ---
             Divider()
 
             CalculatorInputView(
