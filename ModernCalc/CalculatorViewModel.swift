@@ -28,11 +28,9 @@ class CalculatorViewModel: ObservableObject {
     @Published var userFunctionDefinitions: [String: String] = [:]
     @Published var cursorPosition = NSRange()
     
-    // For managing plot windows state
     @Published var plotViewModels: [PlotViewModel] = []
     @Published var plotToShow: PlotData.ID? = nil
     
-    // For managing CSV import window
     @Published var csvViewModel: CSVViewModel? = nil
     @Published var showCSVView: Bool = false
     
@@ -419,7 +417,7 @@ class CalculatorViewModel: ObservableObject {
             } else if case .triggerCSVImport = valueToCommit {
                 Task {
                     self.rawExpression = ""
-                    _ = openCSVFile() // this is needed for opencsv() command
+                    _ = openCSVFile()
                 }
                 return nil
             } else if valueToCommit.typeName == "FunctionDefinition" {
@@ -463,7 +461,6 @@ class CalculatorViewModel: ObservableObject {
                      self.showCSVView = true
                      
                  } catch {
-                     // In a real app, you would show this error to the user.
                      print("Error reading or parsing CSV file: \(error.localizedDescription)")
                  }
                  return true
@@ -571,14 +568,15 @@ class CalculatorViewModel: ObservableObject {
     }
     
     func formatForParsing(_ value: MathValue) -> String {
+        let argumentSeparator = settings.decimalSeparator == .period ? "," : "."
         switch value {
         case .scalar(let d): return formatScalarForParsing(d)
         case .complex(let c): return formatComplexForParsing(c)
         case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
-        case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: ",") }.joined(separator: ";")))"
+        case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
         case .tuple(let t): return t.map { formatForParsing($0) }.first ?? ""
         case .complexVector(let cv): return "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
-        case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: ",") }.joined(separator: ";")))"
+        case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForParsing(p)
         case .regressionResult, .polynomialFit: return "" // Not meant to be parsed back
@@ -743,10 +741,22 @@ class CalculatorViewModel: ObservableObject {
         }
     }
     
+    // MODIFIED: This function now correctly formats numbers for re-parsing based on the current setting.
     private func formatScalarForParsing(_ value: Double) -> String {
+        // String(value) is locale-independent and always uses '.' as the decimal separator.
         let stringValue = String(value)
-        if stringValue.contains("e") { return "(\(stringValue.replacingOccurrences(of: "e", with: "*10^")))" }
-        return stringValue.replacingOccurrences(of: ",", with: ".")
+        
+        // The lexer does not handle scientific 'e' notation, so we convert it to a parsable format.
+        if stringValue.lowercased().contains("e") {
+            let parts = stringValue.lowercased().components(separatedBy: "e")
+            if parts.count == 2 {
+                 let mantissa = parts[0].replacingOccurrences(of: ".", with: settings.decimalSeparator.rawValue)
+                 return "(\(mantissa)*10^\(parts[1]))"
+            }
+        }
+        
+        // For regular numbers, just replace the standard '.' with the user's chosen separator.
+        return stringValue.replacingOccurrences(of: ".", with: settings.decimalSeparator.rawValue)
     }
     
     private func formatComplexForParsing(_ value: Complex) -> String {

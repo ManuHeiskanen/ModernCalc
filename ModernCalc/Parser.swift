@@ -56,7 +56,6 @@ struct PostfixOpNode: ExpressionNode {
     let op: Token, child: ExpressionNode
     var description: String { "(\(child.description)\(op.rawValue))" }
 }
-// --- NEW NODES FOR CALCULUS ---
 struct DerivativeNode: ExpressionNode {
     let body: ExpressionNode, variable: ConstantNode?, point: ExpressionNode, order: ExpressionNode
     var description: String { "derivative(\(body.description), at: \(variable?.description ?? "auto")=\(point.description), order: \(order.description))" }
@@ -74,7 +73,6 @@ struct IndexedOperationNode: ExpressionNode {
     let scalar: ExpressionNode
     var description: String { "@(\(index.description), \(scalar.description))" }
 }
-// --- NEW NODES FOR PLOTTING ---
 struct AutoplotNode: ExpressionNode {
     let expressions: [ExpressionNode]
     var description: String { "autoplot(\(expressions.map { $0.description }.joined(separator: ", ")))" }
@@ -97,9 +95,6 @@ struct ImportCSVNode: ExpressionNode {
     var description: String { "importcsv()" }
 }
 
-
-
-// --- PARSER ---
 enum ParserError: Error, CustomStringConvertible {
     case unexpectedToken(token: Token?, expected: String)
     case unexpectedEndOfInput(expected: String)
@@ -189,7 +184,8 @@ class Parser {
                 if op.rawValue.hasSuffix("@") {
                      try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for indexed operation"))
                      let index = try parseExpression()
-                     try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "','"))
+                     // MODIFIED: Check for a generic argument separator.
+                     try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "argument separator"))
                      let scalar = try parseExpression()
                      try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')'"))
                      left = BinaryOpNode(op: op, left: left, right: IndexedOperationNode(index: index, scalar: scalar))
@@ -226,7 +222,6 @@ class Parser {
         case .unitVector(let char): return ConstantNode(name: "\(char)'")
         case .identifier(let name):
             if let nextToken = peek(), case .paren("(") = nextToken.type {
-                // This is a standard function call
                 switch name {
                 case "matrix": return try parseMatrix()
                 case "vector": return try parseVector()
@@ -241,9 +236,8 @@ class Parser {
                 default: return try parseFunctionCall(name: name)
                 }
             } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
-                // This is an f'(x) style call
-                try advance() // consume '
-                try advance() // consume (
+                try advance()
+                try advance()
                 
                 let argument = try parseExpression()
                 try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "closing ')' for derivative call"))
@@ -272,12 +266,13 @@ class Parser {
         
         repeat {
             arguments.append(try parseExpression())
-            if let nextToken = peek(), case .separator(",") = nextToken.type {
+            // MODIFIED: Check for a generic argument separator instead of a hardcoded comma.
+            if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
                 try advance()
             } else { break }
         } while true
         
-        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for function call"))
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "argument separator or ')' for function call"))
         return FunctionCallNode(name: name, arguments: arguments)
     }
     
@@ -291,12 +286,13 @@ class Parser {
         
         repeat {
             expressions.append(try parseExpression())
-            if let nextToken = peek(), case .separator(",") = nextToken.type {
+            // MODIFIED: Check for a generic argument separator.
+            if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
                 try advance()
             } else { break }
         } while true
         
-        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for autoplot call"))
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "argument separator or ')' for autoplot call"))
         return AutoplotNode(expressions: expressions)
     }
 
@@ -311,20 +307,19 @@ class Parser {
         
         repeat {
             allArguments.append(try parseExpression())
-            if let nextToken = peek(), case .separator(",") = nextToken.type {
+            // MODIFIED: Check for a generic argument separator.
+            if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
                 try advance()
             } else { break }
         } while true
         
-        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for plot call"))
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "argument separator or ')' for plot call"))
         
-        // --- Argument Interpretation Logic ---
         var yRange: (ExpressionNode, ExpressionNode)? = nil
         let xRange: (ExpressionNode, ExpressionNode)
         let variableNode: ConstantNode
         let expressions: [ExpressionNode]
         
-        // Check for optional y-range: plot(..., var, x_min, x_max, y_min, y_max)
         if allArguments.count >= 5 && allArguments[allArguments.count - 4] is ConstantNode {
             let yMax = allArguments.removeLast()
             let yMin = allArguments.removeLast()
@@ -335,7 +330,6 @@ class Parser {
             throw ParserError.incorrectArgumentCount(function: "plot", expected: "at least 3 (expr, var, range)", found: allArguments.count)
         }
         
-        // The last three arguments must be x_max, x_min, and the variable
         let xMax = allArguments.removeLast()
         let xMin = allArguments.removeLast()
         guard let variable = allArguments.removeLast() as? ConstantNode else {
@@ -363,12 +357,13 @@ class Parser {
         
         repeat {
             arguments.append(try parseExpression())
-            if let nextToken = peek(), case .separator(",") = nextToken.type {
+            // MODIFIED: Check for a generic argument separator.
+            if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
                 try advance()
             } else { break }
         } while true
         
-        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "',' or ')' for scatterplot call"))
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "argument separator or ')' for scatterplot call"))
         
         guard !arguments.isEmpty && arguments.count <= 3 else {
             throw ParserError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix), 2 (Vectors), or 3 (Vectors, Degree)", found: arguments.count)
@@ -380,7 +375,6 @@ class Parser {
     private func parseImportCSV() throws -> ExpressionNode {
         try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for importcsv call"))
         
-        // Ensure there are no arguments inside the parentheses.
         if let nextToken = peek(), nextToken.type != .paren(")") {
              throw ParserError.incorrectArgumentCount(function: "importcsv", expected: "0", found: 1)
         }
@@ -392,24 +386,23 @@ class Parser {
     private func parseDerivative() throws -> ExpressionNode {
         try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for derivative"))
         
-        let arg1 = try parseExpression() // This can be the body expression OR a function name
-        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after first argument"))
-        let arg2 = try parseExpression() // This can be the variable OR the point
+        let arg1 = try parseExpression()
+        try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "argument separator after first argument"))
+        let arg2 = try parseExpression()
 
         var order: ExpressionNode = NumberNode(value: 1)
 
-        // Check if there is a third argument, which clarifies the function signature
-        if let nextToken = peek(), case .separator(",") = nextToken.type {
-            // This is a 3 or 4-argument call: derivative(body, var, point, [order])
-            try advance() // Consume the comma
-            let arg3 = try parseExpression() // This is the point
+        // MODIFIED: Check for a generic argument separator.
+        if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
+            try advance()
+            let arg3 = try parseExpression()
 
             guard let varNode = arg2 as? ConstantNode else {
                 throw ParserError.unexpectedToken(token: nil, expected: "a variable name for the second argument (e.g., 'x')")
             }
 
-            // Check for optional 4th argument (order)
-            if let anotherComma = peek(), case .separator(",") = anotherComma.type {
+            // MODIFIED: Check for a generic argument separator.
+            if let anotherSeparator = peek(), case .separator(let char) = anotherSeparator.type, char != ";" {
                 try advance()
                 order = try parseExpression()
             }
@@ -418,9 +411,7 @@ class Parser {
             return DerivativeNode(body: arg1, variable: varNode, point: arg3, order: order)
 
         } else {
-            // This is a 2-argument call: derivative(body, point)
             try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close derivative call"))
-            // The variable is left as nil, to be inferred by the Evaluator
             return DerivativeNode(body: arg1, variable: nil, point: arg2, order: order)
         }
     }
@@ -429,7 +420,7 @@ class Parser {
         try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for integral"))
         
         let body = try parseExpression()
-        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after expression"))
+        try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "argument separator after expression"))
 
         let variableToken = try advance()
         guard case .identifier(let varName) = variableToken.type else {
@@ -437,10 +428,10 @@ class Parser {
         }
         let variableNode = ConstantNode(name: varName)
         
-        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after variable"))
+        try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "argument separator after variable"))
         let lowerBound = try parseExpression()
         
-        try consume(.separator(","), orThrow: .unexpectedToken(token: peek(), expected: "',' after lower bound"))
+        try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "argument separator after lower bound"))
         let upperBound = try parseExpression()
         
         try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')'"))
@@ -478,7 +469,8 @@ class Parser {
             var row: [ExpressionNode] = []
             repeat {
                 row.append(try parseExpression())
-                if let nextToken = peek(), case .separator(",") = nextToken.type {
+                // MODIFIED: Check for a generic column separator.
+                if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
                     try advance()
                 } else { break }
             } while true
@@ -528,7 +520,8 @@ class Parser {
             var row: [ExpressionNode] = []
             repeat {
                 row.append(try parseExpression())
-                if let nextToken = peek(), case .separator(",") = nextToken.type {
+                 // MODIFIED: Check for a generic column separator.
+                if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
                     try advance()
                 } else { break }
             } while true
@@ -545,6 +538,14 @@ class Parser {
             throw ParserError.matrixRowMismatch(expected: firstRowColumnCount, found: rows.first(where: { $0.count != firstRowColumnCount })!.count)
         }
         return ComplexMatrixNode(rows: rows)
+    }
+    
+    // MODIFIED: New helper function to consume a non-semicolon separator token.
+    private func consumeArgumentSeparator(orThrow error: @autoclosure () -> ParserError) throws {
+        guard let token = peek(), case .separator(let char) = token.type, char != ";" else {
+            throw error()
+        }
+        try advance()
     }
 
     private func unaryOperatorPrecedence() -> Int { return 6 }
@@ -568,7 +569,7 @@ class Parser {
 
         let wasValue = {
             switch lastType {
-            case .number, .identifier, .unitVector, .paren(")"), .op("'"), .op("!"): return true // Add !
+            case .number, .identifier, .unitVector, .paren(")"), .op("'"), .op("!"): return true
             default: return false
             }
         }()
@@ -602,4 +603,3 @@ class Parser {
         try advance()
     }
 }
-

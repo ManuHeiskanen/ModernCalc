@@ -39,6 +39,7 @@ class Lexer {
     func tokenize() -> [Token] {
         var tokens: [Token] = []
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
+        let argumentSeparator = (decimalSeparator == .period) ? Character(",") : Character(".")
         
         while let char = peek() {
             if char.isWhitespace {
@@ -46,7 +47,6 @@ class Lexer {
                 continue
             }
             
-            // Handle numbers that might start with a decimal separator, e.g., .5
             if char.isNumber || (char == decimalSeparator.character && (peek(offset: 1)?.isNumber ?? false)) {
                 tokens.append(lexNumber())
                 continue
@@ -90,36 +90,53 @@ class Lexer {
             case "∠":
                 advance()
                 tokens.append(Token(type: .op("∠"), rawValue: "∠"))
-            case "!": // Add factorial operator
+            case "!":
                 advance()
                 tokens.append(Token(type: .op("!"), rawValue: "!"))
-            case "'": // Transpose operator
+            case "'":
                 advance()
                 tokens.append(Token(type: .op("'"), rawValue: "'"))
-            case ".": // Element-wise and indexed operators
-                if peek(offset: 1) == "=" && peek(offset: 2) == "@" {
-                    advance(); advance(); advance()
-                    tokens.append(Token(type: .op(".=@"), rawValue: ".=@"))
-                } else if peek(offset: 1) == "+" && peek(offset: 2) == "@" {
-                    advance(); advance(); advance()
-                    tokens.append(Token(type: .op(".+@"), rawValue: ".+@"))
-                } else if peek(offset: 1) == "-" && peek(offset: 2) == "@" {
-                    advance(); advance(); advance()
-                    tokens.append(Token(type: .op(".-@"), rawValue: ".-@"))
-                } else if peek(offset: 1) == "*" && peek(offset: 2) == "@" {
-                    advance(); advance(); advance()
-                    tokens.append(Token(type: .op(".*@"), rawValue: ".*@"))
-                } else if peek(offset: 1) == "/" && peek(offset: 2) == "@" {
-                    advance(); advance(); advance()
-                    tokens.append(Token(type: .op("./@"), rawValue: "./@"))
-                } else if peek(offset: 1) == "*" {
-                    advance(); advance()
-                    tokens.append(Token(type: .op(".*"), rawValue: ".*"))
-                } else if peek(offset: 1) == "/" {
-                    advance(); advance()
-                    tokens.append(Token(type: .op("./"), rawValue: "./"))
+            // MODIFIED: Replaced the ambiguous fallthrough logic with explicit cases for '.' and ','
+            case ",":
+                if argumentSeparator == "," {
+                    advance()
+                    tokens.append(Token(type: .separator(","), rawValue: ","))
                 } else {
-                    tokens.append(Token(type: .unknown(advance()!), rawValue: "."))
+                    // If we are here, comma must be the decimal separator. If it appears alone, it's an error,
+                    // because lexNumber should have handled it if it was part of a number.
+                    tokens.append(Token(type: .unknown(advance()!), rawValue: ","))
+                }
+            case ".":
+                if argumentSeparator == "." {
+                    advance()
+                    tokens.append(Token(type: .separator("."), rawValue: "."))
+                } else {
+                    // Here, period must be the decimal separator. Check for element-wise operators.
+                    if peek(offset: 1) == "=" && peek(offset: 2) == "@" {
+                        advance(); advance(); advance()
+                        tokens.append(Token(type: .op(".=@"), rawValue: ".=@"))
+                    } else if peek(offset: 1) == "+" && peek(offset: 2) == "@" {
+                        advance(); advance(); advance()
+                        tokens.append(Token(type: .op(".+@"), rawValue: ".+@"))
+                    } else if peek(offset: 1) == "-" && peek(offset: 2) == "@" {
+                        advance(); advance(); advance()
+                        tokens.append(Token(type: .op(".-@"), rawValue: ".-@"))
+                    } else if peek(offset: 1) == "*" && peek(offset: 2) == "@" {
+                        advance(); advance(); advance()
+                        tokens.append(Token(type: .op(".*@"), rawValue: ".*@"))
+                    } else if peek(offset: 1) == "/" && peek(offset: 2) == "@" {
+                        advance(); advance(); advance()
+                        tokens.append(Token(type: .op("./@"), rawValue: "./@"))
+                    } else if peek(offset: 1) == "*" {
+                        advance(); advance()
+                        tokens.append(Token(type: .op(".*"), rawValue: ".*"))
+                    } else if peek(offset: 1) == "/" {
+                        advance(); advance()
+                        tokens.append(Token(type: .op("./"), rawValue: "./"))
+                    } else {
+                        // Period is the decimal separator but wasn't part of a number. Unknown.
+                        tokens.append(Token(type: .unknown(advance()!), rawValue: "."))
+                    }
                 }
             case "°":
                 advance()
@@ -135,7 +152,7 @@ class Lexer {
                 } else {
                     tokens.append(Token(type: .unknown(advance()!), rawValue: ":"))
                 }
-            case ",", ";":
+            case ";":
                 advance()
                 tokens.append(Token(type: .separator(char), rawValue: String(char)))
             default:
@@ -149,12 +166,6 @@ class Lexer {
         let startIndex = currentIndex
         var hasDecimal = false
 
-        // Handle case where number starts with decimal separator
-        if let char = peek(), char == decimalSeparator.character {
-            hasDecimal = true
-            advance()
-        }
-        
         while let char = peek() {
             if char.isNumber {
                 advance()
@@ -162,12 +173,14 @@ class Lexer {
                 hasDecimal = true
                 advance()
             } else {
+                // If the character is not a digit or the valid decimal separator, stop parsing the number.
                 break
             }
         }
         
         let numberString = String(input[startIndex..<currentIndex])
-        let sanitizedString = numberString.replacingOccurrences(of: ",", with: ".")
+        // Standardize the decimal separator to '.' for Double conversion.
+        let sanitizedString = numberString.replacingOccurrences(of: String(decimalSeparator.character), with: ".")
         
         if let value = Double(sanitizedString) {
             return Token(type: .number(value), rawValue: numberString)
@@ -179,7 +192,6 @@ class Lexer {
     private func lexIdentifier() -> Token {
         let startIndex = currentIndex
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
-        // Allow numbers in identifiers, but not as the first character (this is checked in the main tokenize loop)
         while let char = peek(), char.isLetter || char.isNumber || greekLetters.contains(char) || char == "_" {
             advance()
         }
@@ -207,3 +219,4 @@ class Lexer {
         return char
     }
 }
+
