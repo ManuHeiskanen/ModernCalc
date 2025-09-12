@@ -42,8 +42,7 @@ struct ContentView: View {
                 errorText: viewModel.liveErrorText,
                 greekSymbols: viewModel.greekSymbols
             )
-            .frame(height: viewModel.livePreviewHeight) // --- MODIFIED: Use dynamic height ---
-            .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight) // --- MODIFIED: Animate based on dynamic height ---
+            .frame(height: viewModel.livePreviewHeight)
             Divider()
 
             CalculatorInputView(
@@ -87,6 +86,7 @@ struct ContentView: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight) // --- MODIFIED: Animation moved to parent view ---
         .frame(minWidth: 410, minHeight: 300)
         .toolbar {
             // --- MOVED: CSV and Menu buttons are now in the toolbar's principal (center) area ---
@@ -502,3 +502,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
