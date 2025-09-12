@@ -350,8 +350,10 @@ class CalculatorViewModel: ObservableObject {
                     }
                 } else {
                     if self.settings.enableLiveRounding {
-                        let liveSettings = UserSettings(); liveSettings.displayMode = .fixed
-                        liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces; liveSettings.decimalSeparator = self.settings.decimalSeparator
+                        // FIX: Create a temporary, non-persistent copy of the settings for live formatting.
+                        let liveSettings = self.settings.makeTemporaryCopy()
+                        liveSettings.displayMode = .fixed // This change will NOT be saved.
+                        liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
                     } else {
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
