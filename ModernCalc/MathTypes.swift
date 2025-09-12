@@ -294,6 +294,21 @@ struct Matrix: Equatable, Codable {
         return Matrix(values: zip(self.values, other.values).map(/), rows: self.rows, columns: self.columns)
     }
     
+    /// Extracts a single column from the matrix as a vector.
+    /// - Parameter index: The 1-based index of the column to extract.
+    /// - Returns: A `Vector` containing the elements of the specified column.
+    func getcolumn(index: Int) throws -> Vector {
+        let zeroBasedIndex = index - 1
+        guard zeroBasedIndex >= 0 && zeroBasedIndex < columns else {
+            throw MathError.dimensionMismatch(reason: "Column index \(index) is out of bounds for a matrix with \(columns) columns.")
+        }
+        var columnValues: [Double] = []
+        for r in 0..<rows {
+            columnValues.append(self[r, zeroBasedIndex])
+        }
+        return Vector(values: columnValues)
+    }
+    
     // --- Matrix-Matrix Operators ---
     static func + (lhs: Matrix, rhs: Matrix) throws -> Matrix {
         guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else {
@@ -617,4 +632,3 @@ extension MathValue {
         return s
     }
 }
-

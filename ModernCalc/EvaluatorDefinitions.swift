@@ -240,6 +240,19 @@ extension Evaluator {
             throw MathError.typeMismatch(expected: "Two Vectors or Two ComplexVectors", found: "\(a.typeName), \(b.typeName)")
         },
         "cross": { a, b in guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)") }; return .vector(try v1.cross(with: v2)) },
+        "getcolumn": { a, b in
+            guard case .matrix(let matrix) = a else {
+                throw MathError.typeMismatch(expected: "Matrix", found: a.typeName)
+            }
+            guard case .scalar(let indexScalar) = b else {
+                throw MathError.typeMismatch(expected: "Scalar for column index", found: b.typeName)
+            }
+            guard indexScalar.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.typeMismatch(expected: "Integer for column index", found: "Non-integer scalar")
+            }
+            let index = Int(indexScalar)
+            return .vector(try matrix.getcolumn(index: index))
+        },
         "nPr": { a, b in guard case .scalar(let n) = a, case .scalar(let k) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }; return .scalar(try permutations(n: n, k: k)) },
         "nCr": { a, b in guard case .scalar(let n) = a, case .scalar(let k) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }; return .scalar(try combinations(n: n, k: k)) },
         "hypot": { a, b in guard case .scalar(let s1) = a, case .scalar(let s2) = b else { throw MathError.typeMismatch(expected: "Two Scalars", found: "\(a.typeName), \(b.typeName)") }; return .scalar(Foundation.sqrt(s1*s1 + s2*s2)) },
