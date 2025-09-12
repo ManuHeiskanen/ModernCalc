@@ -45,10 +45,12 @@ class NavigationManager: ObservableObject {
             }
             
         } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), selectedItem.type != .functionDefinition {
-            // NEW: Logic to navigate between multiple results of a tuple.
+            // MODIFIED: This logic now also recognizes regression results as having 2 parts.
             let resultCount: Int
             if case .tuple(let values) = selectedItem.result {
                 resultCount = values.count
+            } else if case .regressionResult = selectedItem.result {
+                resultCount = 2 // m and b
             } else {
                 resultCount = 1
             }
@@ -82,12 +84,15 @@ class NavigationManager: ObservableObject {
                 return "Press enter to open plot for \(selectedItem.expression)..."
             }
             
-            // Return the specific result from the tuple based on the selected index.
+            // Return the specific result from the tuple/regression based on the selected index.
             if case .result(let index) = selectedPart {
                 if case .tuple(let values) = selectedItem.result {
                     if index < values.count {
                         return viewModel.formatForParsing(values[index])
                     }
+                } else if case .regressionResult(let slope, let intercept) = selectedItem.result {
+                    let valueToParse = (index == 0) ? MathValue.scalar(slope) : MathValue.scalar(intercept)
+                    return viewModel.formatForParsing(valueToParse)
                 } else if index == 0 { // For single results
                     return viewModel.formatForParsing(selectedItem.result)
                 }

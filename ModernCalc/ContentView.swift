@@ -264,6 +264,29 @@ struct HistoryView: View {
                                                         }
                                                     }
                                                 }
+                                            } else if case .regressionResult(let slope, let intercept) = calculation.result {
+                                                HStack(spacing: 0) {
+                                                    Text("m = \(viewModel.formatScalarForDisplay(slope))")
+                                                        .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                                        .background(isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                                        .onHover { isHovering in
+                                                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
+                                                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                                        }
+                                                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.scalar(slope))) }
+                                                    
+                                                    Text(", ")
+                                                        .font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+
+                                                    Text("b = \(viewModel.formatScalarForDisplay(intercept))")
+                                                        .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                                        .background(isResultSelected(calculation: calculation, index: 1) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                                        .onHover { isHovering in
+                                                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 1)) : nil }
+                                                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                                        }
+                                                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.scalar(intercept))) }
+                                                }
                                             } else {
                                                 Text(viewModel.formatForHistory(calculation.result))
                                                     .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)

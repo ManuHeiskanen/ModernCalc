@@ -549,6 +549,7 @@ class CalculatorViewModel: ObservableObject {
         return LaTeXEngine.format(calculation: calculation, evaluator: self.evaluator, angleMode: self.angleMode, settings: self.settings)
     }
 
+    // MODIFIED: This function now handles tuples from linreg correctly.
     func formatForHistory(_ value: MathValue) -> String {
         switch value {
         case .scalar(let d): return formatScalarForDisplay(d)
@@ -579,7 +580,7 @@ class CalculatorViewModel: ObservableObject {
         case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForParsing(p)
-        case .regressionResult, .polynomialFit: return "" // Not meant to be parsed back
+        case .regressionResult, .polynomialFit: return "" // Not meant to be parsed back directly
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
         }
@@ -741,12 +742,8 @@ class CalculatorViewModel: ObservableObject {
         }
     }
     
-    // MODIFIED: This function now correctly formats numbers for re-parsing based on the current setting.
     private func formatScalarForParsing(_ value: Double) -> String {
-        // String(value) is locale-independent and always uses '.' as the decimal separator.
         let stringValue = String(value)
-        
-        // The lexer does not handle scientific 'e' notation, so we convert it to a parsable format.
         if stringValue.lowercased().contains("e") {
             let parts = stringValue.lowercased().components(separatedBy: "e")
             if parts.count == 2 {
@@ -754,8 +751,6 @@ class CalculatorViewModel: ObservableObject {
                  return "(\(mantissa)*10^\(parts[1]))"
             }
         }
-        
-        // For regular numbers, just replace the standard '.' with the user's chosen separator.
         return stringValue.replacingOccurrences(of: ".", with: settings.decimalSeparator.rawValue)
     }
     
@@ -768,4 +763,5 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
 
