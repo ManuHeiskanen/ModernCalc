@@ -20,6 +20,11 @@ struct NumberNode: ExpressionNode {
     let value: Double
     var description: String { "\(value)" }
 }
+// NEW: Node to represent a string literal
+struct StringNode: ExpressionNode {
+    let value: String
+    var description: String { "\"\(value)\"" }
+}
 struct ConstantNode: ExpressionNode {
     let name: String
     var description: String { name }
@@ -219,6 +224,7 @@ class Parser {
         let token = try advance()
         switch token.type {
         case .number(let value): return NumberNode(value: value)
+        case .string(let value): return StringNode(value: value) // NEW: Handle string token
         case .unitVector(let char): return ConstantNode(name: "\(char)'")
         case .identifier(let name):
             if let nextToken = peek(), case .paren("(") = nextToken.type {
@@ -576,7 +582,7 @@ class Parser {
 
         let isValue = {
             switch nextType {
-            case .number, .identifier, .unitVector, .paren("("): return true
+            case .number, .identifier, .unitVector, .paren("("), .string: return true // MODIFIED: string can be on the right
             default: return false
             }
         }()

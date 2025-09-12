@@ -91,6 +91,9 @@ struct Evaluator {
         case let numberNode as NumberNode:
             return (.scalar(numberNode.value), usedAngle)
         
+        case let stringNode as StringNode: // NEW: Handle StringNode
+            return (.constant(stringNode.value), false)
+            
         case let constantNode as ConstantNode:
             if constantNode.name == "i" { return (.complex(Complex.i), usedAngle) }
             if let value = variables[constantNode.name] { return (value, usedAngle) }
@@ -307,4 +310,3 @@ struct Evaluator {
         }
     }
 }
-

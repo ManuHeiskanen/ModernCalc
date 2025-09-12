@@ -15,6 +15,7 @@ enum TokenType: Equatable {
     case assignment
     case separator(Character) // For , and ;
     case identifier(String)
+    case string(String) // NEW: For string literals like "asc"
     case unitVector(Character) // For i', j', k'
     case unknown(Character)
     case invalid(String)
@@ -66,6 +67,8 @@ class Lexer {
             }
 
             switch char {
+            case "\"":
+                tokens.append(lexString())
             case "+", "-", "%", "^", "=":
                 advance()
                 tokens.append(Token(type: .op(String(char)), rawValue: String(char)))
@@ -189,6 +192,24 @@ class Lexer {
         }
     }
     
+    private func lexString() -> Token {
+        let startIndex = currentIndex
+        advance() // Consume the opening quote
+        
+        var value = ""
+        while let char = peek(), char != "\"" {
+            advance()
+            value.append(char)
+        }
+        
+        if peek() == "\"" {
+            advance() // Consume the closing quote
+        }
+        
+        let rawValue = String(input[startIndex..<currentIndex])
+        return Token(type: .string(value), rawValue: rawValue)
+    }
+
     private func lexIdentifier() -> Token {
         let startIndex = currentIndex
         let greekLetters = "αβγδεζηθικλμνξοπρστυφχψωΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
@@ -219,4 +240,3 @@ class Lexer {
         return char
     }
 }
-

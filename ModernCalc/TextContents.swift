@@ -78,7 +78,7 @@ struct TextContents {
         .init(name: "side", signature: "side(hyp, sideA)", description: "Calculates the missing side of a right triangle."),
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
         .init(name: "sinh", signature: "sinh(value)", description: "Calculates the hyperbolic sine."),
-        .init(name: "sort", signature: "sort(vector, [\"asc\"|\"desc\"])", description: "Sorts a vector in ascending (default) or descending order."),
+        .init(name: "sort", signature: "sort(vector, [asc or desc])", description: "Sorts a vector in ascending (default) or descending order."),
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
         .init(name: "stddev", signature: "stddev(a, b, ...)", description: "Calculates the sample standard deviation."),
         .init(name: "stddevp", signature: "stddevp(a, b, ...)", description: "Calculates the population standard deviation."),
