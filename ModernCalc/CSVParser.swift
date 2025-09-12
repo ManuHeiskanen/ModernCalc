@@ -16,9 +16,10 @@ struct CSVParser {
     }
 
     /// Parses the CSV content into headers and a data grid.
-    /// This is a basic implementation and doesn't handle complex cases like quoted fields containing commas.
+    /// This is a basic implementation and doesn't handle complex cases like quoted fields.
+    /// - Parameter separator: The character used to separate columns.
     /// - Returns: A tuple containing an array of header strings and a 2D array of data strings.
-    func parse() throws -> (headers: [String], grid: [[String]]) {
+    func parse(separator: Character) -> (headers: [String], grid: [[String]]) {
         // Trim whitespace and newlines from the entire file content first.
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         
@@ -36,14 +37,15 @@ struct CSVParser {
 
         // Assume the first line is the header.
         let headerLine = lines.removeFirst()
-        // Split the header line by commas and trim whitespace from each header name.
-        let headers = headerLine.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        // Split the header line by the specified separator and trim whitespace.
+        let headers = headerLine.components(separatedBy: String(separator)).map { $0.trimmingCharacters(in: .whitespaces) }
         
         // Process the remaining lines as the data grid.
         let grid = lines.map { line in
-            line.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            line.components(separatedBy: String(separator)).map { $0.trimmingCharacters(in: .whitespaces) }
         }
         
         return (headers, grid)
     }
 }
+

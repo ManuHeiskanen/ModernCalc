@@ -9,10 +9,8 @@ import SwiftUI
 
 /// A view that displays CSV data in a grid and provides interactive controls for importing it.
 struct CSVView: View {
-    // Use @ObservedObject when a view receives an existing object that it doesn't own.
     @ObservedObject var viewModel: CSVViewModel
     
-    // Used to dismiss the window programmatically.
     @Environment(\.dismiss) private var dismiss
 
     private let cellPadding: CGFloat = 8
@@ -20,48 +18,52 @@ struct CSVView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // --- Header row with column selection toggles ---
             headerView
-            
             Divider()
-
-            // --- Main data grid ---
             ScrollView([.horizontal, .vertical]) {
-                // The LazyVGrid and its contents have been extracted to a computed property
-                // to help the compiler with type-checking.
                 gridContent
             }
-            
             Divider()
-            
-            // --- Control panel at the bottom ---
             controlPanelView
         }
-        .frame(minWidth: 600, minHeight: 400)
-        .navigationTitle(viewModel.sourceData.fileName)
+        .frame(minWidth: 700, minHeight: 400)
+        .navigationTitle(viewModel.sourceFileName)
     }
     
-    /// A computed property for the main data grid's content.
-    /// This has been updated to use a single ForEach loop to prevent duplicate view IDs.
+    /// Creates a binding for the column selection toggle that is safe from out-of-bounds crashes.
+    /// This is necessary because when the data is re-parsed with a new separator, the number of columns
+    /// can change, and the UI might briefly try to access an index that no longer exists.
+    private func safeColumnBinding(for index: Int) -> Binding<Bool> {
+        Binding(
+            get: {
+                // Safely get the value, returning false if the index is out of bounds.
+                guard index < viewModel.selectedColumns.count else {
+                    return false
+                }
+                return viewModel.selectedColumns[index]
+            },
+            set: { newValue in
+                // Safely set the value, doing nothing if the index is out of bounds.
+                guard index < viewModel.selectedColumns.count else {
+                    return
+                }
+                viewModel.selectedColumns[index] = newValue
+            }
+        )
+    }
+    
     @ViewBuilder
     private var gridContent: some View {
         let columnCount = viewModel.headers.count
         
-        // A LazyVGrid requires a non-zero number of columns to be initialized.
         if columnCount > 0 {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: cellMinWidth)), count: columnCount), spacing: 0) {
                 let rowCount = viewModel.displayGrid.count
                 
-                // We iterate over a single, unique range from 0 to the total number of cells.
-                // This provides a unique ID (\.self, i.e., the index) for each cell view,
-                // which resolves the "ID used by multiple child views" error.
                 ForEach(0..<(rowCount * columnCount), id: \.self) { index in
-                    // Calculate the row and column from the flat index.
                     let rowIndex = index / columnCount
                     let colIndex = index % columnCount
                     
-                    // This defensive check handles jagged data (rows with inconsistent column counts)
-                    // and prevents the app from crashing.
                     if rowIndex < viewModel.displayGrid.count && colIndex < viewModel.displayGrid[rowIndex].count {
                         Text(viewModel.displayGrid[rowIndex][colIndex])
                             .padding(cellPadding)
@@ -69,8 +71,6 @@ struct CSVView: View {
                             .background(rowIndex % 2 == 0 ? Color.clear : Color.primary.opacity(0.05))
                             .border(Color.gray.opacity(0.2), width: 0.5)
                     } else {
-                        // If data is missing for a cell, display an empty placeholder
-                        // to keep the grid aligned correctly.
                         Text("")
                             .padding(cellPadding)
                             .frame(minWidth: cellMinWidth, alignment: .leading)
@@ -79,21 +79,24 @@ struct CSVView: View {
                 }
             }
         } else {
-            Text("No data to display.")
+            Text("No data to display. Try changing the column separator.")
                 .padding()
         }
     }
     
-    /// The view for the column headers and selection toggles.
+    /// **FIXED:** Replaced the direct array access with the `safeColumnBinding` helper.
+    /// This creates a robust binding that won't crash even if the underlying array changes size during a view update.
     private var headerView: some View {
         HStack(spacing: 0) {
             ForEach(0..<viewModel.headers.count, id: \.self) { index in
                 VStack(spacing: 4) {
                     Text(viewModel.headers[index])
                         .font(.headline)
+                        .lineLimit(1)
                         .padding(.top, cellPadding)
                     
-                    Toggle("Include", isOn: $viewModel.selectedColumns[index])
+                    // Use the safe binding instead of direct access with an `if` check.
+                    Toggle("Include", isOn: safeColumnBinding(for: index))
                         .labelsHidden()
                         .padding(.bottom, cellPadding)
                 }
@@ -104,11 +107,39 @@ struct CSVView: View {
         .background(Color.primary.opacity(0.1))
     }
     
-    /// The view for the controls like checkboxes, row ranges, and the final import button.
     private var controlPanelView: some View {
-        VStack {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Toggle("First row contains headers", isOn: $viewModel.useFirstRowAsHeader)
+                HStack {
+                    Text("Separator:").fixedSize()
+                    Picker("Separator", selection: $viewModel.columnSeparator) {
+                        ForEach(ColumnSeparator.allCases) { separator in
+                            Text(separator.rawValue).tag(separator)
+                        }
+                    }
+                    .labelsHidden()
+                }
+                
+                Divider().frame(height: 20)
+                
+                HStack {
+                    Text("Fix Decimals:").fixedSize()
+                    Picker("Fix Decimals", selection: $viewModel.decimalConversion) {
+                        ForEach(DecimalConversionOption.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .labelsHidden()
+                }
+                
+                Spacer()
+                
+                Toggle("First row is header", isOn: $viewModel.useFirstRowAsHeader)
+            }
+            
+            HStack {
+                Text(viewModel.infoMessage)
+                    .foregroundColor(viewModel.infoMessage.starts(with: "Error") ? .red : .secondary)
                 
                 Spacer()
                 
@@ -120,14 +151,8 @@ struct CSVView: View {
                 TextField("End", text: $viewModel.endRowString)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .frame(width: 50)
-            }
-            .padding()
 
-            HStack {
-                Text(viewModel.infoMessage)
-                    .foregroundColor(viewModel.infoMessage.starts(with: "Error") ? .red : .secondary)
-                
-                Spacer()
+                Divider().frame(height: 20)
 
                 TextField("Matrix Name", text: $viewModel.matrixVariableName)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -142,8 +167,9 @@ struct CSVView: View {
                 }
                 .keyboardShortcut(.defaultAction)
             }
-            .padding([.horizontal, .bottom])
         }
+        .padding()
         .background(.bar)
     }
 }
+

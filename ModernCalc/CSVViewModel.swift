@@ -8,11 +8,39 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Enums for UI Controls
+
+/// Defines the available column separators for parsing.
+enum ColumnSeparator: String, CaseIterable, Identifiable {
+    case comma = "Comma (,)"
+    case semicolon = "Semicolon (;)"
+
+    var id: String { self.rawValue }
+
+    var character: Character {
+        switch self {
+        case .comma: return ","
+        case .semicolon: return ";"
+        }
+    }
+}
+
+/// Defines the decimal conversion options available in the UI.
+enum DecimalConversionOption: String, CaseIterable, Identifiable {
+    case none = "None"
+    case periodToComma = "Convert . to ,"
+    case commaToPeriod = "Convert , to ."
+    
+    var id: String { self.rawValue }
+}
+
+
 @MainActor
 class CSVViewModel: ObservableObject {
     
-    // The raw data from the CSV file.
-    let sourceData: CSVData
+    // The file name and raw content are stored directly for re-parsing.
+    let sourceFileName: String
+    let rawContent: String
     
     // The user's settings, passed in to control formatting.
     let settings: UserSettings
@@ -20,84 +48,77 @@ class CSVViewModel: ObservableObject {
     // A weak reference to the main view model to assign variables back to it.
     private weak var mainViewModel: CalculatorViewModel?
     
+    // --- NEW UI State Properties ---
+    @Published var columnSeparator: ColumnSeparator = .comma {
+        didSet {
+            // Re-parse data whenever the separator is changed.
+            reparseData()
+        }
+    }
+    @Published var decimalConversion: DecimalConversionOption = .none
+    
+    // --- Properties to hold the currently parsed data ---
+    @Published private var parsedHeaders: [String] = []
+    @Published private var parsedGrid: [[String]] = []
+    
     // --- UI State Properties ---
     @Published var matrixVariableName: String = ""
-    @Published var selectedColumns: [Bool]
-    @Published var useFirstRowAsHeader: Bool = true
+    @Published var selectedColumns: [Bool] = []
+    @Published var useFirstRowAsHeader: Bool = true {
+        didSet {
+            // No need to re-parse, just update the effective row count.
+            updateRowCounts()
+        }
+    }
     @Published var errorMessage: String? = nil
     
-    // --- MODIFIED: Row properties now use didSet for robust validation ---
+    // --- Row properties now use didSet for robust validation ---
     @Published var startRow: Int = 1 {
         didSet {
-            // After startRow changes, ensure it's at least 1.
-            if startRow <= 0 {
-                startRow = 1
-            }
-            // If the new startRow is greater than endRow, endRow must be adjusted.
-            if startRow > endRow {
-                endRow = startRow
-            }
+            if startRow <= 0 { startRow = 1 }
+            if startRow > endRow { endRow = startRow }
         }
     }
-    @Published var endRow: Int {
+    @Published var endRow: Int = 0 {
         didSet {
-            // After endRow changes, ensure it's not less than startRow.
-            // If it is, revert to the previous valid value to prevent an invalid state.
-            if endRow < startRow {
-                endRow = oldValue
-            }
+            if endRow < startRow { endRow = oldValue }
         }
     }
     
-    // --- MODIFIED: Computed properties are now simpler bridges ---
+    // --- Computed properties are now simpler bridges ---
     var startRowString: String {
         get { "\(startRow)" }
-        set {
-            // The setter now just attempts to update the underlying Int property.
-            // The validation logic is handled by the property's `didSet` observer.
-            if let value = Int(newValue) {
-                startRow = value
-            }
-        }
+        set { if let value = Int(newValue) { startRow = value } }
     }
     
     var endRowString: String {
         get { "\(endRow)" }
-        set {
-            if let value = Int(newValue) {
-                endRow = value
-            }
-        }
+        set { if let value = Int(newValue) { endRow = value } }
     }
 
-    init(csvData: CSVData, mainViewModel: CalculatorViewModel, settings: UserSettings) {
-        self.sourceData = csvData
+    init(fileName: String, content: String, mainViewModel: CalculatorViewModel, settings: UserSettings) {
+        self.sourceFileName = fileName
+        self.rawContent = content
         self.mainViewModel = mainViewModel
         self.settings = settings
         
-        let totalRows = csvData.grid.count + (csvData.headers.isEmpty ? 0 : 1)
-        
-        // Initialize state properties
-        self.endRow = totalRows
-        self.selectedColumns = Array(repeating: true, count: csvData.headers.count)
+        // Perform the initial parse based on default settings.
+        reparseData()
     }
     
     // --- Computed Properties for Display ---
     
-    /// The effective headers to be displayed in the view, accounting for the toggle.
     var headers: [String] {
         if useFirstRowAsHeader {
-            return sourceData.headers
+            return parsedHeaders
         } else {
-            // Generate generic headers if the file's first row is data
-            return (1...sourceData.headers.count).map { "Column \($0)" }
+            guard !parsedHeaders.isEmpty else { return [] }
+            return (1...parsedHeaders.count).map { "Column \($0)" }
         }
     }
     
-    /// The grid data to be displayed, sliced based on the selected row range.
     var displayGrid: [[String]] {
-        // The full dataset includes the header row if 'useFirstRowAsHeader' is false.
-        let fullGrid = useFirstRowAsHeader ? sourceData.grid : [sourceData.headers] + sourceData.grid
+        let fullGrid = useFirstRowAsHeader ? parsedGrid : [parsedHeaders] + parsedGrid
         
         let startIndex = max(0, startRow - 1)
         let endIndex = min(fullGrid.count, endRow)
@@ -106,23 +127,18 @@ class CSVViewModel: ObservableObject {
         
         let slicedGrid = Array(fullGrid[startIndex..<endIndex])
         
-        // Apply formatting to the sliced data
         return slicedGrid.map { row in
             row.map { cell in
-                formatCell(cell) // Format each cell before displaying it
+                let convertedCell = applyDecimalConversion(to: cell)
+                return formatCell(convertedCell)
             }
         }
     }
     
-    /// A computed property for the informational message at the bottom of the view.
     var infoMessage: String {
-        // If there's an error message, display it instead of the info message.
-        if let error = errorMessage {
-            return error
-        }
+        if let error = errorMessage { return error }
         
-        let fullGrid = useFirstRowAsHeader ? sourceData.grid : [sourceData.headers] + sourceData.grid
-        
+        let fullGrid = useFirstRowAsHeader ? parsedGrid : [parsedHeaders] + parsedGrid
         let validStart = max(1, startRow)
         let validEnd = min(fullGrid.count, endRow)
         
@@ -132,16 +148,9 @@ class CSVViewModel: ObservableObject {
     
     // MARK: - Intents
     
-    /// Assigns the selected columns as a single matrix to the main calculator view model.
     func assignMatrix() {
-        // Clear any previous error messages when trying to assign again.
         errorMessage = nil
-        
-        guard let mainVM = mainViewModel else {
-            // This is a programmatic error.
-            print("Error: Could not access calculator.")
-            return
-        }
+        guard let mainVM = mainViewModel else { return }
         
         let trimmedVarName = matrixVariableName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedVarName.isEmpty else {
@@ -155,7 +164,7 @@ class CSVViewModel: ObservableObject {
             return
         }
 
-        let dataToProcess = useFirstRowAsHeader ? sourceData.grid : [sourceData.headers] + sourceData.grid
+        let dataToProcess = useFirstRowAsHeader ? parsedGrid : [parsedHeaders] + parsedGrid
         
         let startIndex = max(0, startRow - 1)
         let endIndex = min(dataToProcess.count, endRow)
@@ -170,17 +179,10 @@ class CSVViewModel: ObservableObject {
         
         for row in slicedRows {
             for (colIndex, cell) in row.enumerated() {
-                // Only include the cell if its column is selected
                 if colIndex < selectedColumns.count && selectedColumns[colIndex] {
-                    let originalCell = cell.trimmingCharacters(in: .whitespaces)
-                    let doubleValue: Double?
-                    if settings.decimalSeparator == .comma {
-                        doubleValue = Double(originalCell.replacingOccurrences(of: ",", with: "."))
-                    } else {
-                        doubleValue = Double(originalCell)
-                    }
-                    // If a cell isn't a valid number, use 0.0 as a default.
-                    matrixValues.append(doubleValue ?? 0.0)
+                    let convertedCell = applyDecimalConversion(to: cell)
+                    let standardizedCell = convertedCell.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+                    matrixValues.append(Double(standardizedCell) ?? 0.0)
                 }
             }
         }
@@ -188,23 +190,49 @@ class CSVViewModel: ObservableObject {
         let matrix = Matrix(values: matrixValues, rows: slicedRows.count, columns: numberOfSelectedColumns)
         mainVM.variables[trimmedVarName] = .matrix(matrix)
         
-        // Hide the window after a short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             mainVM.showCSVView = false
         }
     }
     
-    /// Formats a string value from a cell if it's a number and rounding is enabled.
+    // MARK: - Private Helpers
+    
+    private func reparseData() {
+        let parser = CSVParser(content: self.rawContent)
+        (self.parsedHeaders, self.parsedGrid) = parser.parse(separator: columnSeparator.character)
+        
+        self.selectedColumns = Array(repeating: true, count: parsedHeaders.count)
+        updateRowCounts()
+        self.errorMessage = nil
+    }
+    
+    /// **FIXED:** Correctly calculates the total number of rows when the header is treated as data.
+    private func updateRowCounts() {
+        let headerAsDataRow = (useFirstRowAsHeader == false && !parsedHeaders.isEmpty) ? 1 : 0
+        let totalRows = parsedGrid.count + headerAsDataRow
+        self.startRow = totalRows > 0 ? 1 : 0
+        self.endRow = totalRows
+    }
+    
+    private func applyDecimalConversion(to cell: String) -> String {
+        switch decimalConversion {
+        case .none:
+            return cell
+        case .periodToComma:
+            return cell.replacingOccurrences(of: ".", with: ",")
+        case .commaToPeriod:
+            return cell.replacingOccurrences(of: ",", with: ".")
+        }
+    }
+    
     private func formatCell(_ value: String) -> String {
         guard settings.enableCSVRounding,
               let number = Double(value.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")) else {
             return value
         }
         
-        // Format the number to the correct number of decimal places.
         let formattedString = String(format: "%.\(settings.csvDecimalPlaces)f", number)
         
-        // Apply the correct decimal separator.
         if settings.decimalSeparator == .comma {
             return formattedString.replacingOccurrences(of: ".", with: ",")
         }

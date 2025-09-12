@@ -153,7 +153,7 @@ class CalculatorViewModel: ObservableObject {
         .init(symbol: "me", name: "Electron mass", value: 9.1093837015e-31),
         .init(symbol: "mn", name: "Neutron mass", value: 1.67492749804e-27),
         .init(symbol: "mp", name: "Proton mass", value: 1.67262192369e-27),
-        .init(symbol: "NA", name: "Avogadro constant", value: 6.02214076e23),
+        .init(symbol: "NA", name: "Avogadros constant", value: 6.02214076e23),
         .init(symbol: "R", name: "Gas constant", value: 8.314462618),
         .init(symbol: "Rinf", name: "Rydberg constant", value: 10973731.568160),
         .init(symbol: "Vm", name: "Molar volume (STP)", value: 22.41396954e-3),
@@ -442,6 +442,7 @@ class CalculatorViewModel: ObservableObject {
         }
     }
     
+    /// **FIXED:** This function now correctly calls the updated initializers and methods.
     private func openCSVFile() -> Bool {
          let openPanel = NSOpenPanel()
          openPanel.allowedContentTypes = [.commaSeparatedText]
@@ -453,15 +454,14 @@ class CalculatorViewModel: ObservableObject {
              if let url = openPanel.url {
                  do {
                      let content = try String(contentsOf: url, encoding: .utf8)
-                     let parser = CSVParser(content: content)
-                     let (headers, grid) = try parser.parse()
-                     let csvData = CSVData(fileName: url.lastPathComponent, headers: headers, grid: grid)
                      
-                     self.csvViewModel = CSVViewModel(csvData: csvData, mainViewModel: self, settings: self.settings)
+                     // The CSVViewModel now handles all parsing, so we just pass the raw content.
+                     self.csvViewModel = CSVViewModel(fileName: url.lastPathComponent, content: content, mainViewModel: self, settings: self.settings)
                      self.showCSVView = true
                      
                  } catch {
-                     print("Error reading or parsing CSV file: \(error.localizedDescription)")
+                     // This catch block only handles errors from reading the file.
+                     print("Error reading CSV file: \(error.localizedDescription)")
                  }
                  return true
              }
@@ -763,5 +763,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
-
