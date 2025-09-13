@@ -265,8 +265,17 @@ struct LaTeXEngine {
                 if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
                      return valStr
                 }
-                let unitStr = "\\text{\(bestUnit.symbol)}"
+                let symbol = bestUnit.symbol
+                let unitStr: String
+                if let caretIndex = symbol.firstIndex(of: "^") {
+                    let base = symbol[..<caretIndex]
+                    let exponent = symbol[symbol.index(after: caretIndex)...]
+                    unitStr = "\\text{\(base)}^{\(exponent)}"
+                } else {
+                    unitStr = "\\text{\(symbol)}"
+                }
                 return "\(valStr) \\, \(unitStr)"
+
             }
             
             let valStr = formatScalar(u.value, settings: settings)

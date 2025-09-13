@@ -274,7 +274,9 @@ class CalculatorViewModel: ObservableObject {
             resetNavigation()
             
             if !textToInsert.isEmpty {
-                self.insertTextAtCursor(textToInsert)
+                Task {
+                    self.insertTextAtCursor(textToInsert)
+                }
             }
             
             return nil
@@ -380,11 +382,15 @@ class CalculatorViewModel: ObservableObject {
     
     func insertTextAtCursor(_ textToInsert: String) {
         guard let range = Range(cursorPosition, in: rawExpression) else {
-            rawExpression += textToInsert; let newLocation = rawExpression.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
+            Task {
+                rawExpression += textToInsert; let newLocation = rawExpression.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
+            }
             return
         }
         rawExpression.replaceSubrange(range, with: textToInsert)
-        let newLocation = cursorPosition.location + textToInsert.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
+        Task {
+            let newLocation = cursorPosition.location + textToInsert.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
+        }
     }
 
     private func saveState() {
