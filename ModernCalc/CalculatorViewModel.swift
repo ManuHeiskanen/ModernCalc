@@ -310,13 +310,17 @@ class CalculatorViewModel: ObservableObject {
                 calcType = .evaluation
             }
 
-            if calcType != .functionDefinition { self.variables[self.ansVariable] = valueToCommit }
-            if calcType == .variableAssignment { saveState() }
-            else if calcType == .functionDefinition, case .functionDefinition(let name) = valueToCommit { userFunctionDefinitions[name] = rawExpression; saveState() }
-            
             let newCalculation = Calculation(expression: rawExpression, result: valueToCommit, type: calcType, usedAngleSensitiveFunction: self.lastUsedAngleFlag, angleMode: self.angleMode)
             
             Task {
+                if calcType != .functionDefinition { self.variables[self.ansVariable] = valueToCommit }
+                if calcType == .variableAssignment {
+                    saveState()
+                } else if calcType == .functionDefinition, case .functionDefinition(let name) = valueToCommit {
+                    self.userFunctionDefinitions[name] = self.rawExpression
+                    saveState()
+                }
+                
                 self.history.append(newCalculation)
                 self.rawExpression = ""
             }
@@ -666,3 +670,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
