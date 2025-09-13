@@ -340,7 +340,7 @@ struct LaTeXEngine {
         }
         
         // FIX: Add base SI units to the preferred list to ensure they are chosen correctly.
-        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
+        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "m^2", "g", "m^3"]
 
         var potentialMatches: [UnitDefinition] = []
         for (_, unitDef) in UnitStore.units {

@@ -545,7 +545,7 @@ class CalculatorViewModel: ObservableObject {
         }
         
         // FIX: Add base SI units to the preferred list to ensure they are chosen correctly.
-        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
+        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "m^2", "g", "m^3"]
 
         var potentialMatches: [UnitDefinition] = []
         for (_, unitDef) in UnitStore.units {
@@ -746,6 +746,10 @@ class CalculatorViewModel: ObservableObject {
     }
     
     private func formatScalarForParsing(_ value: Double) -> String {
+        if value.truncatingRemainder(dividingBy: 1) == 0 && abs(value) < 1e15 {
+            return String(format: "%.0f", value)
+        }
+        
         let stringValue = String(value)
         if stringValue.lowercased().contains("e") {
             let parts = stringValue.lowercased().components(separatedBy: "e")

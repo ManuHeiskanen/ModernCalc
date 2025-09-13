@@ -75,7 +75,13 @@ struct UnitStore {
         unitMap["L"] = UnitDefinition(symbol: "L", dimensions: [.meter: 3], conversionFactor: 0.001)
         
         // Area
+        unitMap["mm^2"] = UnitDefinition(symbol: "mm^2", dimensions: [.meter: 2], conversionFactor: 0.0000001)
+        unitMap["cm^2"] = UnitDefinition(symbol: "cm^2", dimensions: [.meter: 2], conversionFactor: 0.0001)
+        unitMap["dm^2"] = UnitDefinition(symbol: "dm^2", dimensions: [.meter: 2], conversionFactor: 0.01)
+        unitMap["m^2"] = UnitDefinition(symbol: "m^2", dimensions: [.meter: 2], conversionFactor: 1.0)
+        unitMap["a"] = UnitDefinition(symbol: "a", dimensions: [.meter: 2], conversionFactor: 100.0)
         unitMap["ha"] = UnitDefinition(symbol: "ha", dimensions: [.meter: 2], conversionFactor: 10000.0)
+        unitMap["km^2"] = UnitDefinition(symbol: "km^2", dimensions: [.meter: 2], conversionFactor: 1000000.0)
         
         // Pressure
         unitMap["bar"] = UnitDefinition(symbol: "bar", dimensions: [.kilogram: 1, .meter: -1, .second: -2], conversionFactor: 100000.0)
