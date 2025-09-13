@@ -88,6 +88,10 @@ class CalculatorViewModel: ObservableObject {
                 
                 Task {
                     await self.calculate(expression: expression, cursor: position)
+                    // --- FIX: The state update is now inside the Task ---
+                    // This ensures the cached expression is only updated AFTER its
+                    // calculation is complete, preventing a race condition where a stale
+                    // result from an old task could overwrite a fresh one.
                     self.lastCalculatedExpression = expression
                     self.lastCalculatedAngleMode = angle
                 }
