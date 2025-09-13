@@ -482,7 +482,7 @@ class CalculatorViewModel: ObservableObject {
             let valStr = formatScalarForParsing(u.value)
             let unitStr = formatDimensionsForParsing(u.dimensions)
             if unitStr.isEmpty { return valStr }
-            return "\(valStr) \(unitStr)"
+            return "\(valStr)\(unitStr)"
         case .complex(let c): return formatComplexForParsing(c)
         case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
         case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
