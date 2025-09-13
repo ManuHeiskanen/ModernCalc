@@ -87,7 +87,7 @@ struct TextContents {
         .init(name: "tanh", signature: "tanh(value)", description: "Calculates the hyperbolic tangent."),
         .init(name: "trace", signature: "trace(matrix)", description: "Calculates the trace of a square matrix (sum of diagonal elements)."),
         .init(name: "transpose", signature: "transpose(matrix)", description: "Transposes a matrix (rows become columns). For complex matrices, this is not the conjugate transpose."),
-        .init(name: "uncert", signature: "uncert(value, random: r, resolution: res, accuracy: a)", description: "Creates a value with uncertainty. Combines statistical (random) and systematic (resolution, accuracy) components."),
+        .init(name: "uncert", signature: "uncert(value, random: r, resolution; res, accuracy; a)", description: "Creates a value with uncertainty. Combines statistical (random) and systematic (resolution, accuracy) components."),
         .init(name: "unique", signature: "unique(data)", description: "Returns a vector of the unique elements from a vector or matrix."),
         .init(name: "unit", signature: "unit(vector)", description: "Returns the unit vector (vector with magnitude 1)."),
         .init(name: "variance", signature: "variance(a, b, ...)", description: "Calculates the sample variance."),
