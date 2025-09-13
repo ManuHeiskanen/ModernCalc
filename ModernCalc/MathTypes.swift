@@ -9,6 +9,67 @@ import Foundation
 
 // --- CORE DATA TYPES ---
 
+// NEW: A struct to represent a value with its associated uncertainty.
+struct UncertainValue: Equatable, Codable {
+    var value: Double
+    var uncertainty: Double
+
+    // Standard propagation for addition/subtraction
+    static func + (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
+        let newValue = lhs.value + rhs.value
+        // FIX: Ensure 'pow' and 'sqrt' operate on the 'Double' uncertainty properties, not the 'UncertainValue' struct itself.
+        // Using Foundation.pow explicitly can also prevent ambiguity.
+        let newUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty, 2) + Foundation.pow(rhs.uncertainty, 2))
+        return UncertainValue(value: newValue, uncertainty: newUncertainty)
+    }
+    static func - (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
+        let newValue = lhs.value - rhs.value
+        // FIX: The same correction is applied here for the subtraction operator.
+        let newUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty, 2) + Foundation.pow(rhs.uncertainty, 2))
+        return UncertainValue(value: newValue, uncertainty: newUncertainty)
+    }
+    
+    // Standard propagation for multiplication/division
+    static func * (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
+        let newValue = lhs.value * rhs.value
+        if lhs.value == 0 || rhs.value == 0 {
+            // Handle multiplication by zero case
+            let newUncertainty = Foundation.sqrt(Foundation.pow(lhs.value * rhs.uncertainty, 2) + Foundation.pow(rhs.value * lhs.uncertainty, 2))
+            return UncertainValue(value: 0, uncertainty: newUncertainty)
+        }
+        let relUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty / lhs.value, 2) + Foundation.pow(rhs.uncertainty / rhs.value, 2))
+        return UncertainValue(value: newValue, uncertainty: abs(newValue * relUncertainty))
+    }
+    static func / (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
+        guard rhs.value != 0 else { throw MathError.divisionByZero }
+        let newValue = lhs.value / rhs.value
+        if lhs.value == 0 {
+             let newUncertainty = abs(newValue) * (rhs.uncertainty / rhs.value)
+             return UncertainValue(value: 0, uncertainty: newUncertainty)
+        }
+        let relUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty / lhs.value, 2) + Foundation.pow(rhs.uncertainty / rhs.value, 2))
+        return UncertainValue(value: newValue, uncertainty: abs(newValue * relUncertainty))
+    }
+    
+    // Power propagation
+    func pow(_ exponent: Double) -> UncertainValue {
+        let newValue = Foundation.pow(self.value, exponent)
+        let newUncertainty = abs(newValue * exponent * (self.uncertainty / self.value))
+        return UncertainValue(value: newValue, uncertainty: newUncertainty)
+    }
+    
+    // Unary minus
+    static prefix func - (operand: UncertainValue) -> UncertainValue {
+        return UncertainValue(value: -operand.value, uncertainty: operand.uncertainty)
+    }
+    
+    // --- Function Propagation ---
+    // The general rule is u_f = |f'(x)| * u_x
+    func propagate(derivative: Double) -> UncertainValue {
+        return UncertainValue(value: self.value, uncertainty: abs(derivative * self.uncertainty))
+    }
+}
+
 struct Complex: Equatable, Codable {
     var real: Double
     var imaginary: Double
@@ -556,10 +617,11 @@ enum MathValue: Codable, Equatable {
     case polynomialFit(coefficients: Vector)
     case plot(PlotData)
     case triggerCSVImport // This is a non-codable, transient value used as a signal.
+    case uncertain(UncertainValue) // NEW: Added case for uncertain values
 
     var typeName: String {
         switch self {
-        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"
+        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"; case .uncertain: return "UncertainValue"
         }
     }
     
@@ -587,6 +649,9 @@ enum MathValue: Codable, Equatable {
         case .constant(let s):
             try container.encode("constant", forKey: .type)
             try container.encode(s, forKey: .value)
+        case .uncertain(let u): // NEW: Encoding for uncertain values
+            try container.encode("uncertain", forKey: .type)
+            try container.encode(u, forKey: .value)
         case .plot:
             try container.encode("plot", forKey: .type)
         case .triggerCSVImport:
@@ -617,6 +682,8 @@ enum MathValue: Codable, Equatable {
             self = .polynomialFit(coefficients: coeffs)
         case "constant":
              self = .constant(try container.decode(String.self, forKey: .value))
+        case "uncertain": // NEW: Decoding for uncertain values
+            self = .uncertain(try container.decode(UncertainValue.self, forKey: .value))
         case "plot":
             self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
@@ -640,6 +707,7 @@ enum MathValue: Codable, Equatable {
         case (.plot(let d1), .plot(let d2)): return d1 == d2
         case (.triggerCSVImport, .triggerCSVImport): return true
         case (.constant(let a), .constant(let b)): return a == b
+        case (.uncertain(let a), .uncertain(let b)): return a == b // NEW
         default: return false
         }
     }
@@ -647,9 +715,10 @@ enum MathValue: Codable, Equatable {
 
 extension MathValue {
     func asScalar() throws -> Double {
-        guard case .scalar(let s) = self else {
-            throw MathError.typeMismatch(expected: "Scalar", found: self.typeName)
+        switch self {
+        case .scalar(let s): return s
+        case .uncertain(let u): return u.value // Allow uncertain values to be coerced to scalar
+        default: throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: self.typeName)
         }
-        return s
     }
 }

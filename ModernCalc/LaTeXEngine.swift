@@ -229,6 +229,14 @@ struct LaTeXEngine {
         case is ImportCSVNode:
              return "\\text{importcsv()}"
 
+        // NEW: Format the UncertaintyNode for display
+        case let uncertNode as UncertaintyNode:
+             let val = formatNode(uncertNode.value, evaluator: evaluator, settings: settings)
+             let args = uncertNode.namedArgs.map { key, node in
+                 "\\text{\(key)}: \(formatNode(node, evaluator: evaluator, settings: settings))"
+             }.joined(separator: ", ")
+             return "\\text{uncert}(\(val), \(args))"
+
         case is TupleNode:
             return ""
             
@@ -294,6 +302,11 @@ struct LaTeXEngine {
             return "\\text{...}"
         case .constant(let s):
             return "\\text{\(s)}"
+        // NEW: LaTeX formatting for uncertain values
+        case .uncertain(let u):
+            let valStr = formatScalar(u.value, settings: settings)
+            let uncStr = formatScalar(u.uncertainty, settings: settings)
+            return "\(valStr) \\pm \(uncStr)"
         }
     }
 

@@ -228,7 +228,6 @@ class CalculatorViewModel: ObservableObject {
             finalLiveLaTeXPreview = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
         }
         
-        // --- MODIFIED: Dynamic height calculation logic ---
         let contentForHeightCheck: String
         if !finalLiveErrorText.isEmpty {
             contentForHeightCheck = finalLiveErrorText
@@ -249,13 +248,11 @@ class CalculatorViewModel: ObservableObject {
         
         var calculatedHeight = baseHeight + (CGFloat(verticalityScore) * heightPerUnit)
 
-        // Keep the check for long single-line expressions
         if verticalityScore == 0 && contentForHeightCheck.count > 80 {
             calculatedHeight = 100.0
         }
 
         self.livePreviewHeight = min(calculatedHeight, maxHeight)
-        // --- END of dynamic height logic ---
         
         self.liveHelpText = finalLiveHelpText
         self.liveErrorText = finalLiveErrorText
@@ -323,7 +320,6 @@ class CalculatorViewModel: ObservableObject {
         }
     }
     
-    /// **FIXED:** This function now correctly calls the updated initializers and methods.
     private func openCSVFile() -> Bool {
          let openPanel = NSOpenPanel()
          openPanel.allowedContentTypes = [.commaSeparatedText]
@@ -335,13 +331,10 @@ class CalculatorViewModel: ObservableObject {
              if let url = openPanel.url {
                  do {
                      let content = try String(contentsOf: url, encoding: .utf8)
-                     
-                     // The CSVViewModel now handles all parsing, so we just pass the raw content.
                      self.csvViewModel = CSVViewModel(fileName: url.lastPathComponent, content: content, mainViewModel: self, settings: self.settings)
                      self.showCSVView = true
                      
                  } catch {
-                     // This catch block only handles errors from reading the file.
                      print("Error reading CSV file: \(error.localizedDescription)")
                  }
                  return true
@@ -430,7 +423,6 @@ class CalculatorViewModel: ObservableObject {
         return LaTeXEngine.format(calculation: calculation, evaluator: self.evaluator, angleMode: self.angleMode, settings: self.settings)
     }
 
-    // MODIFIED: This function now handles tuples from linreg correctly.
     func formatForHistory(_ value: MathValue) -> String {
         switch value {
         case .scalar(let d): return formatScalarForDisplay(d)
@@ -447,6 +439,7 @@ class CalculatorViewModel: ObservableObject {
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         case .triggerCSVImport: return "Importing CSV..."
         case .constant(let s): return s
+        case .uncertain(let u): return "\(formatScalarForDisplay(u.value)) ± \(formatScalarForDisplay(u.uncertainty))"
         }
     }
     
@@ -466,6 +459,10 @@ class CalculatorViewModel: ObservableObject {
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
         case .constant(let s): return s
+        case .uncertain(let u):
+            // For simplicity, we'll just reconstruct the basic random uncertainty.
+            // A more complex implementation could try to reconstruct all components.
+            return "uncert(\(formatScalarForParsing(u.value)); random; \(formatScalarForParsing(u.uncertainty)))"
         }
     }
 

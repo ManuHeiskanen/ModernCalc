@@ -87,6 +87,7 @@ struct TextContents {
         .init(name: "tanh", signature: "tanh(value)", description: "Calculates the hyperbolic tangent."),
         .init(name: "trace", signature: "trace(matrix)", description: "Calculates the trace of a square matrix (sum of diagonal elements)."),
         .init(name: "transpose", signature: "transpose(matrix)", description: "Transposes a matrix (rows become columns). For complex matrices, this is not the conjugate transpose."),
+        .init(name: "uncert", signature: "uncert(value, random: r, resolution: res, accuracy: a)", description: "Creates a value with uncertainty. Combines statistical (random) and systematic (resolution, accuracy) components."),
         .init(name: "unique", signature: "unique(data)", description: "Returns a vector of the unique elements from a vector or matrix."),
         .init(name: "unit", signature: "unit(vector)", description: "Returns the unit vector (vector with magnitude 1)."),
         .init(name: "variance", signature: "variance(a, b, ...)", description: "Calculates the sample variance."),
@@ -125,6 +126,7 @@ struct TextContents {
     static let helpTopics: [HelpTopic] = [
         .init(title: "Quick Start", content: "Enter a mathematical expression to see a live result. Press **Enter** to add it to your history. Use the `ans` variable to reference the last result. Use the arrow keys or your mouse to navigate your history and reuse previous equations, results or plots."),
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
+        .init(title: "Uncertainty", content: "Create a value with uncertainty using `uncert(value, random: r, resolution: res, accuracy: a)`. All calculations will automatically propagate the uncertainty. \n- **value**: The nominal value of the measurement.\n- **random**: (Optional) The statistical (Type A) uncertainty, like a standard deviation.\n- **resolution**: (Optional) The systematic (Type B) uncertainty from the measuring instrument's resolution.\n- **accuracy**: (Optional) The systematic (Type B) uncertainty from the instrument's accuracy specification."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
         .init(title: "Linear Algebra", content: "Solve systems of linear equations of the form `Ax = b` with `linsolve(A, b)`. Standard matrix operations like inverse (`inv`), determinant (`det`), and trace (`trace`) are also available."),
@@ -167,4 +169,3 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
-

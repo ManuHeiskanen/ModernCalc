@@ -91,7 +91,7 @@ struct Evaluator {
         case let numberNode as NumberNode:
             return (.scalar(numberNode.value), usedAngle)
         
-        case let stringNode as StringNode: // NEW: Handle StringNode
+        case let stringNode as StringNode:
             return (.constant(stringNode.value), false)
             
         case let constantNode as ConstantNode:
@@ -113,13 +113,41 @@ struct Evaluator {
         case let functionNode as FunctionCallNode:
             return try evaluateFunctionCall(functionNode, variables: &variables, functions: &functions, angleMode: angleMode)
             
+        // NEW: Handle the UncertaintyNode from the parser
+        case let uncertNode as UncertaintyNode:
+            let (value, _) = try _evaluateSingle(node: uncertNode.value, variables: &variables, functions: &functions, angleMode: angleMode)
+            let nominalValue = try value.asScalar()
+            
+            var u_rand: Double = 0
+            var u_res: Double = 0
+            var u_acc: Double = 0
+            
+            for (name, expr) in uncertNode.namedArgs {
+                let (argVal, _) = try _evaluateSingle(node: expr, variables: &variables, functions: &functions, angleMode: angleMode)
+                let scalarArg = try argVal.asScalar()
+                
+                switch name {
+                case "random":
+                    u_rand = scalarArg
+                case "resolution":
+                    u_res = scalarArg / sqrt(12.0) // Rectangular distribution
+                case "accuracy":
+                    u_acc = scalarArg / sqrt(3.0) // Rectangular distribution
+                default:
+                    throw ParserError.invalidNamedArgument(function: "uncert", argument: name)
+                }
+            }
+            
+            let combinedUncertainty = sqrt(pow(u_rand, 2) + pow(u_res, 2) + pow(u_acc, 2))
+            let uncertainValue = UncertainValue(value: nominalValue, uncertainty: combinedUncertainty)
+            return (.uncertain(uncertainValue), false)
+
         case let vectorNode as VectorNode:
             var elements: [Double] = []
             for elementNode in vectorNode.elements {
                 let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = usedAngle || elementUsedAngle
-                guard case .scalar(let scalarElement) = evaluatedElement else { throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in vector definition") }
-                elements.append(scalarElement)
+                elements.append(try evaluatedElement.asScalar())
             }
             return (.vector(Vector(values: elements)), usedAngle)
             
@@ -130,8 +158,7 @@ struct Evaluator {
                 for elementNode in row {
                     let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                     usedAngle = usedAngle || elementUsedAngle
-                    guard case .scalar(let scalarElement) = evaluatedElement else { throw MathError.typeMismatch(expected: "Scalar", found: "Non-scalar in matrix definition") }
-                    values.append(scalarElement)
+                    values.append(try evaluatedElement.asScalar())
                 }
             }
             return (.matrix(Matrix(values: values, rows: rows, columns: columns)), usedAngle)
@@ -220,7 +247,7 @@ struct Evaluator {
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: pointNode, variables: &variables, functions: &functions, angleMode: angleMode)
             let (orderValue, _) = try _evaluateSingle(node: derivativeNode.order, variables: &variables, functions: &functions, angleMode: angleMode)
 
-            guard case .scalar(let point) = pointValue else { throw MathError.typeMismatch(expected: "Scalar for differentiation point", found: pointValue.typeName) }
+            let point = try pointValue.asScalar()
             guard case .scalar(let orderScalar) = orderValue, orderScalar >= 1, orderScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Positive integer for derivative order", found: orderValue.typeName) }
             let order = Int(orderScalar)
 
@@ -235,9 +262,8 @@ struct Evaluator {
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
             let (upperValue, upperUsedAngle) = try _evaluateSingle(node: integralNode.upperBound, variables: &variables, functions: &functions, angleMode: angleMode)
 
-            guard case .scalar(let a) = lowerValue, case .scalar(let b) = upperValue else {
-                throw MathError.typeMismatch(expected: "Scalar for integration bounds", found: "Non-scalar")
-            }
+            let a = try lowerValue.asScalar()
+            let b = try upperValue.asScalar()
 
             var tempVarsForDryRun = variables
             tempVarsForDryRun[integralNode.variable.name] = .scalar(0)
@@ -254,10 +280,7 @@ struct Evaluator {
                     functions: &localFuncs,
                     angleMode: angleMode
                 )
-                guard case .scalar(let scalarValue) = value else {
-                    throw MathError.typeMismatch(expected: "Scalar expression for integration", found: value.typeName)
-                }
-                return scalarValue
+                return try value.asScalar()
             }
                 
             let tolerance = 1e-7
@@ -275,9 +298,7 @@ struct Evaluator {
             let varName = userFunction.parameterNames[0]
 
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: primeNode.argument, variables: &variables, functions: &functions, angleMode: angleMode)
-            guard case .scalar(let point) = pointValue else {
-                throw MathError.typeMismatch(expected: "Scalar for differentiation point", found: pointValue.typeName)
-            }
+            let point = try pointValue.asScalar()
 
             var tempVars = variables
             tempVars[varName] = .scalar(point)
@@ -286,9 +307,8 @@ struct Evaluator {
             let valPlus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
             let valMinus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
             
-            guard case .scalar(let scalarPlus) = valPlus, case .scalar(let scalarMinus) = valMinus else {
-                throw MathError.typeMismatch(expected: "Scalar function for differentiation", found: "Non-scalar")
-            }
+            let scalarPlus = try valPlus.asScalar()
+            let scalarMinus = try valMinus.asScalar()
 
             let derivative = (scalarPlus - scalarMinus) / (2 * h)
             return (.scalar(derivative), pointUsedAngle || bodyUsedAngle)
