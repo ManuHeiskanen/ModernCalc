@@ -108,7 +108,9 @@ class CalculatorViewModel: ObservableObject {
     func addPlotViewModel(for plotData: PlotData) {
         if !plotViewModels.contains(where: { $0.plotData.id == plotData.id }) {
             let newPlotViewModel = PlotViewModel(plotData: plotData)
-            plotViewModels.append(newPlotViewModel)
+            Task {
+                plotViewModels.append(newPlotViewModel)
+            }
         }
     }
 
