@@ -18,9 +18,13 @@ struct VariableEditorView: View {
     @ObservedObject var viewModel: CalculatorViewModel
     @ObservedObject var settings: UserSettings
     @Environment(\.dismiss) var dismiss
+    @Environment(\.dismissSearch) private var dismissSearch
     
     @State private var searchText = ""
     @State private var selectedTab = 0
+    // --- ADDED: State to manage the collapsibility of the user-defined sections. ---
+    @State private var isVariablesExpanded = true
+    @State private var isFunctionsExpanded = true
 
     // --- MODIFIED: The filtering logic now operates on the new categorized structure. ---
     // It filters functions within each category and preserves the group structure.
@@ -48,6 +52,39 @@ struct VariableEditorView: View {
             return viewModel.physicalConstants.filter {
                 $0.symbol.localizedCaseInsensitiveContains(searchText) ||
                 $0.name.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+    
+    // --- ADDED: Filtering for user-defined variables. ---
+    var filteredUserVariables: [(String, MathValue)] {
+        if searchText.isEmpty {
+            return viewModel.sortedVariables
+        } else {
+            return viewModel.sortedVariables.filter { $0.0.localizedCaseInsensitiveContains(searchText) }
+        }
+    }
+    
+    // --- ADDED: Filtering for user-defined functions. ---
+    var filteredUserFunctions: [(String, FunctionDefinitionNode)] {
+        if searchText.isEmpty {
+            return viewModel.sortedFunctions
+        } else {
+            return viewModel.sortedFunctions.filter {
+                $0.0.localizedCaseInsensitiveContains(searchText) ||
+                $0.1.description.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+    
+    // --- ADDED: Filtering for help topics. ---
+    var filteredHelpTopics: [HelpTopic] {
+        if searchText.isEmpty {
+            return viewModel.helpTopics
+        } else {
+            return viewModel.helpTopics.filter {
+                $0.title.localizedCaseInsensitiveContains(searchText) ||
+                $0.content.localizedCaseInsensitiveContains(searchText)
             }
         }
     }
@@ -136,6 +173,13 @@ struct VariableEditorView: View {
                         .tag(4)
                 }
                 .onChange(of: selectedTab) {
+                    // --- MODIFIED: When the tab changes, this logic runs. ---
+                    // The Settings tab (tag 3) isn't searchable, so we dismiss the search bar.
+                    // This is the correct behavior, as there's no list to search in the settings.
+                    if selectedTab == 3 {
+                        dismissSearch()
+                    }
+                    // We also clear the search text to ensure a fresh start on the new tab.
                     searchText = ""
                 }
             }
@@ -154,17 +198,34 @@ struct VariableEditorView: View {
         }
     }
     
+    // --- ADDED: A computed property to provide the correct search prompt for the current tab. ---
+    // This makes the logic for placeholder text easy to manage.
+    private var searchPrompt: String {
+        switch selectedTab {
+        case 0: return "Search User Defined"
+        case 1: return "Search Functions"
+        case 2: return "Search Constants"
+        case 4: return "Search Help Topics"
+        default: return "Nothing to Seach for..." // No prompt for non-searchable tabs like Settings
+        }
+    }
+    
     // --- Views for each tab ---
     
+    // --- MODIFIED: Added searchability and filtering to user-defined variables and functions. ---
     private var userDefinedView: some View {
         List {
-            DisclosureGroup {
+            DisclosureGroup(isExpanded: $isVariablesExpanded) {
                 if viewModel.sortedVariables.isEmpty {
                     Text("No variables defined. Use `x := 5` to create one.")
                         .foregroundColor(.secondary)
                         .padding(.leading)
+                } else if filteredUserVariables.isEmpty && !searchText.isEmpty {
+                    Text("No variables found for '\(searchText)'")
+                        .foregroundColor(.secondary)
+                        .padding(.leading)
                 } else {
-                    ForEach(viewModel.sortedVariables, id: \.0) { name, value in
+                    ForEach(filteredUserVariables, id: \.0) { name, value in
                         HStack {
                             Button(action: {
                                 viewModel.insertTextAtCursor(name)
@@ -188,14 +249,17 @@ struct VariableEditorView: View {
                     .padding(.vertical, 4)
             }
 
-            DisclosureGroup {
+            DisclosureGroup(isExpanded: $isFunctionsExpanded) {
                 if viewModel.sortedFunctions.isEmpty {
                     Text("No functions defined. Use `f(x) := x^2` to create one.")
-                        // --- FIXED: Changed to .secondary to be consistent with the variables placeholder text. ---
+                        .foregroundColor(.secondary)
+                        .padding(.leading)
+                } else if filteredUserFunctions.isEmpty && !searchText.isEmpty {
+                    Text("No functions found for '\(searchText)'")
                         .foregroundColor(.secondary)
                         .padding(.leading)
                 } else {
-                    ForEach(viewModel.sortedFunctions, id: \.0) { name, node in
+                    ForEach(filteredUserFunctions, id: \.0) { name, node in
                         HStack {
                             Button(action: {
                                 viewModel.insertTextAtCursor(name + "(")
@@ -219,6 +283,7 @@ struct VariableEditorView: View {
             }
         }
         .listStyle(.plain)
+        .searchable(text: $searchText, prompt: searchPrompt)
         .scrollContentBackground(.hidden)
     }
     
@@ -250,7 +315,7 @@ struct VariableEditorView: View {
             }
         }
         .listStyle(.plain)
-        .searchable(text: $searchText, prompt: "Search Functions")
+        .searchable(text: $searchText, prompt: searchPrompt)
         .scrollContentBackground(.hidden)
     }
     
@@ -270,13 +335,12 @@ struct VariableEditorView: View {
             }.buttonStyle(.plain)
         }
         .listStyle(.plain)
-        .searchable(text: $searchText, prompt: "Search Constants")
+        .searchable(text: $searchText, prompt: searchPrompt)
         .scrollContentBackground(.hidden)
     }
     
     private var settingsView: some View {
-        // --- FIXED: Replaced List with Form and removed the unavailable .insetGrouped style. ---
-        // Form is the standard container for settings on macOS and provides the correct visual grouping.
+        // --- This view does not have the .searchable modifier because there is no list of data to filter. ---
         Form {
             Section(header: Text("History & Export Formatting")) {
                 Picker("Display Mode", selection: $settings.displayMode) {
@@ -298,7 +362,6 @@ struct VariableEditorView: View {
                 .pickerStyle(.segmented)
             }
             
-            // --- ADDED: Divider for visual separation ---
             Divider()
 
             Section(header: Text("Live Preview Formatting")) {
@@ -309,7 +372,6 @@ struct VariableEditorView: View {
                 }
             }
             
-            // --- ADDED: Divider for visual separation ---
             Divider()
             
             Section(header: Text("CSV Import Formatting")) {
@@ -320,26 +382,27 @@ struct VariableEditorView: View {
                 }
             }
         }
-        // --- MODIFIED: Added frame modifier to align the form to the top of the available space. ---
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // --- MODIFIED: Added padding for better spacing. ---
         .padding()
     }
     
     private var helpView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                ForEach(viewModel.helpTopics) { topic in
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(topic.title)
-                            .font(.headline)
-                        Text(.init(topic.content))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+        List {
+            ForEach(filteredHelpTopics) { topic in
+                DisclosureGroup {
+                    Text(.init(topic.content)) // Using .init() to render markdown
+                        .padding(.leading)
+                        .padding(.vertical, 4)
+                } label: {
+                    Text(topic.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .padding(.vertical, 4)
                 }
             }
-            .padding()
         }
+        .listStyle(.plain)
+        .searchable(text: $searchText, prompt: searchPrompt)
+        .scrollContentBackground(.hidden)
     }
 }
-
