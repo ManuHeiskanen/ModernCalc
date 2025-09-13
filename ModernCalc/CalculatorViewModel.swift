@@ -274,9 +274,7 @@ class CalculatorViewModel: ObservableObject {
             resetNavigation()
             
             if !textToInsert.isEmpty {
-                Task {
-                    self.insertTextAtCursor(textToInsert)
-                }
+                self.insertTextAtCursor(textToInsert)
             }
             
             return nil
@@ -382,9 +380,7 @@ class CalculatorViewModel: ObservableObject {
     
     func insertTextAtCursor(_ textToInsert: String) {
         guard let range = Range(cursorPosition, in: rawExpression) else {
-            Task {
-                rawExpression += textToInsert; let newLocation = rawExpression.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
-            }
+            rawExpression += textToInsert; let newLocation = rawExpression.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
             return
         }
         rawExpression.replaceSubrange(range, with: textToInsert)
@@ -437,6 +433,10 @@ class CalculatorViewModel: ObservableObject {
         switch value {
         case .dimensionless(let d): return formatScalarForDisplay(d)
         case .unitValue(let u):
+            if u.dimensions.isEmpty {
+                return formatScalarForDisplay(u.value)
+            }
+            
             if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
                 let convertedValue = u.value / bestUnit.conversionFactor
                 if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
@@ -534,13 +534,18 @@ class CalculatorViewModel: ObservableObject {
     }
     
     private func findBestUnitFor(dimensions: UnitDimension) -> UnitDefinition? {
+        if dimensions.isEmpty {
+            return nil
+        }
+        
         // Special case: The user prefers to see volume in m^3 rather than converting to L.
         // This prevents the automatic conversion for results that are already in base SI volume units.
         if dimensions == [.meter: 3] {
             return nil
         }
         
-        let preferredSymbols = ["N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
+        // FIX: Add base SI units to the preferred list to ensure they are chosen correctly.
+        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
 
         var potentialMatches: [UnitDefinition] = []
         for (_, unitDef) in UnitStore.units {
@@ -559,7 +564,8 @@ class CalculatorViewModel: ObservableObject {
             }
         }
         
-        return potentialMatches.first(where: { !$0.symbol.contains(where: "kcmμn".contains) }) ?? potentialMatches.first
+        // Fallback to the shortest symbol if no preferred match is found
+        return potentialMatches.min(by: { $0.symbol.count < $1.symbol.count })
     }
     
     private func formatDimensionsForHistory(_ dimensions: UnitDimension) -> String {

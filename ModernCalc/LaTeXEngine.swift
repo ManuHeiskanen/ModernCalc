@@ -255,6 +255,10 @@ struct LaTeXEngine {
         case .dimensionless(let doubleValue):
             return formatScalar(doubleValue, settings: settings)
         case .unitValue(let u):
+            if u.dimensions.isEmpty {
+                return formatScalar(u.value, settings: settings)
+            }
+            
             if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
                 let convertedValue = u.value / bestUnit.conversionFactor
                 let valStr = formatScalar(convertedValue, settings: settings)
@@ -327,11 +331,16 @@ struct LaTeXEngine {
     }
     
     private static func findBestUnitFor(dimensions: UnitDimension) -> UnitDefinition? {
+        if dimensions.isEmpty {
+            return nil
+        }
+        
         if dimensions == [.meter: 3] {
             return nil
         }
         
-        let preferredSymbols = ["N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
+        // FIX: Add base SI units to the preferred list to ensure they are chosen correctly.
+        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
 
         var potentialMatches: [UnitDefinition] = []
         for (_, unitDef) in UnitStore.units {
@@ -350,7 +359,8 @@ struct LaTeXEngine {
             }
         }
         
-        return potentialMatches.first(where: { !$0.symbol.contains(where: "kcmμn".contains) }) ?? potentialMatches.first
+        // Fallback to the shortest symbol if no preferred match is found
+        return potentialMatches.min(by: { $0.symbol.count < $1.symbol.count })
     }
     
     private static func format(dimensions: UnitDimension) -> String {
@@ -490,3 +500,4 @@ struct LaTeXEngine {
         return latex
     }
 }
+

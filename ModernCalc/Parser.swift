@@ -269,6 +269,11 @@ class Parser {
     }
 
     private func parsePrefix() throws -> ExpressionNode {
+        // FIX: If the next token is a unit, implicitly prepend a "1" to allow expressions like "/ .s^2".
+        if let token = peek(), case .unit = token.type {
+            return NumberNode(value: 1.0)
+        }
+        
         let token = try advance()
         switch token.type {
         case .number(let value): return NumberNode(value: value)
