@@ -115,22 +115,22 @@ class Lexer {
                     currentToken = Token(type: .unknown(advance()!), rawValue: ",")
                 }
             case ".":
-                var prevWasNumber = false
-                if case .number = self.lastTokenType { prevWasNumber = true }
-                var prevWasParen = false
-                if case .paren(")") = self.lastTokenType { prevWasParen = true }
-                
-                if prevWasNumber || prevWasParen {
-                    let (unitSymbol, charsConsumed) = peekAheadForUnit()
-                    if !unitSymbol.isEmpty {
-                        // Consume the characters that make up the unit syntax (dot, spaces, symbol)
-                        for _ in 0..<charsConsumed { advance() }
-                        currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
+                // Try to parse as a unit first. This is more flexible and allows for
+                // expressions like "1/.s" (1 / 1 second).
+                let (unitSymbol, charsConsumed) = peekAheadForUnit()
+                if !unitSymbol.isEmpty {
+                    // It's a valid unit symbol.
+                    for _ in 0..<charsConsumed { advance() }
+                    currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
+                } else {
+                    // If it's not a unit, it could be a decimal separator for function arguments
+                    // or a dot operator (like .* for element-wise multiplication).
+                    if argumentSeparator == "." {
+                        advance()
+                        currentToken = Token(type: .separator("."), rawValue: ".")
                     } else {
                         currentToken = lexDotOperator()
                     }
-                } else {
-                    currentToken = lexDotOperator()
                 }
             case "°":
                 advance()
@@ -226,8 +226,16 @@ class Lexer {
             if char.isNumber {
                 advance()
             } else if char == decimalSeparator.character && !hasDecimal {
-                hasDecimal = true
-                advance()
+                // MODIFICATION: Only consume the dot if it's followed by another number.
+                // This prevents the lexer from consuming "1." in "1.Hz" as a single number,
+                // allowing the dot to be correctly identified as a unit separator.
+                if peek(offset: 1)?.isNumber ?? false {
+                    hasDecimal = true
+                    advance()
+                } else {
+                    // This dot is likely a unit separator or an operator, so stop parsing the number.
+                    break
+                }
             } else {
                 break
             }
