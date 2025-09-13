@@ -7,6 +7,13 @@
 
 import SwiftUI
 
+// --- ADDED: A struct to hold themed groups of functions for better organization. ---
+struct FunctionCategory: Identifiable {
+    let id = UUID()
+    let name: String
+    var functions: [BuiltinFunction]
+}
+
 struct VariableEditorView: View {
     @ObservedObject var viewModel: CalculatorViewModel
     @ObservedObject var settings: UserSettings
@@ -15,15 +22,22 @@ struct VariableEditorView: View {
     @State private var searchText = ""
     @State private var selectedTab = 0
 
-    // Computed properties to filter lists based on search text
-    var filteredBuiltinFunctions: [BuiltinFunction] {
+    // --- MODIFIED: The filtering logic now operates on the new categorized structure. ---
+    // It filters functions within each category and preserves the group structure.
+    var filteredFunctionCategories: [FunctionCategory] {
+        let categories = groupFunctions(viewModel.builtinFunctions)
         if searchText.isEmpty {
-            return viewModel.builtinFunctions
-        } else {
-            return viewModel.builtinFunctions.filter {
+            return categories
+        }
+        
+        return categories.compactMap { category in
+            let filteredFunctions = category.functions.filter {
                 $0.name.localizedCaseInsensitiveContains(searchText) ||
-                $0.description.localizedCaseInsensitiveContains(searchText)
+                $0.description.localizedCaseInsensitiveContains(searchText) ||
+                $0.signature.localizedCaseInsensitiveContains(searchText)
             }
+            // Only include the category in the result if it has matching functions.
+            return filteredFunctions.isEmpty ? nil : FunctionCategory(name: category.name, functions: filteredFunctions)
         }
     }
     
@@ -37,6 +51,50 @@ struct VariableEditorView: View {
             }
         }
     }
+    
+    // --- MODIFIED: This function organizes the flat list of functions into themed categories. ---
+    private func groupFunctions(_ functions: [BuiltinFunction]) -> [FunctionCategory] {
+        // This dictionary defines the keywords that assign a function to a category.
+        let categoryKeywords: [String: [String]] = [
+            "Calculus": ["derivative", "grad", "integral"],
+            "Complex Numbers": ["abs", "arg", "conj", "imag", "polar", "real"],
+            "Data Generation & IO": ["importcsv", "linspace", "random", "randm", "randv", "range"],
+            "Geometry": ["angle", "area_circle", "area_rect", "area_tri", "circum_circle", "hypot", "side", "unit", "vol_cone", "vol_cube", "vol_cylinder", "vol_sphere"],
+            "Number Theory": ["fact", "factor", "find", "gcd", "isprime", "lcm", "mod", "nCr", "nPr"],
+            "Plotting": ["autoplot", "plot", "scatterplot"],
+            "Statistics": ["avg", "corr", "count", "countabove", "countbelow", "linreg", "max", "median", "min", "percentile", "polyfit", "sort", "stddev", "stddevp", "sum", "unique", "variance"],
+            "Trigonometry": ["acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cos", "cosh", "sin", "sinh", "tan", "tanh"],
+            "Uncertainty": ["uncert"],
+            "Utility & Conversion": ["ceil", "floor", "lg", "ln", "log", "root", "round", "sqrt"],
+            "Vector & Matrix": ["cmatrix", "cross", "cvector", "det", "dot", "getcolumn", "getrow", "inv", "linsolve", "matrix", "trace", "transpose", "vector"]
+        ]
+
+        var categories: [String: [BuiltinFunction]] = [:]
+        var assignedFunctions = Set<String>()
+
+        // Assign functions to categories based on the keywords.
+        for (categoryName, keywords) in categoryKeywords {
+            categories[categoryName] = []
+            for keyword in keywords {
+                if let function = functions.first(where: { $0.name == keyword }) {
+                    categories[categoryName]?.append(function)
+                    assignedFunctions.insert(function.name)
+                }
+            }
+        }
+        
+        // All remaining functions are grouped into a "General" category.
+        let generalFunctions = functions.filter { !assignedFunctions.contains($0.name) }
+        if !generalFunctions.isEmpty {
+            categories["General"] = generalFunctions
+        }
+
+        // Sort the categories and the functions within them alphabetically.
+        return categories
+            .map { FunctionCategory(name: $0.key, functions: $0.value.sorted(by: { $0.name < $1.name })) }
+            .sorted { $0.name < $1.name }
+    }
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -141,17 +199,24 @@ struct VariableEditorView: View {
         }.listStyle(.sidebar)
     }
     
+    // --- MODIFIED: This view now iterates over categories and displays functions in sections. ---
     private var builtinFunctionsView: some View {
-        List(filteredBuiltinFunctions) { function in
-            Button(action: {
-                viewModel.insertTextAtCursor(function.name + "(")
-                dismiss()
-            }) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(function.signature).font(.system(.body, design: .monospaced)).fontWeight(.bold)
-                    Text(function.description).foregroundColor(.secondary)
-                }.foregroundColor(.primary).padding(.vertical, 6)
-            }.buttonStyle(.plain)
+        List {
+            ForEach(filteredFunctionCategories) { category in
+                Section(header: Text(category.name).fontWeight(.bold)) {
+                    ForEach(category.functions) { function in
+                        Button(action: {
+                            viewModel.insertTextAtCursor(function.name + "(")
+                            dismiss()
+                        }) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(function.signature).font(.system(.body, design: .monospaced)).fontWeight(.bold)
+                                Text(function.description).foregroundColor(.secondary)
+                            }.foregroundColor(.primary).padding(.vertical, 6)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
         .searchable(text: $searchText, prompt: "Search Functions")
