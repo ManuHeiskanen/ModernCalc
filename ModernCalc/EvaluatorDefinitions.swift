@@ -32,12 +32,45 @@ extension Evaluator {
         "sum": { args in try performStatisticalOperation(args: args, on: { $0.sum() }) },
         "avg": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
         "average": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
+        "mean": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
         "min": { args in try performStatisticalOperation(args: args, on: { $0.min() }) },
         "max": { args in try performStatisticalOperation(args: args, on: { $0.max() }) },
         "median": { args in try performStatisticalOperation(args: args, on: { $0.median() }) },
         "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) },
         "variance": { args in try performStatisticalOperation(args: args, on: { $0.variance() }) },
         "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp() }) },
+        "mode": { args in
+            let values = try extractDoublesFromVariadicArgs(args)
+            guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "mode") }
+            
+            let frequencyDict = values.reduce(into: [:]) { counts, value in counts[value, default: 0] += 1 }
+            
+            guard let maxFrequency = frequencyDict.values.max() else { return .vector(Vector(values: [])) }
+            
+            let modes = frequencyDict.filter { $0.value == maxFrequency }.keys.sorted()
+            
+            if modes.count == 1 {
+                return .scalar(modes[0])
+            } else {
+                return .vector(Vector(values: modes))
+            }
+        },
+        "geomean": { args in
+            let values = try extractDoublesFromVariadicArgs(args)
+            guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "geomean") }
+            guard values.allSatisfy({ $0 >= 0 }) else { throw MathError.unsupportedOperation(op: "geomean", typeA: "All values must be non-negative.", typeB: nil) }
+            if values.contains(0) { return .scalar(0) }
+            let product = values.reduce(1, *)
+            return .scalar(pow(product, 1.0 / Double(values.count)))
+        },
+        "harmean": { args in
+            let values = try extractDoublesFromVariadicArgs(args)
+            guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "harmean") }
+            guard !values.contains(0) else { throw MathError.unsupportedOperation(op: "harmean", typeA: "Values cannot be zero.", typeB: nil) }
+            let sumOfReciprocals = values.map { 1.0 / $0 }.reduce(0, +)
+            guard sumOfReciprocals != 0 else { throw MathError.divisionByZero }
+            return .scalar(Double(values.count) / sumOfReciprocals)
+        },
         "gcd": { args in try performAggregateIntegerOperation(args: args, initialValue: 0, operation: performGcd) },
         "lcm": { args in
             let lcmOp = { (a: Double, b: Double) -> Double in
@@ -82,6 +115,20 @@ extension Evaluator {
             let degree = try args[2].asScalar()
             let coeffs = try performPolynomialFit(x: xVec, y: yVec, degree: degree)
             return .polynomialFit(coefficients: coeffs)
+        },
+        "normdist": { args in
+            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "normdist", expected: "3", found: args.count) }
+            let x = try args[0].asScalar()
+            let mean = try args[1].asScalar()
+            let stddev = try args[2].asScalar()
+            return .scalar(normalDistribution(x: x, mean: mean, stddev: stddev))
+        },
+        "binomdist": { args in
+            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "binomdist", expected: "3", found: args.count) }
+            let k = try args[0].asScalar()
+            let n = try args[1].asScalar()
+            let p = try args[2].asScalar()
+            return .scalar(try binomialDistribution(k: k, n: n, p: p))
         },
         "random": { args in
             switch args.count {
@@ -261,6 +308,34 @@ extension Evaluator {
     ]
     
     static let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
+        "rmse": { a, b in
+            guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSE.") }
+            guard v1.dimension > 0 else { return .scalar(0) }
+            let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
+            let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
+            return .scalar(sqrt(meanSquaredError))
+        },
+        "rmsd": { a, b in // alias for rmse
+            guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSD.") }
+            guard v1.dimension > 0 else { return .scalar(0) }
+            let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
+            let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
+            return .scalar(sqrt(meanSquaredError))
+        },
+        "cov": { a, b in
+            guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for covariance.") }
+            
+            let n = Double(xVec.dimension)
+            let meanX = xVec.average()
+            let meanY = yVec.average()
+            
+            let sumOfProducts = zip(xVec.values, yVec.values).map { ($0 - meanX) * ($1 - meanY) }.reduce(0, +)
+            
+            return .scalar(sumOfProducts / (n - 1)) // Sample covariance
+        },
         "corr": { a, b in
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for correlation.") }
@@ -698,25 +773,26 @@ fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
     }
 }
 
-/// Helper function for variadic statistical functions like sum(), avg(), etc.
-fileprivate func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
-    if args.count == 1, case .vector(let v) = args[0] {
-        guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Vector with zero or one elements", typeB: nil) }
-        return .scalar(result)
-    } else if args.count == 1, case .matrix(let m) = args[0] {
-        let v = Vector(values: m.values)
-        guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Matrix with zero or one elements", typeB: nil) }
-        return .scalar(result)
+/// Helper for variadic functions that can accept a list of scalars or a single collection.
+fileprivate func extractDoublesFromVariadicArgs(_ args: [MathValue]) throws -> [Double] {
+    if args.count == 1 {
+        return try extractDoubles(from: args[0])
     } else {
         var scalars: [Double] = []
         for arg in args {
             scalars.append(try arg.asScalar())
         }
-        guard !scalars.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Statistical function") }
-        let v = Vector(values: scalars)
-        guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Scalar list", typeB: nil) }
-        return .scalar(result)
+        return scalars
     }
+}
+
+/// Helper function for variadic statistical functions like sum(), avg(), etc.
+fileprivate func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
+    let values = try extractDoublesFromVariadicArgs(args)
+    guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Statistical function") }
+    let v = Vector(values: values)
+    guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Operation failed (e.g., stddev on single element)", typeB: nil) }
+    return .scalar(result)
 }
 
 /// Helper function for gcd, using Euclidean algorithm.
@@ -790,6 +866,27 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
 }
 
 // MARK: - New Algorithms
+
+/// Calculates the probability density function (PDF) for the normal distribution.
+fileprivate func normalDistribution(x: Double, mean: Double, stddev: Double) -> Double {
+    guard stddev > 0 else { return Double.nan } // Or throw an error
+    let variance = pow(stddev, 2)
+    let coefficient = 1.0 / sqrt(2.0 * .pi * variance)
+    let exponent = -pow(x - mean, 2) / (2.0 * variance)
+    return coefficient * exp(exponent)
+}
+
+/// Calculates the probability mass function (PMF) for the binomial distribution.
+fileprivate func binomialDistribution(k: Double, n: Double, p: Double) throws -> Double {
+    guard k >= 0, n >= 0, p >= 0, p <= 1,
+          k.truncatingRemainder(dividingBy: 1) == 0,
+          n.truncatingRemainder(dividingBy: 1) == 0,
+          k <= n else {
+        throw MathError.unsupportedOperation(op: "binomdist", typeA: "Invalid arguments", typeB: nil)
+    }
+    let combinations_nk = try combinations(n: n, k: k)
+    return combinations_nk * pow(p, k) * pow(1 - p, n - k)
+}
 
 /// Checks if an integer is prime using optimized trial division.
 fileprivate func performIsPrime(_ n: Double) throws -> Bool {

@@ -93,7 +93,7 @@ struct VariableEditorView: View {
             "Geometry": ["angle", "area_circle", "area_rect", "area_tri", "circum_circle", "hypot", "side", "unit", "vol_cone", "vol_cube", "vol_cylinder", "vol_sphere"],
             "Number Theory": ["fact", "factor", "find", "gcd", "isprime", "lcm", "mod", "nCr", "nPr"],
             "Plotting": ["autoplot", "plot", "scatterplot"],
-            "Statistics": ["avg", "corr", "count", "countabove", "countbelow", "linreg", "max", "median", "min", "percentile", "polyfit", "sort", "stddev", "stddevp", "sum", "unique", "variance"],
+            "Statistics": ["avg", "binomdist", "corr", "count", "countabove", "countbelow", "cov", "geomean", "harmean", "linreg", "max", "mean", "median", "min", "mode", "normdist", "percentile", "polyfit", "rmse", "rmsd", "sort", "stddev", "stddevp", "sum", "unique", "variance"],
             "Trigonometry": ["acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cos", "cosh", "sin", "sinh", "tan", "tanh"],
             "Uncertainty": ["uncert"],
             "Utility & Conversion": ["ceil", "floor", "lg", "ln", "log", "root", "round", "sqrt"],
