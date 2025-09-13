@@ -59,6 +59,9 @@ struct UnitStore {
         unitMap["C"] = UnitDefinition(symbol: "C", dimensions: [.second: 1, .ampere: 1], conversionFactor: 1.0)
         unitMap["V"] = UnitDefinition(symbol: "V", dimensions: [.kilogram: 1, .meter: 2, .second: -3, .ampere: -1], conversionFactor: 1.0)
         unitMap["Ohm"] = UnitDefinition(symbol: "Ohm", dimensions: [.kilogram: 1, .meter: 2, .second: -3, .ampere: -2], conversionFactor: 1.0)
+        unitMap["F"] = UnitDefinition(symbol: "F", dimensions: [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2], conversionFactor: 1.0)
+        unitMap["H"] = UnitDefinition(symbol: "H", dimensions: [.kilogram: 1, .meter: 2, .second: -2, .ampere: -2], conversionFactor: 1.0)
+        unitMap["T"] = UnitDefinition(symbol: "T", dimensions: [.kilogram: 1, .second: -2, .ampere: -1], conversionFactor: 1.0)
         
         // Common Non-SI Units
         unitMap["min"] = UnitDefinition(symbol: "min", dimensions: [.second: 1], conversionFactor: 60.0)
@@ -67,10 +70,24 @@ struct UnitStore {
         
         unitMap["deg"] = UnitDefinition(symbol: "deg", dimensions: [:], conversionFactor: .pi / 180.0) // Dimensionless, but convertible
         unitMap["rad"] = UnitDefinition(symbol: "rad", dimensions: [:], conversionFactor: 1.0) // Dimensionless
+        
+        // Volume
+        unitMap["L"] = UnitDefinition(symbol: "L", dimensions: [.meter: 3], conversionFactor: 0.001)
+        
+        // Area
+        unitMap["ha"] = UnitDefinition(symbol: "ha", dimensions: [.meter: 2], conversionFactor: 10000.0)
+        
+        // Pressure
+        unitMap["bar"] = UnitDefinition(symbol: "bar", dimensions: [.kilogram: 1, .meter: -1, .second: -2], conversionFactor: 100000.0)
+        
+        // Energy
+        unitMap["eV"] = UnitDefinition(symbol: "eV", dimensions: [.kilogram: 1, .meter: 2, .second: -2], conversionFactor: 1.602176634e-19)
+        unitMap["cal"] = UnitDefinition(symbol: "cal", dimensions: [.kilogram: 1, .meter: 2, .second: -2], conversionFactor: 4.184)
 
-        // Add SI Prefixes (kilo, milli, etc.) to meters and grams
+
+        // Add SI Prefixes (kilo, milli, etc.) to meters, grams, and liters
         let prefixes = ["k": 1e3, "c": 1e-2, "m": 1e-3, "μ": 1e-6, "n": 1e-9]
-        let baseSymbols = ["m", "g"]
+        let baseSymbols = ["m", "g", "L"]
 
         for (prefix, factor) in prefixes {
             for symbol in baseSymbols {
