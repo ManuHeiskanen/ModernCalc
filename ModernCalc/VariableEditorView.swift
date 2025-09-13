@@ -7,7 +7,6 @@
 
 import SwiftUI
 
-// --- ADDED: A struct to hold themed groups of functions for better organization. ---
 struct FunctionCategory: Identifiable {
     let id = UUID()
     let name: String
@@ -26,8 +25,7 @@ struct VariableEditorView: View {
     @State private var isVariablesExpanded = true
     @State private var isFunctionsExpanded = true
 
-    // --- MODIFIED: The filtering logic now operates on the new categorized structure. ---
-    // It filters functions within each category and preserves the group structure.
+    // Filters functions within each category and preserves the group structure.
     var filteredFunctionCategories: [FunctionCategory] {
         let categories = groupFunctions(viewModel.builtinFunctions)
         if searchText.isEmpty {
@@ -56,7 +54,6 @@ struct VariableEditorView: View {
         }
     }
     
-    // --- ADDED: Filtering for user-defined variables. ---
     var filteredUserVariables: [(String, MathValue)] {
         if searchText.isEmpty {
             return viewModel.sortedVariables
@@ -65,7 +62,6 @@ struct VariableEditorView: View {
         }
     }
     
-    // --- ADDED: Filtering for user-defined functions. ---
     var filteredUserFunctions: [(String, FunctionDefinitionNode)] {
         if searchText.isEmpty {
             return viewModel.sortedFunctions
@@ -77,7 +73,6 @@ struct VariableEditorView: View {
         }
     }
     
-    // --- ADDED: Filtering for help topics. ---
     var filteredHelpTopics: [HelpTopic] {
         if searchText.isEmpty {
             return viewModel.helpTopics
@@ -89,7 +84,6 @@ struct VariableEditorView: View {
         }
     }
     
-    // --- MODIFIED: This function organizes the flat list of functions into themed categories. ---
     private func groupFunctions(_ functions: [BuiltinFunction]) -> [FunctionCategory] {
         // This dictionary defines the keywords that assign a function to a category.
         let categoryKeywords: [String: [String]] = [
@@ -135,7 +129,6 @@ struct VariableEditorView: View {
 
     var body: some View {
         ZStack {
-            // --- FIXED: By not setting a background color here, it will adapt to light/dark mode automatically. ---
             VStack(spacing: 0) {
                 // --- Header ---
                 HStack {
@@ -173,13 +166,6 @@ struct VariableEditorView: View {
                         .tag(4)
                 }
                 .onChange(of: selectedTab) {
-                    // --- MODIFIED: When the tab changes, this logic runs. ---
-                    // The Settings tab (tag 3) isn't searchable, so we dismiss the search bar.
-                    // This is the correct behavior, as there's no list to search in the settings.
-                    if selectedTab == 3 {
-                        dismissSearch()
-                    }
-                    // We also clear the search text to ensure a fresh start on the new tab.
                     searchText = ""
                 }
             }
@@ -187,32 +173,30 @@ struct VariableEditorView: View {
         .frame(minWidth: 500, minHeight: 450, idealHeight: 600)
     }
     
+    // Titles of the tabs
     private var tabTitle: String {
         switch selectedTab {
-        case 0: return "Variables & Functions"
+        case 0: return "User's Variables & Functions"
         case 1: return "Built-in Functions"
         case 2: return "Constants"
         case 3: return "Settings"
         case 4: return "Help"
-        default: return ""
+        default: return "Not Searchable"
         }
     }
     
-    // --- ADDED: A computed property to provide the correct search prompt for the current tab. ---
-    // This makes the logic for placeholder text easy to manage.
+    // Seach prompts show when search box is empty
     private var searchPrompt: String {
         switch selectedTab {
-        case 0: return "Search User Defined"
+        case 0: return "Search Variables & Functions"
         case 1: return "Search Functions"
         case 2: return "Search Constants"
         case 4: return "Search Help Topics"
-        default: return "Nothing to Seach for..." // No prompt for non-searchable tabs like Settings
+        default: return "" // No prompt for non-searchable tabs like Settings
         }
     }
     
     // --- Views for each tab ---
-    
-    // --- MODIFIED: Added searchability and filtering to user-defined variables and functions. ---
     private var userDefinedView: some View {
         List {
             DisclosureGroup(isExpanded: $isVariablesExpanded) {
@@ -406,3 +390,4 @@ struct VariableEditorView: View {
         .scrollContentBackground(.hidden)
     }
 }
+
