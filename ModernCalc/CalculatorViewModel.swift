@@ -433,6 +433,14 @@ class CalculatorViewModel: ObservableObject {
         switch value {
         case .dimensionless(let d): return formatScalarForDisplay(d)
         case .unitValue(let u):
+            if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
+                let convertedValue = u.value / bestUnit.conversionFactor
+                if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
+                     return formatScalarForDisplay(convertedValue)
+                }
+                return "\(formatScalarForDisplay(convertedValue)) \(bestUnit.symbol)"
+            }
+            
             let valStr = formatScalarForDisplay(u.value)
             let unitStr = formatDimensionsForHistory(u.dimensions)
             if unitStr.isEmpty { return valStr }
@@ -470,7 +478,6 @@ class CalculatorViewModel: ObservableObject {
             let valStr = formatScalarForParsing(u.value)
             let unitStr = formatDimensionsForParsing(u.dimensions)
             if unitStr.isEmpty { return valStr }
-            // FIX: Ensure there is always a multiplication operator for clarity and parsing robustness.
             return "(\(valStr))*\(unitStr)"
         case .complex(let c): return formatComplexForParsing(c)
         case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
@@ -522,6 +529,35 @@ class CalculatorViewModel: ObservableObject {
         return settings.decimalSeparator == .comma ? formattedString.replacingOccurrences(of: ".", with: ",") : formattedString
     }
     
+    private func findBestUnitFor(dimensions: UnitDimension) -> UnitDefinition? {
+        // Special case: The user prefers to see volume in m^3 rather than converting to L.
+        // This prevents the automatic conversion for results that are already in base SI volume units.
+        if dimensions == [.meter: 3] {
+            return nil
+        }
+        
+        let preferredSymbols = ["N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
+
+        var potentialMatches: [UnitDefinition] = []
+        for (_, unitDef) in UnitStore.units {
+            if unitDef.dimensions == dimensions {
+                potentialMatches.append(unitDef)
+            }
+        }
+
+        if potentialMatches.isEmpty {
+            return nil
+        }
+
+        for symbol in preferredSymbols {
+            if let match = potentialMatches.first(where: { $0.symbol == symbol }) {
+                return match
+            }
+        }
+        
+        return potentialMatches.first(where: { !$0.symbol.contains(where: "kcmμn".contains) }) ?? potentialMatches.first
+    }
+    
     private func formatDimensionsForHistory(_ dimensions: UnitDimension) -> String {
         let positiveDims = dimensions.filter { $0.value > 0 }
         let negativeDims = dimensions.filter { $0.value < 0 }
@@ -553,11 +589,17 @@ class CalculatorViewModel: ObservableObject {
     }
     
     private func formatDimensionsForParsing(_ dimensions: UnitDimension) -> String {
+        if let bestUnit = findBestUnitFor(dimensions: dimensions) {
+            if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
+                 return ""
+            }
+            return bestUnit.symbol
+        }
+        
         let allDims = dimensions.sorted { $0.key.rawValue < $1.key.rawValue }
         
         return allDims.map { (unit, exponent) -> String in
             let symbol = UnitStore.units.first(where: { $0.value.dimensions == [unit: 1] && $0.value.conversionFactor == 1.0 })?.key ?? unit.rawValue
-            // FIX: Use spaces for implicit multiplication instead of the dot syntax.
             return "\(symbol)\(exponent == 1 ? "" : "^\(exponent)")"
         }.joined(separator: " ")
     }
@@ -714,3 +756,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
