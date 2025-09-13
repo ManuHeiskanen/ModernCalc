@@ -91,7 +91,8 @@ class NavigationManager: ObservableObject {
                         return viewModel.formatForParsing(values[index])
                     }
                 } else if case .regressionResult(let slope, let intercept) = selectedItem.result {
-                    let valueToParse = (index == 0) ? MathValue.scalar(slope) : MathValue.scalar(intercept)
+                    // FIX: Changed .scalar to .dimensionless to match the updated MathValue enum.
+                    let valueToParse = (index == 0) ? MathValue.dimensionless(slope) : MathValue.dimensionless(intercept)
                     return viewModel.formatForParsing(valueToParse)
                 } else if index == 0 { // For single results
                     return viewModel.formatForParsing(selectedItem.result)
@@ -109,4 +110,3 @@ class NavigationManager: ObservableObject {
         selectedPart = .result(index: 0)
     }
 }
-

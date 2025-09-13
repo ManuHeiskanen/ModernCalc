@@ -88,10 +88,6 @@ class CalculatorViewModel: ObservableObject {
                 
                 Task {
                     await self.calculate(expression: expression, cursor: position)
-                    // --- FIX: The state update is now inside the Task ---
-                    // This ensures the cached expression is only updated AFTER its
-                    // calculation is complete, preventing a race condition where a stale
-                    // result from an old task could overwrite a fresh one.
                     self.lastCalculatedExpression = expression
                     self.lastCalculatedAngleMode = angle
                 }
@@ -435,7 +431,12 @@ class CalculatorViewModel: ObservableObject {
 
     func formatForHistory(_ value: MathValue) -> String {
         switch value {
-        case .scalar(let d): return formatScalarForDisplay(d)
+        case .dimensionless(let d): return formatScalarForDisplay(d)
+        case .unitValue(let u):
+            let valStr = formatScalarForDisplay(u.value)
+            let unitStr = formatDimensionsForHistory(u.dimensions)
+            if unitStr.isEmpty { return valStr }
+            return "\(valStr) \(unitStr)"
         case .complex(let c): return formatComplexForDisplay(c)
         case .vector(let v): return formatVectorForDisplay(v)
         case .matrix(let m): return formatMatrixForDisplay(m)
@@ -464,7 +465,12 @@ class CalculatorViewModel: ObservableObject {
     func formatForParsing(_ value: MathValue) -> String {
         let argumentSeparator = settings.decimalSeparator == .period ? "," : "."
         switch value {
-        case .scalar(let d): return formatScalarForParsing(d)
+        case .dimensionless(let d): return formatScalarForParsing(d)
+        case .unitValue(let u):
+            let valStr = formatScalarForParsing(u.value)
+            let unitStr = formatDimensionsForParsing(u.dimensions)
+            if unitStr.isEmpty { return valStr }
+            return "(\(valStr))\(unitStr.starts(with: "/") ? "" : "*")\(unitStr)"
         case .complex(let c): return formatComplexForParsing(c)
         case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
         case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
@@ -473,20 +479,15 @@ class CalculatorViewModel: ObservableObject {
         case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForParsing(p)
-        case .regressionResult, .polynomialFit: return "" // Not meant to be parsed back directly
+        case .regressionResult, .polynomialFit: return ""
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
         case .constant(let s): return s
-        // FIX: The formatting for uncert was incorrect, using semicolons and not creating
-        // a valid, parsable expression. This is now corrected to use colons and commas.
         case .uncertain(let u):
             var parts = [formatScalarForParsing(u.value)]
             if u.randomUncertainty > 0 {
                 parts.append("random:\(formatScalarForParsing(u.randomUncertainty))")
             }
-            // NOTE: This is an approximation. The final UncertainValue only stores the combined
-            // systematic uncertainty. We cannot know if it originated from 'resolution' or 'accuracy'.
-            // We output it as 'accuracy' to ensure the result is parsable.
             if u.systematicUncertainty > 0 {
                 let accuracyEquiv = u.systematicUncertainty * sqrt(3.0)
                 parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))")
@@ -520,6 +521,45 @@ class CalculatorViewModel: ObservableObject {
         return settings.decimalSeparator == .comma ? formattedString.replacingOccurrences(of: ".", with: ",") : formattedString
     }
     
+    private func formatDimensionsForHistory(_ dimensions: UnitDimension) -> String {
+        let positiveDims = dimensions.filter { $0.value > 0 }
+        let negativeDims = dimensions.filter { $0.value < 0 }
+
+        let sortedPositive = positiveDims.sorted { $0.key.rawValue < $1.key.rawValue }
+        let sortedNegative = negativeDims.sorted { $0.key.rawValue < $1.key.rawValue }
+
+        let formatPart = { (dims: [(key: BaseUnit, value: Int)]) -> String in
+            dims.map { (unit, exponent) -> String in
+                let symbol = UnitStore.units.first(where: { $0.value.dimensions == [unit: 1] && $0.value.conversionFactor == 1.0 })?.key ?? unit.rawValue
+                return abs(exponent) == 1 ? "\(symbol)" : "\(symbol)^\(abs(exponent))"
+            }.joined(separator: " ")
+        }
+
+        let numerator = formatPart(sortedPositive)
+        let denominator = formatPart(sortedNegative)
+
+        if numerator.isEmpty && denominator.isEmpty {
+            return ""
+        } else if !denominator.isEmpty {
+            if numerator.isEmpty {
+                return "1/\(denominator)"
+            } else {
+                return "\(numerator)/\(denominator)"
+            }
+        } else {
+            return numerator
+        }
+    }
+    
+    private func formatDimensionsForParsing(_ dimensions: UnitDimension) -> String {
+        let allDims = dimensions.sorted { $0.key.rawValue < $1.key.rawValue }
+        
+        return allDims.map { (unit, exponent) -> String in
+            let symbol = UnitStore.units.first(where: { $0.value.dimensions == [unit: 1] && $0.value.conversionFactor == 1.0 })?.key ?? unit.rawValue
+            return ".\(symbol)\(exponent == 1 ? "" : "^\(exponent)")"
+        }.joined(separator: "*")
+    }
+
     private func formatComplexForDisplay(_ value: Complex) -> String {
         if value.real != 0 && value.imaginary != 0 { return "\(formatScalarForDisplay(value.real)) \(value.imaginary < 0 ? "-" : "+") \(formatScalarForDisplay(abs(value.imaginary)))i" }
         else if value.real != 0 { return formatScalarForDisplay(value.real) }

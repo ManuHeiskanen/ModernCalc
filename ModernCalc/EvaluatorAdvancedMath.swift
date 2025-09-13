@@ -10,12 +10,15 @@ extension Evaluator {
         if n == 1 {
             let valPlus = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a + h, variables: &variables, functions: &functions, angleMode: angleMode)
             let valMinus = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a - h, variables: &variables, functions: &functions, angleMode: angleMode)
-            guard case .scalar(let scalarPlus) = valPlus, case .scalar(let scalarMinus) = valMinus else {
-                throw MathError.typeMismatch(expected: "Scalar expression for differentiation", found: "Non-scalar")
-            }
+            
+            // FIX: Use asScalar() to handle dimensionless and unitless values correctly.
+            let scalarPlus = try valPlus.asScalar()
+            let scalarMinus = try valMinus.asScalar()
+            
             return (scalarPlus - scalarMinus) / (2 * h)
         }
         
+        // The recursive calls correctly return Doubles, so this part is fine.
         let f_prime_at_a_plus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: a + h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
         let f_prime_at_a_minus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: a - h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
         
@@ -46,11 +49,13 @@ extension Evaluator {
             let f: (Double) throws -> Double = { x_perturbed in
                 var tempVars = capturedVariables
                 for (j, otherVarName) in varNames.enumerated() {
-                    tempVars[otherVarName] = .scalar((j == i) ? x_perturbed : pointVector.values[j])
+                    // FIX: Changed .scalar to .dimensionless
+                    tempVars[otherVarName] = .dimensionless((j == i) ? x_perturbed : pointVector.values[j])
                 }
                 var tempFuncs = capturedFunctions
-                let result = try self._evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode).result
-                guard case .scalar(let scalarResult) = result else { throw MathError.typeMismatch(expected: "Scalar expression for gradient calculation", found: result.typeName) }
+                let (result, _) = try self._evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
+                // FIX: Use asScalar() to correctly extract the double value.
+                let scalarResult = try result.asScalar()
                 return scalarResult
             }
             
@@ -159,7 +164,10 @@ extension Evaluator {
                 do {
                     let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
                     let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                    if case .scalar(let x) = xValue, case .scalar(let y) = yValue, x.isFinite, y.isFinite {
+                    // FIX: Use asScalar() for type safety
+                    let x = try xValue.asScalar()
+                    let y = try yValue.asScalar()
+                    if x.isFinite, y.isFinite {
                         results[i] = DataPoint(x: x, y: y)
                     }
                 } catch { }
@@ -191,7 +199,9 @@ extension Evaluator {
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
                         let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                        if case .scalar(let y) = yValue, y.isFinite {
+                        // FIX: Use asScalar() for type safety
+                        let y = try yValue.asScalar()
+                        if y.isFinite {
                             results[i] = DataPoint(x: x, y: y)
                         }
                     } catch { }
@@ -275,15 +285,21 @@ extension Evaluator {
         let startTime = CFAbsoluteTimeGetCurrent()
         let (xMinVal, _) = try _evaluateSingle(node: node.xRange.0, variables: &variables, functions: &functions, angleMode: .radians)
         let (xMaxVal, _) = try _evaluateSingle(node: node.xRange.1, variables: &variables, functions: &functions, angleMode: .radians)
-        guard case .scalar(let xMin) = xMinVal, case .scalar(let xMax) = xMaxVal else { throw MathError.plotError(reason: "Plot range must be scalar values.") }
+        
+        // FIX: Use asScalar() for plot ranges
+        let xMin = try xMinVal.asScalar()
+        let xMax = try xMaxVal.asScalar()
+        
         guard xMin < xMax else { throw MathError.plotError(reason: "Plot range min must be less than max.") }
         let plotRange = xMin...xMax
         var explicitYRange: (min: Double, max: Double)? = nil
         if let yRangeNodes = node.yRange {
              let (yMinVal, _) = try _evaluateSingle(node: yRangeNodes.0, variables: &variables, functions: &functions, angleMode: .radians)
              let (yMaxVal, _) = try _evaluateSingle(node: yRangeNodes.1, variables: &variables, functions: &functions, angleMode: .radians)
-             guard case .scalar(let yMin) = yMinVal, case .scalar(let yMax) = yMaxVal else { throw MathError.plotError(reason: "Y-axis range must be scalar values.") }
-            guard yMin < yMax else { throw MathError.plotError(reason: "Y-axis range min must be less than max.") }
+             // FIX: Use asScalar() for y-axis range
+             let yMin = try yMinVal.asScalar()
+             let yMax = try yMaxVal.asScalar()
+             guard yMin < yMax else { throw MathError.plotError(reason: "Y-axis range min must be less than max.") }
             explicitYRange = (yMin, yMax)
         }
 
@@ -302,7 +318,10 @@ extension Evaluator {
                 do {
                     let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
                     let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                    if case .scalar(let x) = xValue, case .scalar(let y) = yValue, x.isFinite, y.isFinite {
+                    // FIX: Use asScalar()
+                    let x = try xValue.asScalar()
+                    let y = try yValue.asScalar()
+                    if x.isFinite, y.isFinite {
                         results[i] = DataPoint(x: x, y: y)
                     }
                 } catch {}
@@ -326,7 +345,9 @@ extension Evaluator {
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
                         let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                        if case .scalar(let y) = yValue, y.isFinite {
+                        // FIX: Use asScalar()
+                        let y = try yValue.asScalar()
+                        if y.isFinite {
                             results[i] = DataPoint(x: x, y: y)
                         }
                     } catch {}
@@ -424,4 +445,3 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
     let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
     return coefficients
 }
-

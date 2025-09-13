@@ -9,14 +9,15 @@ import Foundation
 
 enum TokenType: Equatable {
     case number(Double)
-    case op(String) // Changed from Character to String
+    case op(String)
     case paren(Character)
     case bracket(Character)
     case assignment
-    case separator(Character) // For , and ;
+    case separator(Character)
     case identifier(String)
-    case string(String) // NEW: For string literals like "asc"
-    case unitVector(Character) // For i', j', k'
+    case string(String)
+    case unit(String)
+    case unitVector(Character)
     case unknown(Character)
     case invalid(String)
 }
@@ -30,6 +31,7 @@ class Lexer {
     private let input: String
     private var currentIndex: String.Index
     private let decimalSeparator: DecimalSeparator
+    private var lastTokenType: TokenType?
 
     init(input: String, decimalSeparator: DecimalSeparator = .period) {
         self.input = input
@@ -49,123 +51,157 @@ class Lexer {
             }
             
             if char.isNumber || (char == decimalSeparator.character && (peek(offset: 1)?.isNumber ?? false)) {
-                tokens.append(lexNumber())
+                let token = lexNumber()
+                tokens.append(token)
+                self.lastTokenType = token.type
                 continue
             }
             
             if char.isLetter || greekLetters.contains(char) || char == "_" {
+                let token: Token
                 if char == "j" && peek(offset: 1) == "'" {
                     advance(); advance()
-                    tokens.append(Token(type: .unitVector("j"), rawValue: "j'"))
+                    token = Token(type: .unitVector("j"), rawValue: "j'")
                 } else if char == "k" && peek(offset: 1) == "'" {
                     advance(); advance()
-                    tokens.append(Token(type: .unitVector("k"), rawValue: "k'"))
+                    token = Token(type: .unitVector("k"), rawValue: "k'")
                 } else {
-                    tokens.append(lexIdentifier())
+                    token = lexIdentifier()
                 }
+                tokens.append(token)
+                self.lastTokenType = token.type
                 continue
             }
 
+            var currentToken: Token?
             switch char {
             case "\"":
-                tokens.append(lexString())
+                currentToken = lexString()
             case "+", "-", "%", "^", "=":
                 advance()
-                tokens.append(Token(type: .op(String(char)), rawValue: String(char)))
+                currentToken = Token(type: .op(String(char)), rawValue: String(char))
             case "*":
                 advance()
-                tokens.append(Token(type: .op("*"), rawValue: "*"))
+                currentToken = Token(type: .op("*"), rawValue: "*")
             case "/":
                 advance()
-                tokens.append(Token(type: .op("/"), rawValue: "/"))
+                currentToken = Token(type: .op("/"), rawValue: "/")
             case "×":
                 advance()
-                tokens.append(Token(type: .op("*"), rawValue: "×"))
+                currentToken = Token(type: .op("*"), rawValue: "×")
             case "÷":
                 advance()
-                tokens.append(Token(type: .op("/"), rawValue: "÷"))
+                currentToken = Token(type: .op("/"), rawValue: "÷")
             case "√":
                 advance()
-                tokens.append(Token(type: .identifier("sqrt"), rawValue: "√"))
+                currentToken = Token(type: .identifier("sqrt"), rawValue: "√")
             case "±":
                 advance()
-                tokens.append(Token(type: .op("±"), rawValue: "±"))
+                currentToken = Token(type: .op("±"), rawValue: "±")
             case "∠":
                 advance()
-                tokens.append(Token(type: .op("∠"), rawValue: "∠"))
+                currentToken = Token(type: .op("∠"), rawValue: "∠")
             case "!":
                 advance()
-                tokens.append(Token(type: .op("!"), rawValue: "!"))
+                currentToken = Token(type: .op("!"), rawValue: "!")
             case "'":
                 advance()
-                tokens.append(Token(type: .op("'"), rawValue: "'"))
-            // MODIFIED: Replaced the ambiguous fallthrough logic with explicit cases for '.' and ','
+                currentToken = Token(type: .op("'"), rawValue: "'")
             case ",":
                 if argumentSeparator == "," {
                     advance()
-                    tokens.append(Token(type: .separator(","), rawValue: ","))
+                    currentToken = Token(type: .separator(","), rawValue: ",")
                 } else {
-                    // If we are here, comma must be the decimal separator. If it appears alone, it's an error,
-                    // because lexNumber should have handled it if it was part of a number.
-                    tokens.append(Token(type: .unknown(advance()!), rawValue: ","))
+                    currentToken = Token(type: .unknown(advance()!), rawValue: ",")
                 }
             case ".":
-                if argumentSeparator == "." {
-                    advance()
-                    tokens.append(Token(type: .separator("."), rawValue: "."))
-                } else {
-                    // Here, period must be the decimal separator. Check for element-wise operators.
-                    if peek(offset: 1) == "=" && peek(offset: 2) == "@" {
-                        advance(); advance(); advance()
-                        tokens.append(Token(type: .op(".=@"), rawValue: ".=@"))
-                    } else if peek(offset: 1) == "+" && peek(offset: 2) == "@" {
-                        advance(); advance(); advance()
-                        tokens.append(Token(type: .op(".+@"), rawValue: ".+@"))
-                    } else if peek(offset: 1) == "-" && peek(offset: 2) == "@" {
-                        advance(); advance(); advance()
-                        tokens.append(Token(type: .op(".-@"), rawValue: ".-@"))
-                    } else if peek(offset: 1) == "*" && peek(offset: 2) == "@" {
-                        advance(); advance(); advance()
-                        tokens.append(Token(type: .op(".*@"), rawValue: ".*@"))
-                    } else if peek(offset: 1) == "/" && peek(offset: 2) == "@" {
-                        advance(); advance(); advance()
-                        tokens.append(Token(type: .op("./@"), rawValue: "./@"))
-                    } else if peek(offset: 1) == "*" {
-                        advance(); advance()
-                        tokens.append(Token(type: .op(".*"), rawValue: ".*"))
-                    } else if peek(offset: 1) == "/" {
-                        advance(); advance()
-                        tokens.append(Token(type: .op("./"), rawValue: "./"))
-                    } else {
-                        // Period is the decimal separator but wasn't part of a number. Unknown.
-                        tokens.append(Token(type: .unknown(advance()!), rawValue: "."))
-                    }
-                }
+                 var prevWasNumber = false
+                 if case .number = self.lastTokenType { prevWasNumber = true }
+
+                 var prevWasParen = false
+                 if case .paren(")") = self.lastTokenType { prevWasParen = true }
+                 
+                 if prevWasNumber || prevWasParen {
+                     let unitSymbol = peekAheadForUnit()
+                     if !unitSymbol.isEmpty {
+                         advance() // Consume the dot
+                         for _ in 0..<unitSymbol.count { advance() }
+                         currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
+                     } else {
+                         currentToken = lexDotOperator()
+                     }
+                 } else {
+                     currentToken = lexDotOperator()
+                 }
             case "°":
                 advance()
                 continue
-            case "(": tokens.append(Token(type: .paren("("), rawValue: String(advance()!)))
-            case ")": tokens.append(Token(type: .paren(")"), rawValue: String(advance()!)))
-            case "[": tokens.append(Token(type: .bracket("["), rawValue: String(advance()!)))
-            case "]": tokens.append(Token(type: .bracket("]"), rawValue: String(advance()!)))
+            case "(": currentToken = Token(type: .paren("("), rawValue: String(advance()!))
+            case ")": currentToken = Token(type: .paren(")"), rawValue: String(advance()!))
+            case "[": currentToken = Token(type: .bracket("["), rawValue: String(advance()!))
+            case "]": currentToken = Token(type: .bracket("]"), rawValue: String(advance()!))
             case ":":
                 if peek(offset: 1) == "=" {
                     advance(); advance()
-                    tokens.append(Token(type: .assignment, rawValue: ":="))
+                    currentToken = Token(type: .assignment, rawValue: ":=")
                 } else {
-                    // FIX: Recognize a single colon as an assignment token for named arguments.
-                    // The parser will distinguish it from ':=' based on the context.
                     advance()
-                    tokens.append(Token(type: .assignment, rawValue: ":"))
+                    currentToken = Token(type: .assignment, rawValue: ":")
                 }
             case ";":
                 advance()
-                tokens.append(Token(type: .separator(char), rawValue: String(char)))
+                currentToken = Token(type: .separator(char), rawValue: String(char))
             default:
-                tokens.append(Token(type: .unknown(advance()!), rawValue: String(char)))
+                currentToken = Token(type: .unknown(advance()!), rawValue: String(char))
+            }
+            
+            if let token = currentToken {
+                tokens.append(token)
+                self.lastTokenType = token.type
             }
         }
         return tokens
+    }
+    
+    private func lexDotOperator() -> Token {
+        if peek(offset: 1) == "=" && peek(offset: 2) == "@" {
+            advance(); advance(); advance()
+            return Token(type: .op(".=@"), rawValue: ".=@")
+        } else if peek(offset: 1) == "+" && peek(offset: 2) == "@" {
+            advance(); advance(); advance()
+            return Token(type: .op(".+@"), rawValue: ".+@")
+        } else if peek(offset: 1) == "-" && peek(offset: 2) == "@" {
+            advance(); advance(); advance()
+            return Token(type: .op(".-@"), rawValue: ".-@")
+        } else if peek(offset: 1) == "*" && peek(offset: 2) == "@" {
+            advance(); advance(); advance()
+            return Token(type: .op(".*@"), rawValue: ".*@")
+        } else if peek(offset: 1) == "/" && peek(offset: 2) == "@" {
+            advance(); advance(); advance()
+            return Token(type: .op("./@"), rawValue: "./@")
+        } else if peek(offset: 1) == "*" {
+            advance(); advance()
+            return Token(type: .op(".*"), rawValue: ".*")
+        } else if peek(offset: 1) == "/" {
+            advance(); advance()
+            return Token(type: .op("./"), rawValue: "./")
+        } else {
+            return Token(type: .unknown(advance()!), rawValue: ".")
+        }
+    }
+    
+    private func peekAheadForUnit() -> String {
+        var potentialUnit = ""
+        var offset = 1
+        while let char = peek(offset: offset), char.isLetter || char == "μ" { // Allow for micro symbol
+            potentialUnit.append(char)
+            offset += 1
+        }
+        
+        if UnitStore.units[potentialUnit] != nil {
+            return potentialUnit
+        }
+        return ""
     }
 
     private func lexNumber() -> Token {
@@ -179,13 +215,11 @@ class Lexer {
                 hasDecimal = true
                 advance()
             } else {
-                // If the character is not a digit or the valid decimal separator, stop parsing the number.
                 break
             }
         }
         
         let numberString = String(input[startIndex..<currentIndex])
-        // Standardize the decimal separator to '.' for Double conversion.
         let sanitizedString = numberString.replacingOccurrences(of: String(decimalSeparator.character), with: ".")
         
         if let value = Double(sanitizedString) {
@@ -197,18 +231,13 @@ class Lexer {
     
     private func lexString() -> Token {
         let startIndex = currentIndex
-        advance() // Consume the opening quote
-        
+        advance()
         var value = ""
         while let char = peek(), char != "\"" {
             advance()
             value.append(char)
         }
-        
-        if peek() == "\"" {
-            advance() // Consume the closing quote
-        }
-        
+        if peek() == "\"" { advance() }
         let rawValue = String(input[startIndex..<currentIndex])
         return Token(type: .string(value), rawValue: rawValue)
     }
@@ -220,11 +249,7 @@ class Lexer {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
-        
-        if identifierString == "π" {
-            return Token(type: .identifier("pi"), rawValue: "π")
-        }
-        
+        if identifierString == "π" { return Token(type: .identifier("pi"), rawValue: "π") }
         return Token(type: .identifier(identifierString), rawValue: identifierString)
     }
 
@@ -243,3 +268,4 @@ class Lexer {
         return char
     }
 }
+

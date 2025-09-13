@@ -1,11 +1,55 @@
-//
-//  MathTypes.swift
-//  ModernCalc
-//
-//  Created by Manu Heiskanen on 29.8.2025.
-//
-
 import Foundation
+
+// --- NEW: A struct to represent a value with its associated physical dimensions. ---
+struct UnitValue: Equatable, Codable {
+    var value: Double
+    var dimensions: UnitDimension
+
+    // A dimensionless value, for convenience.
+    static func dimensionless(_ value: Double) -> UnitValue {
+        return UnitValue(value: value, dimensions: [:])
+    }
+
+    // --- Operator Overloads for Dimensional Analysis ---
+
+    static func + (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
+        guard lhs.dimensions == rhs.dimensions else {
+            throw MathError.dimensionMismatch(reason: "Cannot add quantities with different units.")
+        }
+        return UnitValue(value: lhs.value + rhs.value, dimensions: lhs.dimensions)
+    }
+
+    static func - (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
+        guard lhs.dimensions == rhs.dimensions else {
+            throw MathError.dimensionMismatch(reason: "Cannot subtract quantities with different units.")
+        }
+        return UnitValue(value: lhs.value - rhs.value, dimensions: lhs.dimensions)
+    }
+    
+    static func * (lhs: UnitValue, rhs: UnitValue) -> UnitValue {
+        let newValue = lhs.value * rhs.value
+        let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +)
+            .filter { $0.value != 0 } // Remove dimensions that cancel out
+        return UnitValue(value: newValue, dimensions: newDimensions)
+    }
+
+    static func / (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
+        guard rhs.value != 0 else { throw MathError.divisionByZero }
+        let newValue = lhs.value / rhs.value
+        let negatedRhsDimensions = rhs.dimensions.mapValues { -$0 }
+        let newDimensions = lhs.dimensions.merging(negatedRhsDimensions, uniquingKeysWith: +)
+            .filter { $0.value != 0 }
+        return UnitValue(value: newValue, dimensions: newDimensions)
+    }
+    
+    func pow(_ exponent: Double) -> UnitValue {
+        let newValue = Foundation.pow(self.value, exponent)
+        let newDimensions = self.dimensions.mapValues { Int(Double($0) * exponent) }
+            .filter { $0.value != 0 }
+        return UnitValue(value: newValue, dimensions: newDimensions)
+    }
+}
+
 
 // --- CORE DATA TYPES ---
 
@@ -675,7 +719,17 @@ struct ComplexMatrix: Equatable, Codable {
 }
 
 enum MathValue: Codable, Equatable {
-    case scalar(Double); case complex(Complex); case vector(Vector); case matrix(Matrix); case tuple([MathValue]); case functionDefinition(String); case complexVector(ComplexVector); case complexMatrix(ComplexMatrix); case polar(Complex); case constant(String)
+    case dimensionless(Double)
+    case unitValue(UnitValue)
+    case complex(Complex)
+    case vector(Vector)
+    case matrix(Matrix)
+    case tuple([MathValue])
+    case functionDefinition(String)
+    case complexVector(ComplexVector)
+    case complexMatrix(ComplexMatrix)
+    case polar(Complex)
+    case constant(String)
     case regressionResult(slope: Double, intercept: Double)
     case polynomialFit(coefficients: Vector)
     case plot(PlotData)
@@ -684,7 +738,7 @@ enum MathValue: Codable, Equatable {
 
     var typeName: String {
         switch self {
-        case .scalar: return "Scalar"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"; case .uncertain: return "UncertainValue"
+        case .dimensionless: return "Dimensionless"; case .unitValue: return "UnitValue"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"; case .uncertain: return "UncertainValue"
         }
     }
     
@@ -693,7 +747,8 @@ enum MathValue: Codable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         switch self {
-        case .scalar(let d): try container.encode("scalar", forKey: .type); try container.encode(d, forKey: .value)
+        case .dimensionless(let d): try container.encode("dimensionless", forKey: .type); try container.encode(d, forKey: .value)
+        case .unitValue(let u): try container.encode("unitValue", forKey: .type); try container.encode(u, forKey: .value)
         case .complex(let c): try container.encode("complex", forKey: .type); try container.encode(c, forKey: .value)
         case .vector(let v): try container.encode("vector", forKey: .type); try container.encode(v, forKey: .value)
         case .matrix(let m): try container.encode("matrix", forKey: .type); try container.encode(m, forKey: .value)
@@ -718,7 +773,6 @@ enum MathValue: Codable, Equatable {
         case .plot:
             try container.encode("plot", forKey: .type)
         case .triggerCSVImport:
-            // This case should not be encoded. If it is, something is wrong.
             throw EncodingError.invalidValue(self, .init(codingPath: [], debugDescription: "triggerCSVImport is a transient value and should not be saved."))
         }
     }
@@ -727,7 +781,9 @@ enum MathValue: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(String.self, forKey: .type)
         switch type {
-        case "scalar": self = .scalar(try container.decode(Double.self, forKey: .value))
+        case "dimensionless", "scalar": // Keep "scalar" for backward compatibility
+            self = .dimensionless(try container.decode(Double.self, forKey: .value))
+        case "unitValue": self = .unitValue(try container.decode(UnitValue.self, forKey: .value))
         case "complex": self = .complex(try container.decode(Complex.self, forKey: .value))
         case "vector": self = .vector(try container.decode(Vector.self, forKey: .value))
         case "matrix": self = .matrix(try container.decode(Matrix.self, forKey: .value))
@@ -753,10 +809,10 @@ enum MathValue: Codable, Equatable {
         }
     }
     
-    // Plots cannot be equated since they contain unique IDs.
     static func == (lhs: MathValue, rhs: MathValue) -> Bool {
         switch (lhs, rhs) {
-        case (.scalar(let a), .scalar(let b)): return a == b
+        case (.dimensionless(let a), .dimensionless(let b)): return a == b
+        case (.unitValue(let a), .unitValue(let b)): return a == b
         case (.complex(let a), .complex(let b)): return a == b
         case (.vector(let a), .vector(let b)): return a == b
         case (.matrix(let a), .matrix(let b)): return a == b
@@ -779,9 +835,17 @@ enum MathValue: Codable, Equatable {
 extension MathValue {
     func asScalar() throws -> Double {
         switch self {
-        case .scalar(let s): return s
-        case .uncertain(let u): return u.value // Allow uncertain values to be coerced to scalar
-        default: throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: self.typeName)
+        case .dimensionless(let d):
+            return d
+        case .unitValue(let u):
+            guard u.dimensions.isEmpty else {
+                throw MathError.typeMismatch(expected: "Dimensionless value", found: "Value with units")
+            }
+            return u.value
+        case .uncertain(let u):
+            return u.value // Allow uncertain values to be coerced
+        default:
+            throw MathError.typeMismatch(expected: "Dimensionless or UncertainValue", found: self.typeName)
         }
     }
 }

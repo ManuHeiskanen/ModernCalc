@@ -20,6 +20,12 @@ struct NumberNode: ExpressionNode {
     let value: Double
     var description: String { "\(value)" }
 }
+// NEW: An AST node representing a number with an attached unit.
+struct UnitNode: ExpressionNode {
+    let number: ExpressionNode // Can be a NumberNode or a more complex expression like (2+3)
+    let unitSymbol: String
+    var description: String { "\(number.description).\(unitSymbol)" }
+}
 struct StringNode: ExpressionNode {
     let value: String
     var description: String { "\"\(value)\"" }
@@ -216,8 +222,15 @@ class Parser {
     }
 
     private func parsePrimary() throws -> ExpressionNode {
-        let prefixNode = try parsePrefix()
-        return try parsePostfix(left: prefixNode)
+        var node = try parsePrefix()
+        
+        // After parsing a potential number or parenthesized expression, check for a unit.
+        if let token = peek(), case .unit(let unitSymbol) = token.type {
+            try advance()
+            node = UnitNode(number: node, unitSymbol: unitSymbol)
+        }
+        
+        return try parsePostfix(left: node)
     }
 
     private func parsePostfix(left: ExpressionNode) throws -> ExpressionNode {
@@ -298,11 +311,9 @@ class Parser {
         
         var namedArgs: [String: ExpressionNode] = [:]
         
-        // Loop to parse named arguments like "random: 0.1, resolution: 0.05"
         while let separator = peek(), case .separator(let char) = separator.type, char == "," {
-            try advance() // Consume the comma
+            try advance()
             
-            // Check for a premature closing parenthesis after a comma
             if let closing = peek(), case .paren(")") = closing.type {
                 break
             }
@@ -312,8 +323,6 @@ class Parser {
                 throw ParserError.unexpectedToken(token: nameToken, expected: "argument name (e.g., 'random')")
             }
             
-            // FIX: Expect a colon ':' instead of a semicolon to associate the name with the value.
-            // This is the standard convention for named arguments.
             let colonToken = try advance()
             guard case .assignment = colonToken.type else {
                 throw ParserError.unexpectedToken(token: colonToken, expected: "':' after argument name")
@@ -617,7 +626,7 @@ class Parser {
 
         let wasValue = {
             switch lastType {
-            case .number, .identifier, .unitVector, .paren(")"), .op("'"), .op("!"): return true
+            case .number, .identifier, .unitVector, .paren(")"), .op("'"), .op("!"), .unit: return true
             default: return false
             }
         }()

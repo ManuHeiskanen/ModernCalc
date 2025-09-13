@@ -47,6 +47,10 @@ struct LaTeXEngine {
         case let numberNode as NumberNode:
             return formatScalar(numberNode.value, settings: settings)
             
+        case let unitNode as UnitNode:
+            let numberLaTeX = formatNode(unitNode.number, evaluator: evaluator, settings: settings)
+            return "\(numberLaTeX)\\,\\text{\(unitNode.unitSymbol)}"
+
         case let constantNode as ConstantNode:
             if constantNode.name == "pi" { return "\\pi" }
             return constantNode.name.replacingOccurrences(of: "π", with: "\\pi")
@@ -88,7 +92,6 @@ struct LaTeXEngine {
             case "/", "÷":
                 return "\\frac{\(leftLaTeX)}{\(rightLaTeX)}"
             case "*", "×":
-                // Heuristic for rendering implicit multiplication without a dot.
                 if binaryNode.op.rawValue == "*" {
                     let leftIsNumber = binaryNode.left is NumberNode
                     let leftIsConstant = binaryNode.left is ConstantNode
@@ -97,13 +100,11 @@ struct LaTeXEngine {
                     let rightIsFuncCall = binaryNode.right is FunctionCallNode
                     let rightIsVectorOrMatrix = binaryNode.right is VectorNode || binaryNode.right is MatrixNode || binaryNode.right is ComplexVectorNode || binaryNode.right is ComplexMatrixNode
                     
-                    // e.g., "2x", "ax", "2sin(x)", "2[1;2]"
                     if (leftIsNumber || leftIsConstant) && (rightIsConstant || rightIsFuncCall || rightIsVectorOrMatrix) {
                         return "\(leftLaTeX)\(rightLaTeX)"
                     }
                     
                     let rightIsNumber = binaryNode.right is NumberNode
-                    // e.g., "x2"
                     if leftIsConstant && rightIsNumber {
                         return "\(leftLaTeX)\(rightLaTeX)"
                     }
@@ -190,7 +191,6 @@ struct LaTeXEngine {
         
         case let derivativeNode as DerivativeNode:
             if let variableNode = derivativeNode.variable {
-                // Standard derivative(body, var, point) form
                 let body = formatNode(derivativeNode.body, evaluator: evaluator, settings: settings)
                 let variable = variableNode.name
                 let point = formatNode(derivativeNode.point, evaluator: evaluator, settings: settings)
@@ -202,12 +202,8 @@ struct LaTeXEngine {
                     return "\\frac{d^{\(orderLaTeX)}}{d\(variable)^{\(orderLaTeX)}}{\\left(\(body)\\right)}\\Big|_{\(variable)=\(point)}"
                 }
             } else {
-                // Shorthand derivative(f, point) form
-                // Here, derivativeNode.body is expected to be a ConstantNode with the function name
                 let functionName = (derivativeNode.body as? ConstantNode)?.name ?? "f"
                 let point = formatNode(derivativeNode.point, evaluator: evaluator, settings: settings)
-                
-                // Note: The parser for this form hardcodes the order to 1, so we only need to handle f'
                 return "\\text{\(functionName.replacingOccurrences(of: "_", with: "\\_"))}'(\(point))"
             }
 
@@ -229,7 +225,6 @@ struct LaTeXEngine {
         case is ImportCSVNode:
              return "\\text{importcsv()}"
 
-        // NEW: Format the UncertaintyNode for display
         case let uncertNode as UncertaintyNode:
              let val = formatNode(uncertNode.value, evaluator: evaluator, settings: settings)
              let args = uncertNode.namedArgs.map { key, node in
@@ -250,8 +245,13 @@ struct LaTeXEngine {
     
     static func formatMathValue(_ value: MathValue, angleMode: AngleMode, settings: UserSettings) -> String {
         switch value {
-        case .scalar(let doubleValue):
+        case .dimensionless(let doubleValue):
             return formatScalar(doubleValue, settings: settings)
+        case .unitValue(let u):
+            let valStr = formatScalar(u.value, settings: settings)
+            let unitStr = format(dimensions: u.dimensions)
+            if unitStr.isEmpty { return valStr }
+            return "\(valStr) \\, \(unitStr)"
         case .complex(let complexValue):
             let realPart = formatScalar(complexValue.real, settings: settings)
             let imagPart = formatScalar(abs(complexValue.imaginary), settings: settings)
@@ -306,6 +306,44 @@ struct LaTeXEngine {
             let valStr = formatScalar(u.value, settings: settings)
             let uncStr = formatScalar(u.totalUncertainty, settings: settings)
             return "\(valStr) \\pm \(uncStr)"
+        }
+    }
+    
+    private static func format(dimensions: UnitDimension) -> String {
+        let positiveDims = dimensions.filter { $0.value > 0 }
+        let negativeDims = dimensions.filter { $0.value < 0 }
+
+        let sortedPositive = positiveDims.sorted { $0.key.rawValue < $1.key.rawValue }
+        let sortedNegative = negativeDims.sorted { $0.key.rawValue < $1.key.rawValue }
+
+        let formatPart = { (dims: [(key: BaseUnit, value: Int)]) -> String in
+            dims.map { (unit, exponent) -> String in
+                let symbol = UnitStore.units.first(where: {
+                    $0.value.dimensions == [unit: 1] && $0.value.conversionFactor == 1.0
+                })?.key ?? unit.rawValue
+                
+                let absExponent = abs(exponent)
+                if absExponent == 1 {
+                    return "\\text{\(symbol)}"
+                } else {
+                    return "\\text{\(symbol)}^{\(absExponent)}"
+                }
+            }.joined(separator: " \\cdot ")
+        }
+
+        let numerator = formatPart(sortedPositive)
+        let denominator = formatPart(sortedNegative)
+
+        if numerator.isEmpty && denominator.isEmpty {
+            return ""
+        } else if !denominator.isEmpty {
+            if numerator.isEmpty {
+                return "\\frac{1}{\(denominator)}"
+            } else {
+                return "\\frac{\(numerator)}{\(denominator)}"
+            }
+        } else {
+            return numerator
         }
     }
 
@@ -366,19 +404,16 @@ struct LaTeXEngine {
             let isFirstTerm = (result == "y = ")
             let formattedCoeff = formatScalar(abs(coeff), settings: settings)
             
-            // Sign
             if !isFirstTerm {
                 result += (coeff < 0) ? " - " : " + "
             } else if coeff < 0 {
                 result += "- "
             }
             
-            // Coefficient
             if abs(abs(coeff) - 1.0) > 1e-9 || i == 0 {
                 result += formattedCoeff
             }
             
-            // Variable and power
             if i > 0 {
                 result += "x"
                 if i > 1 {
@@ -392,7 +427,7 @@ struct LaTeXEngine {
     private static func formatScientificNotation(fromString scientificString: String, using settings: UserSettings) -> String {
         let parts = scientificString.lowercased().split(separator: "e")
         guard parts.count == 2, let exponent = Int(parts[1]) else {
-            return scientificString // Fallback
+            return scientificString
         }
 
         var mantissaString = String(parts[0])

@@ -17,7 +17,7 @@ enum MathError: Error, CustomStringConvertible {
         switch self {
         case .divisionByZero: return "Error: Division by zero."
         case .unknownOperator(let op): return "Error: Unknown operator '\(op)'."
-        case .unknownConstant(let name): return "Error: Unknown variable or constant '\(name)'."
+        case .unknownConstant(let name): return "Error: Unknown constant or unit '\(name)'."
         case .unknownFunction(let name): return "Error: Unknown function '\(name)'."
         case .invalidNode: return "Error: The expression tree contains an invalid node."
         case .typeMismatch(let expected, let found): return "Error: Type mismatch. Expected \(expected), but found \(found)."
@@ -48,7 +48,7 @@ struct Evaluator {
     /// A helper function to evaluate an expression with a temporary variable, used for calculus operations.
     func evaluateWithTempVar(node: ExpressionNode, varName: String, varValue: Double, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
         var tempVars = variables
-        tempVars[varName] = .scalar(varValue)
+        tempVars[varName] = .dimensionless(varValue)
         let (result, _) = try _evaluateSingle(node: node, variables: &tempVars, functions: &functions, angleMode: angleMode)
         return result
     }
@@ -89,16 +89,28 @@ struct Evaluator {
         
         switch node {
         case let numberNode as NumberNode:
-            return (.scalar(numberNode.value), usedAngle)
+            return (.dimensionless(numberNode.value), usedAngle)
         
+        case let unitNode as UnitNode:
+            let (numberValue, numberUsedAngle) = try _evaluateSingle(node: unitNode.number, variables: &variables, functions: &functions, angleMode: angleMode)
+            let value = try numberValue.asScalar() // Ensure the base is dimensionless
+
+            guard let unitDef = UnitStore.units[unitNode.unitSymbol] else {
+                throw MathError.unknownConstant(name: unitNode.unitSymbol)
+            }
+
+            let finalValue = value * unitDef.conversionFactor
+            let unitValue = UnitValue(value: finalValue, dimensions: unitDef.dimensions)
+            return (.unitValue(unitValue), numberUsedAngle)
+
         case let stringNode as StringNode:
             return (.constant(stringNode.value), false)
             
         case let constantNode as ConstantNode:
             if constantNode.name == "i" { return (.complex(Complex.i), usedAngle) }
             if let value = variables[constantNode.name] { return (value, usedAngle) }
-            else if let value = Evaluator.siPrefixes[constantNode.name] { return (.scalar(value), usedAngle) }
-            else if let value = Evaluator.constants[constantNode.name] { return (.scalar(value), usedAngle) }
+            else if let value = Evaluator.siPrefixes[constantNode.name] { return (.dimensionless(value), usedAngle) }
+            else if let value = Evaluator.constants[constantNode.name] { return (.dimensionless(value), usedAngle) }
             else { throw MathError.unknownConstant(name: constantNode.name) }
             
         case let assignmentNode as AssignmentNode:
@@ -125,22 +137,18 @@ struct Evaluator {
                 let (argVal, _) = try _evaluateSingle(node: expr, variables: &variables, functions: &functions, angleMode: angleMode)
                 let scalarArg = try argVal.asScalar()
                 
-                // FIX: Add support for aliases (r, res, a) to match the documentation.
                 switch name {
                 case "random", "r":
                     u_rand = scalarArg
                 case "resolution", "res":
-                    // Assuming a rectangular distribution for resolution uncertainty
                     u_sys_res = scalarArg / sqrt(12.0)
                 case "accuracy", "a":
-                    // Assuming a rectangular distribution for accuracy uncertainty
                     u_sys_acc = scalarArg / sqrt(3.0)
                 default:
                     throw ParserError.invalidNamedArgument(function: "uncert", argument: name)
                 }
             }
             
-            // Systematic uncertainties from different sources are combined in quadrature
             let combinedSystematic = sqrt(pow(u_sys_res, 2) + pow(u_sys_acc, 2))
             
             let uncertainValue = UncertainValue(value: nominalValue, randomUncertainty: u_rand, systematicUncertainty: combinedSystematic)
@@ -174,8 +182,8 @@ struct Evaluator {
                 usedAngle = usedAngle || elementUsedAngle
                 switch evaluatedElement {
                 case .complex(let c): elements.append(c)
-                case .scalar(let s): elements.append(Complex(real: s, imaginary: 0))
-                default: throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
+                case .dimensionless(let s): elements.append(Complex(real: s, imaginary: 0))
+                default: throw MathError.typeMismatch(expected: "Complex or Dimensionless", found: evaluatedElement.typeName)
                 }
             }
             return (.complexVector(ComplexVector(values: elements)), usedAngle)
@@ -188,8 +196,8 @@ struct Evaluator {
                     usedAngle = usedAngle || elementUsedAngle
                     switch evaluatedElement {
                     case .complex(let c): values.append(c)
-                    case .scalar(let s): values.append(Complex(real: s, imaginary: 0))
-                    default: throw MathError.typeMismatch(expected: "Complex or Scalar", found: evaluatedElement.typeName)
+                    case .dimensionless(let s): values.append(Complex(real: s, imaginary: 0))
+                    default: throw MathError.typeMismatch(expected: "Complex or Dimensionless", found: evaluatedElement.typeName)
                     }
                 }
             }
@@ -210,7 +218,7 @@ struct Evaluator {
                 let (rValue, rUsedAngle) = try _evaluateSingle(node: binaryNode.left, variables: &variables, functions: &functions, angleMode: angleMode)
                 let (thetaValue, thetaUsedAngle) = try _evaluateSingle(node: binaryNode.right, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = rUsedAngle || thetaUsedAngle
-                guard case .scalar(let r) = rValue, case .scalar(let theta) = thetaValue else { throw MathError.typeMismatch(expected: "Scalar ∠ Scalar", found: "\(rValue.typeName) ∠ \(thetaValue.typeName)") }
+                guard case .dimensionless(let r) = rValue, case .dimensionless(let theta) = thetaValue else { throw MathError.typeMismatch(expected: "Dimensionless ∠ Dimensionless", found: "\(rValue.typeName) ∠ \(thetaValue.typeName)") }
                 let thetaRad = angleMode == .degrees ? theta * .pi / 180.0 : theta
                 return (.complex(Complex(real: r * cos(thetaRad), imaginary: r * sin(thetaRad))), true)
             }
@@ -252,15 +260,15 @@ struct Evaluator {
             let (orderValue, _) = try _evaluateSingle(node: derivativeNode.order, variables: &variables, functions: &functions, angleMode: angleMode)
 
             let point = try pointValue.asScalar()
-            guard case .scalar(let orderScalar) = orderValue, orderScalar >= 1, orderScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Positive integer for derivative order", found: orderValue.typeName) }
+            guard case .dimensionless(let orderScalar) = orderValue, orderScalar >= 1, orderScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Positive integer for derivative order", found: orderValue.typeName) }
             let order = Int(orderScalar)
 
             var tempVarsForDryRun = variables
-            tempVarsForDryRun[varName] = .scalar(0)
+            tempVarsForDryRun[varName] = .dimensionless(0)
             let bodyUsedAngle = (try? _evaluateSingle(node: bodyNode, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
             
             let result = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: point, order: order, variables: &variables, functions: &functions, angleMode: angleMode)
-            return (.scalar(result), pointUsedAngle || bodyUsedAngle)
+            return (.dimensionless(result), pointUsedAngle || bodyUsedAngle)
 
         case let integralNode as IntegralNode:
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -270,7 +278,7 @@ struct Evaluator {
             let b = try upperValue.asScalar()
 
             var tempVarsForDryRun = variables
-            tempVarsForDryRun[integralNode.variable.name] = .scalar(0)
+            tempVarsForDryRun[integralNode.variable.name] = .dimensionless(0)
             let bodyUsedAngle = (try? _evaluateSingle(node: integralNode.body, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
 
             let f: (Double) throws -> Double = { x in
@@ -290,7 +298,7 @@ struct Evaluator {
             let tolerance = 1e-7
             let result = try adaptiveSimpson(f: f, a: a, b: b, tolerance: tolerance)
                     
-            return (.scalar(result), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
+            return (.dimensionless(result), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
 
         case let primeNode as PrimeDerivativeNode:
             guard let userFunction = functions[primeNode.functionName] else {
@@ -305,7 +313,7 @@ struct Evaluator {
             let point = try pointValue.asScalar()
 
             var tempVars = variables
-            tempVars[varName] = .scalar(point)
+            tempVars[varName] = .dimensionless(point)
             let bodyUsedAngle = (try? _evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
 
             let valPlus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -315,7 +323,7 @@ struct Evaluator {
             let scalarMinus = try valMinus.asScalar()
 
             let derivative = (scalarPlus - scalarMinus) / (2 * h)
-            return (.scalar(derivative), pointUsedAngle || bodyUsedAngle)
+            return (.dimensionless(derivative), pointUsedAngle || bodyUsedAngle)
             
         case let autoplotNode as AutoplotNode:
             return try (evaluateAutoplot(autoplotNode, variables: &variables, functions: &functions), false)

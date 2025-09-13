@@ -22,7 +22,7 @@ extension Evaluator {
     
     // MARK: - Function Dictionaries
     
-    static let scalarFunctions: [String: (Double) -> Double] = [
+    static let dimensionlessScalarFunctions: [String: (Double) -> Double] = [
         "ln": log, "lg": log10, "log": log10,
         "sinh": sinh, "cosh": cosh, "tanh": tanh,
         "asinh": asinh, "acosh": acosh, "atanh": atanh
@@ -50,7 +50,7 @@ extension Evaluator {
             let modes = frequencyDict.filter { $0.value == maxFrequency }.keys.sorted()
             
             if modes.count == 1 {
-                return .scalar(modes[0])
+                return .dimensionless(modes[0])
             } else {
                 return .vector(Vector(values: modes))
             }
@@ -59,9 +59,9 @@ extension Evaluator {
             let values = try extractDoublesFromVariadicArgs(args)
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "geomean") }
             guard values.allSatisfy({ $0 >= 0 }) else { throw MathError.unsupportedOperation(op: "geomean", typeA: "All values must be non-negative.", typeB: nil) }
-            if values.contains(0) { return .scalar(0) }
+            if values.contains(0) { return .dimensionless(0) }
             let product = values.reduce(1, *)
-            return .scalar(pow(product, 1.0 / Double(values.count)))
+            return .dimensionless(pow(product, 1.0 / Double(values.count)))
         },
         "harmean": { args in
             let values = try extractDoublesFromVariadicArgs(args)
@@ -69,7 +69,7 @@ extension Evaluator {
             guard !values.contains(0) else { throw MathError.unsupportedOperation(op: "harmean", typeA: "Values cannot be zero.", typeB: nil) }
             let sumOfReciprocals = values.map { 1.0 / $0 }.reduce(0, +)
             guard sumOfReciprocals != 0 else { throw MathError.divisionByZero }
-            return .scalar(Double(values.count) / sumOfReciprocals)
+            return .dimensionless(Double(values.count) / sumOfReciprocals)
         },
         "gcd": { args in try performAggregateIntegerOperation(args: args, initialValue: 0, operation: performGcd) },
         "lcm": { args in
@@ -121,26 +121,26 @@ extension Evaluator {
             let x = try args[0].asScalar()
             let mean = try args[1].asScalar()
             let stddev = try args[2].asScalar()
-            return .scalar(normalDistribution(x: x, mean: mean, stddev: stddev))
+            return .dimensionless(normalDistribution(x: x, mean: mean, stddev: stddev))
         },
         "binomdist": { args in
             guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "binomdist", expected: "3", found: args.count) }
             let k = try args[0].asScalar()
             let n = try args[1].asScalar()
             let p = try args[2].asScalar()
-            return .scalar(try binomialDistribution(k: k, n: n, p: p))
+            return .dimensionless(try binomialDistribution(k: k, n: n, p: p))
         },
         "random": { args in
             switch args.count {
-            case 0: return .scalar(Double.random(in: 0...1))
+            case 0: return .dimensionless(Double.random(in: 0...1))
             case 1:
                 let max = try args[0].asScalar()
                 guard max >= 1, max.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "random", typeA: "max must be an integer >= 1", typeB: nil)}
-                return .scalar(Double(Int.random(in: 1...Int(max))))
+                return .dimensionless(Double(Int.random(in: 1...Int(max))))
             case 2:
                 let min = try args[0].asScalar(); let max = try args[1].asScalar()
                 guard min <= max, min.truncatingRemainder(dividingBy: 1) == 0, max.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "random", typeA: "min and max must be integers where min <= max", typeB: nil)}
-                return .scalar(Double(Int.random(in: Int(min)...Int(max))))
+                return .dimensionless(Double(Int.random(in: Int(min)...Int(max))))
             case 3:
                 let min = try args[0].asScalar(); let max = try args[1].asScalar(); let count = try args[2].asScalar()
                 guard min <= max, min.truncatingRemainder(dividingBy: 1) == 0, max.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "random", typeA: "min and max must be integers where min <= max", typeB: nil)}
@@ -167,27 +167,29 @@ extension Evaluator {
     static let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
         "abs": { arg in
             switch arg {
-            case .scalar(let s): return .scalar(abs(s))
-            case .complex(let c): return .scalar(c.abs())
-            case .vector(let v): return .scalar(v.magnitude())
-            case .uncertain(let u): return .scalar(abs(u.value))
+            case .dimensionless(let s): return .dimensionless(abs(s))
+            case .unitValue(let u): return .unitValue(UnitValue(value: abs(u.value), dimensions: u.dimensions))
+            case .complex(let c): return .dimensionless(c.abs())
+            case .vector(let v): return .dimensionless(v.magnitude())
+            case .uncertain(let u): return .dimensionless(abs(u.value))
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, or UncertainValue", found: arg.typeName)
             }
         },
         "polar": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .polar(c) },
         "sqrt": { arg in
-            if case .scalar(let s) = arg { return s < 0 ? .complex(Complex(real: s, imaginary: 0).sqrt()) : .scalar(sqrt(s)) }
+            if case .dimensionless(let s) = arg { return s < 0 ? .complex(Complex(real: s, imaginary: 0).sqrt()) : .dimensionless(sqrt(s)) }
+            if case .unitValue(let u) = arg { return .unitValue(u.pow(0.5)) }
             else if case .complex(let c) = arg { return .complex(c.sqrt()) }
             else if case .uncertain(let u) = arg { return .uncertain(u.pow(0.5)) }
             else { throw MathError.typeMismatch(expected: "Scalar, Complex or UncertainValue", found: arg.typeName) }
         },
-        "round": { arg in let s = try arg.asScalar(); return .scalar(round(s)) },
-        "floor": { arg in let s = try arg.asScalar(); return .scalar(floor(s)) },
-        "ceil": { arg in let s = try arg.asScalar(); return .scalar(ceil(s)) },
-        "fact": { arg in let s = try arg.asScalar(); return .scalar(try factorial(s)) },
+        "round": { arg in let s = try arg.asScalar(); return .dimensionless(round(s)) },
+        "floor": { arg in let s = try arg.asScalar(); return .dimensionless(floor(s)) },
+        "ceil": { arg in let s = try arg.asScalar(); return .dimensionless(ceil(s)) },
+        "fact": { arg in let s = try arg.asScalar(); return .dimensionless(try factorial(s)) },
         "det": { arg in
             switch arg {
-            case .matrix(let m): return .scalar(try m.determinant())
+            case .matrix(let m): return .dimensionless(try m.determinant())
             case .complexMatrix(let cm): return .complex(try cm.determinant())
             default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
             }
@@ -199,13 +201,13 @@ extension Evaluator {
             default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
             }
         },
-        "real": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .scalar(c.real) },
-        "imag": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .scalar(c.imaginary) },
+        "real": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .dimensionless(c.real) },
+        "imag": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .dimensionless(c.imaginary) },
         "conj": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .complex(c.conjugate()) },
-        "area_circle": { arg in let r = try arg.asScalar(); return .scalar(Double.pi * r * r) },
-        "circum_circle": { arg in let r = try arg.asScalar(); return .scalar(2 * Double.pi * r) },
-        "vol_sphere": { arg in let r = try arg.asScalar(); return .scalar((4.0/3.0) * Double.pi * pow(r, 3)) },
-        "vol_cube": { arg in let s = try arg.asScalar(); return .scalar(pow(s, 3)) },
+        "area_circle": { arg in let r = try arg.asScalar(); return .dimensionless(Double.pi * r * r) },
+        "circum_circle": { arg in let r = try arg.asScalar(); return .dimensionless(2 * Double.pi * r) },
+        "vol_sphere": { arg in let r = try arg.asScalar(); return .dimensionless((4.0/3.0) * Double.pi * pow(r, 3)) },
+        "vol_cube": { arg in let s = try arg.asScalar(); return .dimensionless(pow(s, 3)) },
         "unit": { arg in guard case .vector(let v) = arg else { throw MathError.typeMismatch(expected: "Vector", found: arg.typeName) }; return .vector(v.unit()) },
         "transpose": { arg in
             switch arg {
@@ -216,7 +218,7 @@ extension Evaluator {
         },
         "trace": { arg in
             switch arg {
-            case .matrix(let m): return .scalar(try m.trace())
+            case .matrix(let m): return .dimensionless(try m.trace())
             case .complexMatrix(let cm): return .complex(try cm.trace())
             default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
             }
@@ -228,7 +230,7 @@ extension Evaluator {
             let values = (0..<size).map { _ in Double.random(in: 0...1) }
             return .vector(Vector(values: values))
         },
-        "isprime": { arg in let n = try arg.asScalar(); return .scalar(try performIsPrime(n) ? 1.0 : 0.0) },
+        "isprime": { arg in let n = try arg.asScalar(); return .dimensionless(try performIsPrime(n) ? 1.0 : 0.0) },
         "factor": { arg in let n = try arg.asScalar(); return .vector(Vector(values: try performFactor(n))) },
         "unique": { arg in
             let values = try extractDoubles(from: arg)
@@ -244,19 +246,16 @@ extension Evaluator {
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
                 let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
                 
-                // We need to create a temporary UncertainValue with the total uncertainty in radians
-                // to correctly propagate it through the derivative.
                 let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0)
                 let propagated_u = u_rad_total.propagate(derivative: cos(valRad))
 
-                // The result maintains the original ratio of random to systematic uncertainty.
                 let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
                 
                 return .uncertain(UncertainValue(value: sin(valRad),
                                                  randomUncertainty: propagated_u.randomUncertainty * randomRatio,
                                                  systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
             }
-            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .scalar(sin(valRad))
+            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(sin(valRad))
         },
         "cos": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
@@ -273,7 +272,7 @@ extension Evaluator {
                                                  randomUncertainty: propagated_u.randomUncertainty * randomRatio,
                                                  systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
             }
-            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .scalar(cos(valRad))
+            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(cos(valRad))
         },
         "tan": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
@@ -290,20 +289,20 @@ extension Evaluator {
                                                  randomUncertainty: propagated_u.randomUncertainty * randomRatio,
                                                  systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
             }
-            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .scalar(tan(valRad))
+            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(tan(valRad))
         },
-        "asin": { args, mode in let a = asin(try args[0].asScalar()); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
-        "acos": { args, mode in let a = acos(try args[0].asScalar()); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
-        "atan": { args, mode in let a = atan(try args[0].asScalar()); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
-        "atan2": { args, mode in let a = Foundation.atan2(try args[0].asScalar(), try args[1].asScalar()); return .scalar(mode == .degrees ? a * 180 / .pi : a) },
+        "asin": { args, mode in let a = asin(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "acos": { args, mode in let a = acos(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "atan": { args, mode in let a = atan(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "atan2": { args, mode in let a = Foundation.atan2(try args[0].asScalar(), try args[1].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "arg": { args, mode in
             guard args.count == 1, case .complex(let c) = args[0] else { throw MathError.typeMismatch(expected: "Complex", found: args.first?.typeName ?? "none") }
-            let a = c.argument(); return .scalar(mode == .degrees ? a * 180 / .pi : a)
+            let a = c.argument(); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
         },
         "angle": { args, mode in
             guard args.count == 2, case .vector(let v1) = args[0], case .vector(let v2) = args[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "other") }
             let angleRad = try v1.angle(with: v2)
-            return .scalar(mode == .degrees ? angleRad * 180 / .pi : angleRad)
+            return .dimensionless(mode == .degrees ? angleRad * 180 / .pi : angleRad)
         }
     ]
     
@@ -311,18 +310,18 @@ extension Evaluator {
         "rmse": { a, b in
             guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSE.") }
-            guard v1.dimension > 0 else { return .scalar(0) }
+            guard v1.dimension > 0 else { return .dimensionless(0) }
             let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
             let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
-            return .scalar(sqrt(meanSquaredError))
+            return .dimensionless(sqrt(meanSquaredError))
         },
         "rmsd": { a, b in // alias for rmse
             guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSD.") }
-            guard v1.dimension > 0 else { return .scalar(0) }
+            guard v1.dimension > 0 else { return .dimensionless(0) }
             let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
             let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
-            return .scalar(sqrt(meanSquaredError))
+            return .dimensionless(sqrt(meanSquaredError))
         },
         "cov": { a, b in
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
@@ -334,7 +333,7 @@ extension Evaluator {
             
             let sumOfProducts = zip(xVec.values, yVec.values).map { ($0 - meanX) * ($1 - meanY) }.reduce(0, +)
             
-            return .scalar(sumOfProducts / (n - 1)) // Sample covariance
+            return .dimensionless(sumOfProducts / (n - 1)) // Sample covariance
         },
         "corr": { a, b in
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
@@ -349,22 +348,22 @@ extension Evaluator {
             let denominator = sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY))
             
             guard denominator != 0 else { throw MathError.unsupportedOperation(op: "corr", typeA: "Cannot calculate correlation, denominator is zero.", typeB: nil) }
-            return .scalar(numerator / denominator)
+            return .dimensionless(numerator / denominator)
         },
         "count": { data, value in
             let values = try extractDoubles(from: data)
             let target = try value.asScalar()
-            return .scalar(Double(values.filter { $0 == target }.count))
+            return .dimensionless(Double(values.filter { $0 == target }.count))
         },
         "countabove": { data, threshold in
             let values = try extractDoubles(from: data)
             let target = try threshold.asScalar()
-            return .scalar(Double(values.filter { $0 > target }.count))
+            return .dimensionless(Double(values.filter { $0 > target }.count))
         },
         "countbelow": { data, threshold in
             let values = try extractDoubles(from: data)
             let target = try threshold.asScalar()
-            return .scalar(Double(values.filter { $0 < target }.count))
+            return .dimensionless(Double(values.filter { $0 < target }.count))
         },
         "find": { data, value in
             let values = try extractDoubles(from: data)
@@ -389,7 +388,7 @@ extension Evaluator {
             return .vector(try solveLinearSystem(A: matrixA, b: vectorB))
         },
         "dot": { a, b in
-            if case .vector(let v1) = a, case .vector(let v2) = b { return .scalar(try v1.dot(with: v2)) }
+            if case .vector(let v1) = a, case .vector(let v2) = b { return .dimensionless(try v1.dot(with: v2)) }
             else if case .complexVector(let v1) = a, case .complexVector(let v2) = b { return .complex(try v1.dot(with: v2)) }
             throw MathError.typeMismatch(expected: "Two Vectors or Two ComplexVectors", found: "\(a.typeName), \(b.typeName)")
         },
@@ -408,18 +407,18 @@ extension Evaluator {
             let index = Int(indexScalar)
             return .vector(try matrix.getrow(index: index))
         },
-        "nPr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .scalar(try permutations(n: n, k: k)) },
-        "nCr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .scalar(try combinations(n: n, k: k)) },
-        "hypot": { a, b in let s1 = try a.asScalar(); let s2 = try b.asScalar(); return .scalar(Foundation.sqrt(s1*s1 + s2*s2)) },
-        "side": { a, b in let c = try a.asScalar(); let s = try b.asScalar(); guard c >= s else { throw MathError.unsupportedOperation(op: "side", typeA: "hyp < side", typeB: nil) }; return .scalar(Foundation.sqrt(c*c - s*s)) },
-        "area_rect": { a, b in let w = try a.asScalar(); let h = try b.asScalar(); return .scalar(w * h) },
-        "area_tri": { a, b in let base = try a.asScalar(); let h = try b.asScalar(); return .scalar(0.5 * base * h) },
-        "vol_cylinder": { a, b in let r = try a.asScalar(); let h = try b.asScalar(); return .scalar(Double.pi * r * r * h) },
-        "vol_cone": { a, b in let r = try a.asScalar(); let h = try b.asScalar(); return .scalar((1.0/3.0) * Double.pi * r * r * h) },
+        "nPr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .dimensionless(try permutations(n: n, k: k)) },
+        "nCr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .dimensionless(try combinations(n: n, k: k)) },
+        "hypot": { a, b in let s1 = try a.asScalar(); let s2 = try b.asScalar(); return .dimensionless(Foundation.sqrt(s1*s1 + s2*s2)) },
+        "side": { a, b in let c = try a.asScalar(); let s = try b.asScalar(); guard c >= s else { throw MathError.unsupportedOperation(op: "side", typeA: "hyp < side", typeB: nil) }; return .dimensionless(Foundation.sqrt(c*c - s*s)) },
+        "area_rect": { a, b in let w = try a.asScalar(); let h = try b.asScalar(); return .dimensionless(w * h) },
+        "area_tri": { a, b in let base = try a.asScalar(); let h = try b.asScalar(); return .dimensionless(0.5 * base * h) },
+        "vol_cylinder": { a, b in let r = try a.asScalar(); let h = try b.asScalar(); return .dimensionless(Double.pi * r * r * h) },
+        "vol_cone": { a, b in let r = try a.asScalar(); let h = try b.asScalar(); return .dimensionless((1.0/3.0) * Double.pi * r * r * h) },
         "root": { a, b in
                 let x = try a.asScalar(); let n = try b.asScalar()
                 if x < 0 && n.truncatingRemainder(dividingBy: 2) == 0 { return .complex(Complex(real: 0, imaginary: pow(abs(x), 1/n))) }
-                return .scalar(pow(x, 1/n))
+                return .dimensionless(pow(x, 1/n))
         },
         "randm": { a, b in
             let rows_s = try a.asScalar(); let cols_s = try b.asScalar()
@@ -431,7 +430,7 @@ extension Evaluator {
         "mod": { a, b in
             let n1 = try a.asScalar(); let n2 = try b.asScalar()
             guard n2 != 0 else { throw MathError.divisionByZero }
-            return .scalar(n1 - n2 * floor(n1 / n2))
+            return .dimensionless(n1 - n2 * floor(n1 / n2))
         },
         "percentile": { data, p_val in
             let values = try extractDoubles(from: data).sorted()
@@ -439,18 +438,18 @@ extension Evaluator {
             let p = try p_val.asScalar()
             guard p >= 0 && p <= 100 else { throw MathError.unsupportedOperation(op: "percentile", typeA: "p must be between 0 and 100", typeB: nil) }
             
-            if p == 100 { return .scalar(values.last!) }
+            if p == 100 { return .dimensionless(values.last!) }
             
             let rank = (p / 100.0) * Double(values.count - 1)
             let lowerIndex = Int(floor(rank))
             let upperIndex = Int(ceil(rank))
             
             if lowerIndex == upperIndex {
-                return .scalar(values[lowerIndex])
+                return .dimensionless(values[lowerIndex])
             } else {
                 let lowerValue = values[lowerIndex]
                 let upperValue = values[upperIndex]
-                return .scalar(lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue))
+                return .dimensionless(lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue))
             }
         },
         "gcd": { a, b in
@@ -492,7 +491,6 @@ extension Evaluator {
         
         if let multiArgFunc = Evaluator.multiArgumentFunctions[node.name] {
             var args: [MathValue] = []
-            // Special case for sort: second argument is a raw string constant, not an evaluated MathValue
             if node.name == "sort" && node.arguments.count == 2 {
                 let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = usedAngle || arg1UsedAngle
@@ -524,7 +522,7 @@ extension Evaluator {
             return (try twoArgFunc(arg1, arg2), arg1UsedAngle || arg2UsedAngle)
         }
         
-        if let scalarFunc = Evaluator.scalarFunctions[node.name] {
+        if let scalarFunc = Evaluator.dimensionlessScalarFunctions[node.name] {
             guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "1", found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             
@@ -536,14 +534,14 @@ extension Evaluator {
                 case "ln", "log", "lg": derivative = 1 / (val * (node.name == "ln" ? 1 : log(10)))
                 case "sinh": derivative = cosh(val); case "cosh": derivative = sinh(val); case "tanh": derivative = 1 - pow(tanh(val), 2)
                 case "asinh": derivative = 1 / sqrt(pow(val, 2) + 1); case "acosh": derivative = 1 / sqrt(pow(val, 2) - 1); case "atanh": derivative = 1 / (1 - pow(val, 2))
-                default: derivative = 0 // Should not happen
+                default: derivative = 0
                 }
                 let propagated = u.propagate(derivative: derivative)
                 return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty)), argUsedAngle)
             }
             
-            guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: arg.typeName) }
-            return (.scalar(scalarFunc(s)), argUsedAngle)
+            guard case .dimensionless(let s) = arg else { throw MathError.typeMismatch(expected: "Dimensionless or UncertainValue", found: arg.typeName) }
+            return (.dimensionless(scalarFunc(s)), argUsedAngle)
         }
         
         if let userFunction = functions[node.name] {
@@ -553,7 +551,7 @@ extension Evaluator {
                     var resultValues: [Double] = []; var overallUsedAngle = argUsedAngle
                     for element in v.values {
                         var localVariables = variables
-                        localVariables[userFunction.parameterNames[0]] = .scalar(element)
+                        localVariables[userFunction.parameterNames[0]] = .dimensionless(element)
                         let (result, elementUsedAngle) = try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions, angleMode: angleMode)
                         let scalarResult = try result.asScalar()
                         resultValues.append(scalarResult)
@@ -579,7 +577,8 @@ extension Evaluator {
         case "+": return value
         case "-":
             switch value {
-            case .scalar(let s): return .scalar(-s)
+            case .dimensionless(let s): return .dimensionless(-s)
+            case .unitValue(let u): return .unitValue(UnitValue(value: -u.value, dimensions: u.dimensions))
             case .complex(let c): return .complex(c * -1.0)
             case .vector(let v): return .vector(Vector(values: v.values.map { -$0 }))
             case .matrix(let m): return .matrix(Matrix(values: m.values.map { -$0 }, rows: m.rows, columns: m.columns))
@@ -597,7 +596,7 @@ extension Evaluator {
             }
         case "!":
             let s = try value.asScalar()
-            return .scalar(try factorial(s))
+            return .dimensionless(try factorial(s))
         default: throw MathError.unknownOperator(op: op.rawValue)
         }
     }
@@ -607,25 +606,36 @@ extension Evaluator {
         if case .tuple = right { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         
         switch (left, right) {
+        // --- Unit & Dimensionless Operations ---
+        case (.unitValue(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, r))
+        case (.unitValue(let l), .dimensionless(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, .dimensionless(r)))
+        case (.dimensionless(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, .dimensionless(l), r))
+        case (.dimensionless(let l), .dimensionless(let r)): return .dimensionless(try performDimensionlessOp(op.rawValue, l, r))
+
         // --- Uncertainty propagation rules ---
         case (.uncertain(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, r))
-        case (.uncertain(let l), .scalar(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r, randomUncertainty: 0, systematicUncertainty: 0)))
-        case (.scalar(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l, randomUncertainty: 0, systematicUncertainty: 0), r))
+        case (.uncertain(let l), .dimensionless(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r, randomUncertainty: 0, systematicUncertainty: 0)))
+        case (.dimensionless(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l, randomUncertainty: 0, systematicUncertainty: 0), r))
             
-        // --- Standard rules ---
-        case (.scalar(let l), .scalar(let r)): return .scalar(try performScalarScalarOp(op.rawValue, l, r))
+        // --- Complex Number Operations ---
         case (.complex(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, r))
-        case (.complex(let l), .scalar(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
-        case (.scalar(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
-        case (.vector(let v), .scalar(let s)): return .vector(try performVectorScalarOp(op.rawValue, v, s))
-        case (.scalar(let s), .vector(let v)): return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
+        case (.complex(let l), .dimensionless(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
+        case (.dimensionless(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
+        
+        // --- Vector Operations ---
+        case (.vector(let v), .dimensionless(let s)): return .vector(try performVectorScalarOp(op.rawValue, v, s))
+        case (.dimensionless(let s), .vector(let v)): return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
         case (.vector(let l), .vector(let r)): return .vector(try performVectorVectorOp(op.rawValue, l, r))
-        case (.matrix(let m), .scalar(let s)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
-        case (.scalar(let s), .matrix(let m)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s, reversed: true))
+            
+        // --- Matrix Operations ---
+        case (.matrix(let m), .dimensionless(let s)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
+        case (.dimensionless(let s), .matrix(let m)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s, reversed: true))
         case (.matrix(let l), .matrix(let r)): return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
         case (.matrix(let m), .vector(let v)):
              if op.rawValue == "*" { return .vector(try m * v) }
              else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
+        
+        // --- Complex Vector/Matrix Operations ---
         case (.complexVector(let cv), .complex(let c)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c))
         case (.complex(let c), .complexVector(let cv)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c, reversed: true))
         case (.complexVector(let l), .complexVector(let r)): return .complexVector(try performCVectorCVectorOp(op.rawValue, l, r))
@@ -635,7 +645,9 @@ extension Evaluator {
         case (.complexMatrix(let m), .complexVector(let v)):
             if op.rawValue == "*" { return .complexVector(try m * v) }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
-        case (.matrix, .complex), (.complex, .matrix), (.vector, .complex), (.complex, .vector), (.complexMatrix, .scalar), (.scalar, .complexMatrix), (.complexVector, .scalar), (.scalar, .complexVector):
+        
+        // --- Promotion cases for mixed types ---
+        case (.matrix, .complex), (.complex, .matrix), (.vector, .complex), (.complex, .vector), (.complexMatrix, .dimensionless), (.dimensionless, .complexMatrix), (.complexVector, .dimensionless), (.dimensionless, .complexVector):
             let (promotedL, promotedR) = try promote(left, right)
             return try evaluateBinaryOperation(op: op, left: promotedL, right: promotedR)
         default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName)
@@ -665,7 +677,7 @@ extension Evaluator {
             result = .vector(modifiedVector)
         case .complexVector(let cv):
             let complexScalar: Complex
-            if case .scalar(let s) = scalarValue { complexScalar = Complex(real: s, imaginary: 0) }
+            if case .dimensionless(let s) = scalarValue { complexScalar = Complex(real: s, imaginary: 0) }
             else if case .complex(let c) = scalarValue { complexScalar = c }
             else { throw MathError.typeMismatch(expected: "Scalar or Complex", found: scalarValue.typeName) }
             let opFunction: (Complex, Complex) throws -> Complex
@@ -683,16 +695,28 @@ extension Evaluator {
         switch op {
         case "+": return l + r; case "-": return l - r; case "*": return l * r
         case "/": return try l / r
-        case "^": return l.pow(r.value) // Power only supports scalar exponents for now
+        case "^": return l.pow(r.value)
         default: throw MathError.unknownOperator(op: op)
         }
     }
-    private func performScalarScalarOp(_ op: String, _ l: Double, _ r: Double) throws -> Double {
+    private func performDimensionlessOp(_ op: String, _ l: Double, _ r: Double) throws -> Double {
         switch op {
         case "+": return l + r; case "-": return l - r; case "*": return l * r
         case "/": guard r != 0 else { throw MathError.divisionByZero }; return l / r
         case "%": guard r != 0 else { throw MathError.divisionByZero }; return l.truncatingRemainder(dividingBy: r)
         case "^": return pow(l, r)
+        default: throw MathError.unknownOperator(op: op)
+        }
+    }
+    private func performUnitUnitOp(_ op: String, _ l: UnitValue, _ r: UnitValue) throws -> UnitValue {
+        switch op {
+        case "+": return try l + r
+        case "-": return try l - r
+        case "*": return l * r
+        case "/": return try l / r
+        case "^":
+            guard r.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless exponent", found: "Value with units") }
+            return l.pow(r.value)
         default: throw MathError.unknownOperator(op: op)
         }
     }
@@ -752,7 +776,7 @@ extension Evaluator {
     }
     private func promote(_ left: MathValue, _ right: MathValue) throws -> (MathValue, MathValue) {
         switch (left, right) {
-        case (.matrix(let m), .complex(let c)): return (.complexMatrix(ComplexMatrix(from: m)), .complex(c)); case (.complex(let c), .matrix(let m)): return (.complex(c), .complexMatrix(ComplexMatrix(from: m))); case (.vector(let v), .complex(let c)): return (.complexVector(ComplexVector(from: v)), .complex(c)); case (.complex(let c), .vector(let v)): return (.complex(c), .complexVector(ComplexVector(from: v))); case (.complexMatrix(let cm), .scalar(let s)): return (.complexMatrix(cm), .complex(Complex(real: s, imaginary: 0))); case (.scalar(let s), .complexMatrix(let cm)): return (.complex(Complex(real: s, imaginary: 0)), .complexMatrix(cm)); case (.complexVector(let cv), .scalar(let s)): return (.complexVector(cv), .complex(Complex(real: s, imaginary: 0))); case (.scalar(let s), .complexVector(let cv)): return (.complex(Complex(real: s, imaginary: 0)), .complexVector(cv)); default: return (left, right)
+        case (.matrix(let m), .complex(let c)): return (.complexMatrix(ComplexMatrix(from: m)), .complex(c)); case (.complex(let c), .matrix(let m)): return (.complex(c), .complexMatrix(ComplexMatrix(from: m))); case (.vector(let v), .complex(let c)): return (.complexVector(ComplexVector(from: v)), .complex(c)); case (.complex(let c), .vector(let v)): return (.complex(c), .complexVector(ComplexVector(from: v))); case (.complexMatrix(let cm), .dimensionless(let s)): return (.complexMatrix(cm), .complex(Complex(real: s, imaginary: 0))); case (.dimensionless(let s), .complexMatrix(let cm)): return (.complex(Complex(real: s, imaginary: 0)), .complexMatrix(cm)); case (.complexVector(let cv), .dimensionless(let s)): return (.complexVector(cv), .complex(Complex(real: s, imaginary: 0))); case (.dimensionless(let s), .complexVector(let cv)): return (.complex(Complex(real: s, imaginary: 0)), .complexVector(cv)); default: return (left, right)
         }
     }
 }
@@ -760,7 +784,7 @@ extension Evaluator {
 /// Helper function to extract all scalar values from a MathValue.
 fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
     switch data {
-    case .scalar(let s):
+    case .dimensionless(let s):
         return [s]
     case .vector(let v):
         return v.values
@@ -769,7 +793,7 @@ fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
     case .uncertain(let u):
         return [u.value]
     default:
-        throw MathError.typeMismatch(expected: "Vector, Matrix, Scalar or UncertainValue", found: data.typeName)
+        throw MathError.typeMismatch(expected: "Vector, Matrix, or Dimensionless value", found: data.typeName)
     }
 }
 
@@ -788,12 +812,61 @@ fileprivate func extractDoublesFromVariadicArgs(_ args: [MathValue]) throws -> [
 
 /// Helper function for variadic statistical functions like sum(), avg(), etc.
 fileprivate func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
-    let values = try extractDoublesFromVariadicArgs(args)
+    // This is a new, unit-aware implementation
+    let (values, finalDimension) = try extractAndConvertUnitValues(from: args)
     guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Statistical function") }
     let v = Vector(values: values)
-    guard let result = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Operation failed (e.g., stddev on single element)", typeB: nil) }
-    return .scalar(result)
+    guard let resultValue = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Operation failed (e.g., stddev on single element)", typeB: nil) }
+
+    if finalDimension.isEmpty {
+        return .dimensionless(resultValue)
+    } else {
+        return .unitValue(UnitValue(value: resultValue, dimensions: finalDimension))
+    }
 }
+
+/// Extracts and validates values for statistical functions, ensuring unit consistency.
+fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (values: [Double], dimensions: UnitDimension) {
+    var allValues: [Double] = []
+    var commonDimension: UnitDimension? = nil
+
+    // Inner function to process a single MathValue, checking for unit consistency.
+    func processValue(_ val: MathValue) throws {
+        switch val {
+        case .dimensionless(let d):
+            if commonDimension == nil { commonDimension = [:] }
+            if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
+            allValues.append(d)
+        case .unitValue(let u):
+            if commonDimension == nil { commonDimension = u.dimensions }
+            if commonDimension != u.dimensions { throw MathError.dimensionMismatch(reason: "All values must have the same units.") }
+            allValues.append(u.value)
+        case .vector(let v): // Vectors are currently always dimensionless
+            if commonDimension == nil { commonDimension = [:] }
+            if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
+            allValues.append(contentsOf: v.values)
+        case .matrix(let m): // Matrices are currently always dimensionless
+            if commonDimension == nil { commonDimension = [:] }
+            if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
+            allValues.append(contentsOf: m.values)
+        default:
+            throw MathError.typeMismatch(expected: "Numeric value", found: val.typeName)
+        }
+    }
+
+    if args.count == 1 {
+        // If there's only one argument, it could be a vector or matrix itself.
+        try processValue(args[0])
+    } else {
+        // Otherwise, process each argument as a separate value.
+        for arg in args {
+            try processValue(arg)
+        }
+    }
+
+    return (allValues, commonDimension ?? [:])
+}
+
 
 /// Helper function for gcd, using Euclidean algorithm.
 fileprivate func performGcd(_ a: Double, _ b: Double) -> Double {
@@ -810,7 +883,7 @@ fileprivate func performAggregateIntegerOperation(args: [MathValue], initialValu
         var integers: [Double] = []
         for value in values {
             switch value {
-            case .scalar, .uncertain: // FIX: Don't bind the associated values to a single variable.
+            case .dimensionless, .uncertain:
                 let val = try value.asScalar()
                 guard val.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "Integer", typeA: "arguments must be integers", typeB: nil) }
                 integers.append(val)
@@ -831,7 +904,7 @@ fileprivate func performAggregateIntegerOperation(args: [MathValue], initialValu
     guard !integers.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Integer operation") }
 
     let result = integers.reduce(initialValue, operation)
-    return .scalar(result)
+    return .dimensionless(result)
 }
 
 
@@ -842,15 +915,15 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
     }
     
     switch (a, b) {
-    case (.scalar(let n1), .scalar(let n2)):
-        return .scalar(operation(try checkInt(n1), try checkInt(n2)))
+    case (.dimensionless(let n1), .dimensionless(let n2)):
+        return .dimensionless(operation(try checkInt(n1), try checkInt(n2)))
         
-    case (.vector(let v), .scalar(let s)):
+    case (.vector(let v), .dimensionless(let s)):
         let checkedS = try checkInt(s)
         let results = try v.values.map { operation(try checkInt($0), checkedS) }
         return .vector(Vector(values: results))
         
-    case (.scalar(let s), .vector(let v)):
+    case (.dimensionless(let s), .vector(let v)):
         let checkedS = try checkInt(s)
         let results = try v.values.map { operation(checkedS, try checkInt($0)) }
         return .vector(Vector(values: results))
@@ -938,3 +1011,4 @@ fileprivate func performFactor(_ n: Double) throws -> [Double] {
     
     return factors
 }
+
