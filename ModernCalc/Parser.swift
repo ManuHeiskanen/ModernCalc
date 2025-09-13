@@ -20,11 +20,17 @@ struct NumberNode: ExpressionNode {
     let value: Double
     var description: String { "\(value)" }
 }
-// NEW: An AST node representing a number with an attached unit.
-struct UnitNode: ExpressionNode {
-    let number: ExpressionNode // Can be a NumberNode or a more complex expression like (2+3)
+// NEW: An AST node representing a unit with an optional exponent, like .m or .m^2.
+// This node does NOT contain the numeric value, only the unit information.
+struct UnitAndExponentNode: ExpressionNode {
     let unitSymbol: String
-    var description: String { "\(number.description).\(unitSymbol)" }
+    let exponent: ExpressionNode?
+    var description: String {
+        if let exp = exponent {
+            return ".\(unitSymbol)^\(exp.description)"
+        }
+        return ".\(unitSymbol)"
+    }
 }
 struct StringNode: ExpressionNode {
     let value: String
@@ -224,10 +230,30 @@ class Parser {
     private func parsePrimary() throws -> ExpressionNode {
         var node = try parsePrefix()
         
-        // After parsing a potential number or parenthesized expression, check for a unit.
+        // FIX: The logic for unit attachment has been completely reworked.
+        // Instead of binding the number and unit together here, we now treat the unit
+        // as a separate entity that is implicitly multiplied by the number. This
+        // correctly handles operator precedence for exponents.
         if let token = peek(), case .unit(let unitSymbol) = token.type {
             try advance()
-            node = UnitNode(number: node, unitSymbol: unitSymbol)
+
+            var exponentNode: ExpressionNode? = nil
+            // Check for an exponent immediately following the unit symbol.
+            if let opToken = peek(), opToken.type == .op("^") {
+                try advance() // consume '^'
+                // The exponent has a higher precedence than multiplication, so we parse it first.
+                exponentNode = try parseExpression(currentPrecedence: 5)
+            }
+
+            // Create a node for just the unit part (e.g., .m^2).
+            let unitPart = UnitAndExponentNode(unitSymbol: unitSymbol, exponent: exponentNode)
+            
+            // Create a multiplication node to combine the number and the unit part.
+            node = BinaryOpNode(
+                op: Token(type: .op("*"), rawValue: "*"),
+                left: node,
+                right: unitPart
+            )
         }
         
         return try parsePostfix(left: node)

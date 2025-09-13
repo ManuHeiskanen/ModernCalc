@@ -115,24 +115,23 @@ class Lexer {
                     currentToken = Token(type: .unknown(advance()!), rawValue: ",")
                 }
             case ".":
-                 var prevWasNumber = false
-                 if case .number = self.lastTokenType { prevWasNumber = true }
-
-                 var prevWasParen = false
-                 if case .paren(")") = self.lastTokenType { prevWasParen = true }
-                 
-                 if prevWasNumber || prevWasParen {
-                     let unitSymbol = peekAheadForUnit()
-                     if !unitSymbol.isEmpty {
-                         advance() // Consume the dot
-                         for _ in 0..<unitSymbol.count { advance() }
-                         currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
-                     } else {
-                         currentToken = lexDotOperator()
-                     }
-                 } else {
-                     currentToken = lexDotOperator()
-                 }
+                var prevWasNumber = false
+                if case .number = self.lastTokenType { prevWasNumber = true }
+                var prevWasParen = false
+                if case .paren(")") = self.lastTokenType { prevWasParen = true }
+                
+                if prevWasNumber || prevWasParen {
+                    let (unitSymbol, charsConsumed) = peekAheadForUnit()
+                    if !unitSymbol.isEmpty {
+                        // Consume the characters that make up the unit syntax (dot, spaces, symbol)
+                        for _ in 0..<charsConsumed { advance() }
+                        currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
+                    } else {
+                        currentToken = lexDotOperator()
+                    }
+                } else {
+                    currentToken = lexDotOperator()
+                }
             case "°":
                 advance()
                 continue
@@ -190,18 +189,33 @@ class Lexer {
         }
     }
     
-    private func peekAheadForUnit() -> String {
+    private func peekAheadForUnit() -> (symbol: String, charsConsumed: Int) {
         var potentialUnit = ""
-        var offset = 1
-        while let char = peek(offset: offset), char.isLetter || char == "μ" { // Allow for micro symbol
+        var offset = 0
+        
+        // Start by consuming the dot
+        offset += 1
+        
+        // Skip leading whitespace after the dot
+        while let char = peek(offset: offset), char.isWhitespace {
+            offset += 1
+        }
+        
+        // Now find the actual unit symbol
+        let unitStartOffset = offset
+        while let char = peek(offset: offset), char.isLetter || char == "μ" {
             potentialUnit.append(char)
             offset += 1
         }
         
+        // If we found a valid unit in our store, return it and the total number of characters
+        // we looked past (dot + spaces + symbol length).
         if UnitStore.units[potentialUnit] != nil {
-            return potentialUnit
+            return (potentialUnit, offset)
         }
-        return ""
+        
+        // Otherwise, it wasn't a valid unit.
+        return ("", 0)
     }
 
     private func lexNumber() -> Token {
@@ -268,4 +282,3 @@ class Lexer {
         return char
     }
 }
-

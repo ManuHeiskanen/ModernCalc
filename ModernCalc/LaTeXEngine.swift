@@ -47,9 +47,17 @@ struct LaTeXEngine {
         case let numberNode as NumberNode:
             return formatScalar(numberNode.value, settings: settings)
             
-        case let unitNode as UnitNode:
-            let numberLaTeX = formatNode(unitNode.number, evaluator: evaluator, settings: settings)
-            return "\(numberLaTeX)\\,\\text{\(unitNode.unitSymbol)}"
+        // FIX: Added case for the new UnitAndExponentNode to format units with exponents correctly.
+        case let unitNode as UnitAndExponentNode:
+            var latex = "\\text{\(unitNode.unitSymbol)}"
+            if let exponentNode = unitNode.exponent {
+                let exponentLaTeX = formatNode(exponentNode, evaluator: evaluator, settings: settings)
+                // Avoid showing an exponent of 1.
+                if exponentLaTeX != "1" {
+                    latex += "^{\(exponentLaTeX)}"
+                }
+            }
+            return latex
 
         case let constantNode as ConstantNode:
             if constantNode.name == "pi" { return "\\pi" }
@@ -100,7 +108,10 @@ struct LaTeXEngine {
                     let rightIsFuncCall = binaryNode.right is FunctionCallNode
                     let rightIsVectorOrMatrix = binaryNode.right is VectorNode || binaryNode.right is MatrixNode || binaryNode.right is ComplexVectorNode || binaryNode.right is ComplexMatrixNode
                     
-                    if (leftIsNumber || leftIsConstant) && (rightIsConstant || rightIsFuncCall || rightIsVectorOrMatrix) {
+                    // FIX: Also check for the new UnitAndExponentNode to allow for implicit multiplication like "3m"
+                    let rightIsUnit = binaryNode.right is UnitAndExponentNode
+                    
+                    if (leftIsNumber || leftIsConstant) && (rightIsConstant || rightIsFuncCall || rightIsVectorOrMatrix || rightIsUnit) {
                         return "\(leftLaTeX)\(rightLaTeX)"
                     }
                     

@@ -470,7 +470,8 @@ class CalculatorViewModel: ObservableObject {
             let valStr = formatScalarForParsing(u.value)
             let unitStr = formatDimensionsForParsing(u.dimensions)
             if unitStr.isEmpty { return valStr }
-            return "(\(valStr))\(unitStr.starts(with: "/") ? "" : "*")\(unitStr)"
+            // FIX: Ensure there is always a multiplication operator for clarity and parsing robustness.
+            return "(\(valStr))*\(unitStr)"
         case .complex(let c): return formatComplexForParsing(c)
         case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
         case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
@@ -556,8 +557,9 @@ class CalculatorViewModel: ObservableObject {
         
         return allDims.map { (unit, exponent) -> String in
             let symbol = UnitStore.units.first(where: { $0.value.dimensions == [unit: 1] && $0.value.conversionFactor == 1.0 })?.key ?? unit.rawValue
-            return ".\(symbol)\(exponent == 1 ? "" : "^\(exponent)")"
-        }.joined(separator: "*")
+            // FIX: Use spaces for implicit multiplication instead of the dot syntax.
+            return "\(symbol)\(exponent == 1 ? "" : "^\(exponent)")"
+        }.joined(separator: " ")
     }
 
     private func formatComplexForDisplay(_ value: Complex) -> String {
@@ -712,4 +714,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-

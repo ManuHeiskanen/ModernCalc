@@ -91,17 +91,28 @@ struct Evaluator {
         case let numberNode as NumberNode:
             return (.dimensionless(numberNode.value), usedAngle)
         
-        case let unitNode as UnitNode:
-            let (numberValue, numberUsedAngle) = try _evaluateSingle(node: unitNode.number, variables: &variables, functions: &functions, angleMode: angleMode)
-            let value = try numberValue.asScalar() // Ensure the base is dimensionless
-
+        // FIX: Added a new case to handle the unit-with-exponent node.
+        case let unitNode as UnitAndExponentNode:
             guard let unitDef = UnitStore.units[unitNode.unitSymbol] else {
                 throw MathError.unknownConstant(name: unitNode.unitSymbol)
             }
 
-            let finalValue = value * unitDef.conversionFactor
-            let unitValue = UnitValue(value: finalValue, dimensions: unitDef.dimensions)
-            return (.unitValue(unitValue), numberUsedAngle)
+            var exponent = 1.0
+            var expUsedAngle = false
+            if let exponentNode = unitNode.exponent {
+                let (expValue, usedAngle) = try _evaluateSingle(node: exponentNode, variables: &variables, functions: &functions, angleMode: angleMode)
+                exponent = try expValue.asScalar()
+                expUsedAngle = usedAngle
+            }
+
+            // The conversion factor and dimensions are adjusted by the exponent.
+            let finalConversionFactor = Foundation.pow(unitDef.conversionFactor, exponent)
+            let finalDimensions = unitDef.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
+
+            // This node evaluates to a UnitValue with a numeric value of its conversion factor,
+            // ready to be multiplied by the actual number.
+            let resultUnitValue = UnitValue(value: finalConversionFactor, dimensions: finalDimensions)
+            return (.unitValue(resultUnitValue), expUsedAngle)
 
         case let stringNode as StringNode:
             return (.constant(stringNode.value), false)
