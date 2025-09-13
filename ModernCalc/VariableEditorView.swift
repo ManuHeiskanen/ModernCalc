@@ -97,45 +97,47 @@ struct VariableEditorView: View {
 
 
     var body: some View {
-        VStack(spacing: 0) {
-            // --- Header ---
-            HStack {
-                Text(tabTitle)
-                    .font(.title2).bold()
-                Spacer()
-                Button("Done") {
-                    dismiss()
+        ZStack {
+            // --- FIXED: By not setting a background color here, it will adapt to light/dark mode automatically. ---
+            VStack(spacing: 0) {
+                // --- Header ---
+                HStack {
+                    Text(tabTitle)
+                        .font(.title2).bold()
+                    Spacer()
+                    Button("Done") {
+                        dismiss()
+                    }
                 }
-            }
-            .padding()
-            .background(.bar)
-            
-            Divider()
+                .padding()
+                
+                Divider()
 
-            // Main TabView for different sections
-            TabView(selection: $selectedTab) {
-                userDefinedView
-                    .tabItem { Label("User Defined", systemImage: "person.text.rectangle") }
-                    .tag(0)
+                // Main TabView for different sections
+                TabView(selection: $selectedTab) {
+                    userDefinedView
+                        .tabItem { Label("User Defined", systemImage: "person.text.rectangle") }
+                        .tag(0)
 
-                builtinFunctionsView
-                    .tabItem { Label("Functions", systemImage: "function") }
-                    .tag(1)
-                
-                constantsView
-                    .tabItem { Label("Constants", systemImage: "number.square") }
-                    .tag(2)
-                
-                settingsView
-                    .tabItem { Label("Settings", systemImage: "gear") }
-                    .tag(3)
-                
-                helpView
-                    .tabItem { Label("Help", systemImage: "questionmark.circle") }
-                    .tag(4)
-            }
-            .onChange(of: selectedTab) {
-                searchText = ""
+                    builtinFunctionsView
+                        .tabItem { Label("Functions", systemImage: "function") }
+                        .tag(1)
+                    
+                    constantsView
+                        .tabItem { Label("Constants", systemImage: "number.square") }
+                        .tag(2)
+                    
+                    settingsView
+                        .tabItem { Label("Settings", systemImage: "gear") }
+                        .tag(3)
+                    
+                    helpView
+                        .tabItem { Label("Help", systemImage: "questionmark.circle") }
+                        .tag(4)
+                }
+                .onChange(of: selectedTab) {
+                    searchText = ""
+                }
             }
         }
         .frame(minWidth: 500, minHeight: 450, idealHeight: 600)
@@ -156,9 +158,11 @@ struct VariableEditorView: View {
     
     private var userDefinedView: some View {
         List {
-            Section {
+            DisclosureGroup {
                 if viewModel.sortedVariables.isEmpty {
-                    Text("No variables defined. Use `x := 5` to create one.").foregroundColor(.secondary)
+                    Text("No variables defined. Use `x := 5` to create one.")
+                        .foregroundColor(.secondary)
+                        .padding(.leading)
                 } else {
                     ForEach(viewModel.sortedVariables, id: \.0) { name, value in
                         HStack {
@@ -172,14 +176,24 @@ struct VariableEditorView: View {
                             Spacer()
                             Text(viewModel.formatForHistory(value)).foregroundColor(.secondary)
                             Button(role: .destructive) { viewModel.deleteVariable(name: name) } label: { Image(systemName: "trash") }.buttonStyle(.plain)
-                        }.padding(.vertical, 4)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.leading)
                     }
                 }
-            } header: { Text("Variables").fontWeight(.bold) }
+            } label: {
+                Text("Variables")
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                    .padding(.vertical, 4)
+            }
 
-            Section {
+            DisclosureGroup {
                 if viewModel.sortedFunctions.isEmpty {
-                    Text("No functions defined. Use `f(x) := x^2` to create one.").foregroundColor(.secondary)
+                    Text("No functions defined. Use `f(x) := x^2` to create one.")
+                        // --- FIXED: Changed to .secondary to be consistent with the variables placeholder text. ---
+                        .foregroundColor(.secondary)
+                        .padding(.leading)
                 } else {
                     ForEach(viewModel.sortedFunctions, id: \.0) { name, node in
                         HStack {
@@ -192,18 +206,26 @@ struct VariableEditorView: View {
                             
                             Spacer()
                             Button(role: .destructive) { viewModel.deleteFunction(name: name) } label: { Image(systemName: "trash") }.buttonStyle(.plain)
-                        }.padding(.vertical, 4)
+                        }
+                        .padding(.vertical, 4)
+                        .padding(.leading)
                     }
                 }
-            } header: { Text("Functions").fontWeight(.bold) }
-        }.listStyle(.sidebar)
+            } label: {
+                Text("Functions")
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                    .padding(.vertical, 4)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
     
-    // --- MODIFIED: This view now iterates over categories and displays functions in sections. ---
     private var builtinFunctionsView: some View {
         List {
             ForEach(filteredFunctionCategories) { category in
-                Section(header: Text(category.name).fontWeight(.bold)) {
+                DisclosureGroup {
                     ForEach(category.functions) { function in
                         Button(action: {
                             viewModel.insertTextAtCursor(function.name + "(")
@@ -211,15 +233,25 @@ struct VariableEditorView: View {
                         }) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(function.signature).font(.system(.body, design: .monospaced)).fontWeight(.bold)
-                                Text(function.description).foregroundColor(.secondary)
-                            }.foregroundColor(.primary).padding(.vertical, 6)
-                        }.buttonStyle(.plain)
+                                Text(function.description).foregroundColor(.primary)
+                            }
+                            .foregroundColor(.primary)
+                            .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.leading)
                     }
+                } label: {
+                    Text(category.name)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .padding(.vertical, 4)
                 }
             }
         }
-        .listStyle(.sidebar)
+        .listStyle(.plain)
         .searchable(text: $searchText, prompt: "Search Functions")
+        .scrollContentBackground(.hidden)
     }
     
     private var constantsView: some View {
@@ -237,53 +269,61 @@ struct VariableEditorView: View {
                 }.foregroundColor(.primary).padding(.vertical, 6)
             }.buttonStyle(.plain)
         }
-        .listStyle(.sidebar)
+        .listStyle(.plain)
         .searchable(text: $searchText, prompt: "Search Constants")
+        .scrollContentBackground(.hidden)
     }
     
     private var settingsView: some View {
-        VStack {
-            Form {
-                Section(header: Text("History & Export Formatting")) {
-                    Picker("Display Mode", selection: $settings.displayMode) {
-                        ForEach(NumberDisplayMode.allCases, id: \.self) {
-                            Text($0.rawValue)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    
-                    if settings.displayMode == .fixed {
-                        Stepper("Decimal Places: \(settings.fixedDecimalPlaces)", value: $settings.fixedDecimalPlaces, in: 0...10)
-                    }
-                    
-                    Picker("Decimal Separator", selection: $settings.decimalSeparator) {
-                        ForEach(DecimalSeparator.allCases, id: \.self) {
-                            Text($0.rawValue)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-                
-                Section(header: Text("Live Preview Formatting")) {
-                    Toggle("Round live result", isOn: $settings.enableLiveRounding.animation())
-                    
-                    if settings.enableLiveRounding {
-                        Stepper("Decimal Places: \(settings.livePreviewDecimalPlaces)", value: $settings.livePreviewDecimalPlaces, in: 0...10)
+        // --- FIXED: Replaced List with Form and removed the unavailable .insetGrouped style. ---
+        // Form is the standard container for settings on macOS and provides the correct visual grouping.
+        Form {
+            Section(header: Text("History & Export Formatting")) {
+                Picker("Display Mode", selection: $settings.displayMode) {
+                    ForEach(NumberDisplayMode.allCases, id: \.self) {
+                        Text($0.rawValue)
                     }
                 }
+                .pickerStyle(.segmented)
                 
-                Section(header: Text("CSV Import Formatting")) {
-                    Toggle("Round displayed values", isOn: $settings.enableCSVRounding.animation())
-                    
-                    if settings.enableCSVRounding {
-                        Stepper("Decimal Places: \(settings.csvDecimalPlaces)", value: $settings.csvDecimalPlaces, in: 0...10)
+                if settings.displayMode == .fixed {
+                    Stepper("Decimal Places: \(settings.fixedDecimalPlaces)", value: $settings.fixedDecimalPlaces, in: 0...10)
+                }
+                
+                Picker("Decimal Separator", selection: $settings.decimalSeparator) {
+                    ForEach(DecimalSeparator.allCases, id: \.self) {
+                        Text($0.rawValue)
                     }
+                }
+                .pickerStyle(.segmented)
+            }
+            
+            // --- ADDED: Divider for visual separation ---
+            Divider()
+
+            Section(header: Text("Live Preview Formatting")) {
+                Toggle("Round live result", isOn: $settings.enableLiveRounding.animation())
+                
+                if settings.enableLiveRounding {
+                    Stepper("Decimal Places: \(settings.livePreviewDecimalPlaces)", value: $settings.livePreviewDecimalPlaces, in: 0...10)
                 }
             }
-            .padding()
             
-            Spacer()
+            // --- ADDED: Divider for visual separation ---
+            Divider()
+            
+            Section(header: Text("CSV Import Formatting")) {
+                Toggle("Round displayed values", isOn: $settings.enableCSVRounding.animation())
+                
+                if settings.enableCSVRounding {
+                    Stepper("Decimal Places: \(settings.csvDecimalPlaces)", value: $settings.csvDecimalPlaces, in: 0...10)
+                }
+            }
         }
+        // --- MODIFIED: Added frame modifier to align the form to the top of the available space. ---
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // --- MODIFIED: Added padding for better spacing. ---
+        .padding()
     }
     
     private var helpView: some View {
@@ -302,3 +342,4 @@ struct VariableEditorView: View {
         }
     }
 }
+
