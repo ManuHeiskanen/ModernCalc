@@ -76,7 +76,7 @@ class NavigationManager: ObservableObject {
         
         if let selectedItem = history.first(where: { $0.id == selectedHistoryId }) {
             if selectedItem.type == .functionDefinition {
-                return selectedItem.expression.replacingOccurrences(of: " ", with: "")
+                return selectedItem.expression
             }
             
             // Add a special case for plot items to show a user-friendly message.
@@ -99,7 +99,7 @@ class NavigationManager: ObservableObject {
                 }
             }
             
-            return selectedItem.expression.replacingOccurrences(of: " ", with: "")
+            return selectedItem.expression
         } else {
             return nil
         }
