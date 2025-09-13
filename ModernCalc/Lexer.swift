@@ -153,7 +153,10 @@ class Lexer {
                     advance(); advance()
                     tokens.append(Token(type: .assignment, rawValue: ":="))
                 } else {
-                    tokens.append(Token(type: .unknown(advance()!), rawValue: ":"))
+                    // FIX: Recognize a single colon as an assignment token for named arguments.
+                    // The parser will distinguish it from ':=' based on the context.
+                    advance()
+                    tokens.append(Token(type: .assignment, rawValue: ":"))
                 }
             case ";":
                 advance()

@@ -9,66 +9,129 @@ import Foundation
 
 // --- CORE DATA TYPES ---
 
-// NEW: A struct to represent a value with its associated uncertainty.
+// ADVANCED MODEL: A struct to represent a value with its associated uncertainties,
+// separating random (statistical) and systematic components.
 struct UncertainValue: Equatable, Codable {
     var value: Double
-    var uncertainty: Double
+    var randomUncertainty: Double // Statistical, Type A
+    var systematicUncertainty: Double // Systematic, Type B
 
-    // Standard propagation for addition/subtraction
+    // A computed property for the total combined uncertainty.
+    // Random and systematic uncertainties are combined in quadrature.
+    var totalUncertainty: Double {
+        return Foundation.sqrt(Foundation.pow(randomUncertainty, 2) + Foundation.pow(systematicUncertainty, 2))
+    }
+
+    // --- Operator Overloads with Advanced Propagation ---
+
+    // For addition and subtraction:
+    // - Random uncertainties are combined in quadrature.
+    // - Systematic uncertainties are added linearly (worst-case scenario).
     static func + (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
         let newValue = lhs.value + rhs.value
-        // FIX: Ensure 'pow' and 'sqrt' operate on the 'Double' uncertainty properties, not the 'UncertainValue' struct itself.
-        // Using Foundation.pow explicitly can also prevent ambiguity.
-        let newUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty, 2) + Foundation.pow(rhs.uncertainty, 2))
-        return UncertainValue(value: newValue, uncertainty: newUncertainty)
+        let newRandom = Foundation.sqrt(Foundation.pow(lhs.randomUncertainty, 2) + Foundation.pow(rhs.randomUncertainty, 2))
+        let newSystematic = lhs.systematicUncertainty + rhs.systematicUncertainty
+        return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
     }
+
     static func - (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
         let newValue = lhs.value - rhs.value
-        // FIX: The same correction is applied here for the subtraction operator.
-        let newUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty, 2) + Foundation.pow(rhs.uncertainty, 2))
-        return UncertainValue(value: newValue, uncertainty: newUncertainty)
+        let newRandom = Foundation.sqrt(Foundation.pow(lhs.randomUncertainty, 2) + Foundation.pow(rhs.randomUncertainty, 2))
+        let newSystematic = lhs.systematicUncertainty + rhs.systematicUncertainty
+        return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
     }
     
-    // Standard propagation for multiplication/division
+    // For multiplication and division, we combine the *relative* uncertainties.
     static func * (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
         let newValue = lhs.value * rhs.value
+        
+        // Handle cases where a value is zero to avoid division by zero
         if lhs.value == 0 || rhs.value == 0 {
-            // Handle multiplication by zero case
-            let newUncertainty = Foundation.sqrt(Foundation.pow(lhs.value * rhs.uncertainty, 2) + Foundation.pow(rhs.value * lhs.uncertainty, 2))
-            return UncertainValue(value: 0, uncertainty: newUncertainty)
+            let unc_A_due_to_lhs = rhs.value * lhs.randomUncertainty
+            let unc_A_due_to_rhs = lhs.value * rhs.randomUncertainty
+            let newRandom = Foundation.sqrt(Foundation.pow(unc_A_due_to_lhs, 2) + Foundation.pow(unc_A_due_to_rhs, 2))
+            
+            let unc_B_due_to_lhs = abs(rhs.value * lhs.systematicUncertainty)
+            let unc_B_due_to_rhs = abs(lhs.value * lhs.systematicUncertainty)
+            let newSystematic = unc_B_due_to_lhs + unc_B_due_to_rhs
+
+            return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
         }
-        let relUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty / lhs.value, 2) + Foundation.pow(rhs.uncertainty / rhs.value, 2))
-        return UncertainValue(value: newValue, uncertainty: abs(newValue * relUncertainty))
+
+        let relRandomL = lhs.randomUncertainty / lhs.value
+        let relRandomR = rhs.randomUncertainty / rhs.value
+        let combinedRelRandom = Foundation.sqrt(Foundation.pow(relRandomL, 2) + Foundation.pow(relRandomR, 2))
+        
+        let relSystematicL = lhs.systematicUncertainty / lhs.value
+        let relSystematicR = rhs.systematicUncertainty / rhs.value
+        let combinedRelSystematic = abs(relSystematicL) + abs(relSystematicR)
+
+        return UncertainValue(
+            value: newValue,
+            randomUncertainty: abs(newValue * combinedRelRandom),
+            systematicUncertainty: abs(newValue * combinedRelSystematic)
+        )
     }
+
     static func / (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
         guard rhs.value != 0 else { throw MathError.divisionByZero }
         let newValue = lhs.value / rhs.value
+        
         if lhs.value == 0 {
-             let newUncertainty = abs(newValue) * (rhs.uncertainty / rhs.value)
-             return UncertainValue(value: 0, uncertainty: newUncertainty)
+            let newRandom = abs(newValue / rhs.value) * rhs.randomUncertainty
+            let newSystematic = abs(newValue / rhs.value) * rhs.systematicUncertainty
+            return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
         }
-        let relUncertainty = Foundation.sqrt(Foundation.pow(lhs.uncertainty / lhs.value, 2) + Foundation.pow(rhs.uncertainty / rhs.value, 2))
-        return UncertainValue(value: newValue, uncertainty: abs(newValue * relUncertainty))
+
+        let relRandomL = lhs.randomUncertainty / lhs.value
+        let relRandomR = rhs.randomUncertainty / rhs.value
+        let combinedRelRandom = Foundation.sqrt(Foundation.pow(relRandomL, 2) + Foundation.pow(relRandomR, 2))
+        
+        let relSystematicL = lhs.systematicUncertainty / lhs.value
+        let relSystematicR = rhs.systematicUncertainty / rhs.value
+        let combinedRelSystematic = abs(relSystematicL) + abs(relSystematicR)
+
+        return UncertainValue(
+            value: newValue,
+            randomUncertainty: abs(newValue * combinedRelRandom),
+            systematicUncertainty: abs(newValue * combinedRelSystematic)
+        )
     }
     
-    // Power propagation
+    // Power propagation: u_f = |f * n * (u_x / x)|
     func pow(_ exponent: Double) -> UncertainValue {
+        guard self.value != 0 else { return self }
         let newValue = Foundation.pow(self.value, exponent)
-        let newUncertainty = abs(newValue * exponent * (self.uncertainty / self.value))
-        return UncertainValue(value: newValue, uncertainty: newUncertainty)
+        let relativeUncertainty = self.totalUncertainty / self.value
+        let newTotalUncertainty = abs(newValue * exponent * relativeUncertainty)
+        
+        // We'll assume the ratio of random to systematic uncertainty remains the same.
+        // A more rigorous treatment might be needed for complex cases, but this is a reasonable approximation.
+        let randomRatio = self.totalUncertainty > 0 ? self.randomUncertainty / self.totalUncertainty : 0
+        
+        return UncertainValue(
+            value: newValue,
+            randomUncertainty: newTotalUncertainty * randomRatio,
+            systematicUncertainty: newTotalUncertainty * (1 - randomRatio)
+        )
     }
     
-    // Unary minus
+    // Unary minus flips the value but leaves uncertainties as positive values.
     static prefix func - (operand: UncertainValue) -> UncertainValue {
-        return UncertainValue(value: -operand.value, uncertainty: operand.uncertainty)
+        return UncertainValue(value: -operand.value, randomUncertainty: operand.randomUncertainty, systematicUncertainty: operand.systematicUncertainty)
     }
     
-    // --- Function Propagation ---
-    // The general rule is u_f = |f'(x)| * u_x
+    // General function propagation: u_f = |f'(x)| * u_x
+    // This is applied to both random and systematic components.
     func propagate(derivative: Double) -> UncertainValue {
-        return UncertainValue(value: self.value, uncertainty: abs(derivative * self.uncertainty))
+        return UncertainValue(
+            value: self.value,
+            randomUncertainty: abs(derivative * self.randomUncertainty),
+            systematicUncertainty: abs(derivative * self.systematicUncertainty)
+        )
     }
 }
+
 
 struct Complex: Equatable, Codable {
     var real: Double
@@ -240,7 +303,7 @@ struct Vector: Equatable, Codable {
     func stddev() -> Double? {
         guard dimension > 1 else { return nil }
         let mean = average()
-        let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
+        let sumOfSquaredDiffs = values.map { Foundation.pow($0 - mean, 2.0) }.reduce(0, +)
         return Foundation.sqrt(sumOfSquaredDiffs / Double(dimension - 1))
     }
     func magnitude() -> Double {
@@ -250,14 +313,14 @@ struct Vector: Equatable, Codable {
     func variance() -> Double? {
         guard dimension > 1 else { return nil }
         let mean = average()
-        let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
+        let sumOfSquaredDiffs = values.map { Foundation.pow($0 - mean, 2.0) }.reduce(0, +)
         return sumOfSquaredDiffs / Double(dimension - 1)
     }
 
     func stddevp() -> Double? {
         guard dimension > 0 else { return nil }
         let mean = average()
-        let sumOfSquaredDiffs = values.map { pow($0 - mean, 2.0) }.reduce(0, +)
+        let sumOfSquaredDiffs = values.map { Foundation.pow($0 - mean, 2.0) }.reduce(0, +)
         return Foundation.sqrt(sumOfSquaredDiffs / Double(dimension))
     }
 }
@@ -617,7 +680,7 @@ enum MathValue: Codable, Equatable {
     case polynomialFit(coefficients: Vector)
     case plot(PlotData)
     case triggerCSVImport // This is a non-codable, transient value used as a signal.
-    case uncertain(UncertainValue) // NEW: Added case for uncertain values
+    case uncertain(UncertainValue)
 
     var typeName: String {
         switch self {
@@ -649,7 +712,7 @@ enum MathValue: Codable, Equatable {
         case .constant(let s):
             try container.encode("constant", forKey: .type)
             try container.encode(s, forKey: .value)
-        case .uncertain(let u): // NEW: Encoding for uncertain values
+        case .uncertain(let u):
             try container.encode("uncertain", forKey: .type)
             try container.encode(u, forKey: .value)
         case .plot:
@@ -682,7 +745,7 @@ enum MathValue: Codable, Equatable {
             self = .polynomialFit(coefficients: coeffs)
         case "constant":
              self = .constant(try container.decode(String.self, forKey: .value))
-        case "uncertain": // NEW: Decoding for uncertain values
+        case "uncertain":
             self = .uncertain(try container.decode(UncertainValue.self, forKey: .value))
         case "plot":
             self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
@@ -707,7 +770,7 @@ enum MathValue: Codable, Equatable {
         case (.plot(let d1), .plot(let d2)): return d1 == d2
         case (.triggerCSVImport, .triggerCSVImport): return true
         case (.constant(let a), .constant(let b)): return a == b
-        case (.uncertain(let a), .uncertain(let b)): return a == b // NEW
+        case (.uncertain(let a), .uncertain(let b)): return a == b
         default: return false
         }
     }

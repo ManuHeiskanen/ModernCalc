@@ -35,7 +35,7 @@ struct FunctionCallNode: ExpressionNode {
 struct UncertaintyNode: ExpressionNode {
     let value: ExpressionNode
     let namedArgs: [String: ExpressionNode]
-    var description: String { "uncert(\(value.description), \(namedArgs.map { "\($0.key); \($0.value.description)" }.joined(separator: ", ")))" }
+    var description: String { "uncert(\(value.description), \(namedArgs.map { "\($0.key): \($0.value.description)" }.joined(separator: ", ")))" }
 }
 struct VectorNode: ExpressionNode {
     let elements: [ExpressionNode]
@@ -298,9 +298,11 @@ class Parser {
         
         var namedArgs: [String: ExpressionNode] = [:]
         
-        while let separator = peek(), case .separator(let char) = separator.type, char != ";" {
-            try advance()
+        // Loop to parse named arguments like "random: 0.1, resolution: 0.05"
+        while let separator = peek(), case .separator(let char) = separator.type, char == "," {
+            try advance() // Consume the comma
             
+            // Check for a premature closing parenthesis after a comma
             if let closing = peek(), case .paren(")") = closing.type {
                 break
             }
@@ -310,9 +312,11 @@ class Parser {
                 throw ParserError.unexpectedToken(token: nameToken, expected: "argument name (e.g., 'random')")
             }
             
-            let semicolonToken = try advance()
-            guard case .separator(";") = semicolonToken.type else {
-                throw ParserError.unexpectedToken(token: semicolonToken, expected: "';' after argument name")
+            // FIX: Expect a colon ':' instead of a semicolon to associate the name with the value.
+            // This is the standard convention for named arguments.
+            let colonToken = try advance()
+            guard case .assignment = colonToken.type else {
+                throw ParserError.unexpectedToken(token: colonToken, expected: "':' after argument name")
             }
             
             let exprNode = try parseExpression()
@@ -647,4 +651,3 @@ class Parser {
         try advance()
     }
 }
-

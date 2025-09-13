@@ -113,33 +113,37 @@ struct Evaluator {
         case let functionNode as FunctionCallNode:
             return try evaluateFunctionCall(functionNode, variables: &variables, functions: &functions, angleMode: angleMode)
             
-        // NEW: Handle the UncertaintyNode from the parser
         case let uncertNode as UncertaintyNode:
             let (value, _) = try _evaluateSingle(node: uncertNode.value, variables: &variables, functions: &functions, angleMode: angleMode)
             let nominalValue = try value.asScalar()
             
             var u_rand: Double = 0
-            var u_res: Double = 0
-            var u_acc: Double = 0
+            var u_sys_res: Double = 0
+            var u_sys_acc: Double = 0
             
             for (name, expr) in uncertNode.namedArgs {
                 let (argVal, _) = try _evaluateSingle(node: expr, variables: &variables, functions: &functions, angleMode: angleMode)
                 let scalarArg = try argVal.asScalar()
                 
+                // FIX: Add support for aliases (r, res, a) to match the documentation.
                 switch name {
-                case "random":
+                case "random", "r":
                     u_rand = scalarArg
-                case "resolution":
-                    u_res = scalarArg / sqrt(12.0) // Rectangular distribution
-                case "accuracy":
-                    u_acc = scalarArg / sqrt(3.0) // Rectangular distribution
+                case "resolution", "res":
+                    // Assuming a rectangular distribution for resolution uncertainty
+                    u_sys_res = scalarArg / sqrt(12.0)
+                case "accuracy", "a":
+                    // Assuming a rectangular distribution for accuracy uncertainty
+                    u_sys_acc = scalarArg / sqrt(3.0)
                 default:
                     throw ParserError.invalidNamedArgument(function: "uncert", argument: name)
                 }
             }
             
-            let combinedUncertainty = sqrt(pow(u_rand, 2) + pow(u_res, 2) + pow(u_acc, 2))
-            let uncertainValue = UncertainValue(value: nominalValue, uncertainty: combinedUncertainty)
+            // Systematic uncertainties from different sources are combined in quadrature
+            let combinedSystematic = sqrt(pow(u_sys_res, 2) + pow(u_sys_acc, 2))
+            
+            let uncertainValue = UncertainValue(value: nominalValue, randomUncertainty: u_rand, systematicUncertainty: combinedSystematic)
             return (.uncertain(uncertainValue), false)
 
         case let vectorNode as VectorNode:

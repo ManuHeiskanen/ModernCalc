@@ -439,7 +439,15 @@ class CalculatorViewModel: ObservableObject {
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         case .triggerCSVImport: return "Importing CSV..."
         case .constant(let s): return s
-        case .uncertain(let u): return "\(formatScalarForDisplay(u.value)) ± \(formatScalarForDisplay(u.uncertainty))"
+        case .uncertain(let u):
+            let val = formatScalarForDisplay(u.value)
+            let unc = formatScalarForDisplay(u.totalUncertainty)
+            let rand = formatScalarForDisplay(u.randomUncertainty)
+            let sys = formatScalarForDisplay(u.systematicUncertainty)
+            if u.randomUncertainty > 0 && u.systematicUncertainty > 0 {
+                return "\(val) ± \(unc) (R: \(rand), S: \(sys))"
+            }
+            return "\(val) ± \(unc)"
         }
     }
     
@@ -459,10 +467,21 @@ class CalculatorViewModel: ObservableObject {
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
         case .constant(let s): return s
+        // FIX: The formatting for uncert was incorrect, using semicolons and not creating
+        // a valid, parsable expression. This is now corrected to use colons and commas.
         case .uncertain(let u):
-            // For simplicity, we'll just reconstruct the basic random uncertainty.
-            // A more complex implementation could try to reconstruct all components.
-            return "uncert(\(formatScalarForParsing(u.value)); random; \(formatScalarForParsing(u.uncertainty)))"
+            var parts = [formatScalarForParsing(u.value)]
+            if u.randomUncertainty > 0 {
+                parts.append("random:\(formatScalarForParsing(u.randomUncertainty))")
+            }
+            // NOTE: This is an approximation. The final UncertainValue only stores the combined
+            // systematic uncertainty. We cannot know if it originated from 'resolution' or 'accuracy'.
+            // We output it as 'accuracy' to ensure the result is parsable.
+            if u.systematicUncertainty > 0 {
+                let accuracyEquiv = u.systematicUncertainty * sqrt(3.0)
+                parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))")
+            }
+            return "uncert(\(parts.joined(separator: ", ")))"
         }
     }
 
@@ -643,4 +662,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-

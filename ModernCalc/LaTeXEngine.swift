@@ -302,10 +302,9 @@ struct LaTeXEngine {
             return "\\text{...}"
         case .constant(let s):
             return "\\text{\(s)}"
-        // NEW: LaTeX formatting for uncertain values
         case .uncertain(let u):
             let valStr = formatScalar(u.value, settings: settings)
-            let uncStr = formatScalar(u.uncertainty, settings: settings)
+            let uncStr = formatScalar(u.totalUncertainty, settings: settings)
             return "\(valStr) \\pm \(uncStr)"
         }
     }

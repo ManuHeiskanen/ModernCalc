@@ -195,10 +195,19 @@ extension Evaluator {
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
-                let uncRad = mode == .degrees ? u.uncertainty * .pi / 180 : u.uncertainty
-                let u_rad = UncertainValue(value: valRad, uncertainty: uncRad)
-                let result_u = u_rad.propagate(derivative: cos(valRad))
-                return .uncertain(UncertainValue(value: sin(valRad), uncertainty: result_u.uncertainty))
+                let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
+                
+                // We need to create a temporary UncertainValue with the total uncertainty in radians
+                // to correctly propagate it through the derivative.
+                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0)
+                let propagated_u = u_rad_total.propagate(derivative: cos(valRad))
+
+                // The result maintains the original ratio of random to systematic uncertainty.
+                let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
+                
+                return .uncertain(UncertainValue(value: sin(valRad),
+                                                 randomUncertainty: propagated_u.randomUncertainty * randomRatio,
+                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .scalar(sin(valRad))
         },
@@ -206,10 +215,16 @@ extension Evaluator {
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
-                let uncRad = mode == .degrees ? u.uncertainty * .pi / 180 : u.uncertainty
-                let u_rad = UncertainValue(value: valRad, uncertainty: uncRad)
-                let result_u = u_rad.propagate(derivative: -sin(valRad))
-                return .uncertain(UncertainValue(value: cos(valRad), uncertainty: result_u.uncertainty))
+                let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
+                
+                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0)
+                let propagated_u = u_rad_total.propagate(derivative: -sin(valRad))
+                
+                let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
+
+                return .uncertain(UncertainValue(value: cos(valRad),
+                                                 randomUncertainty: propagated_u.randomUncertainty * randomRatio,
+                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .scalar(cos(valRad))
         },
@@ -217,10 +232,16 @@ extension Evaluator {
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
-                let uncRad = mode == .degrees ? u.uncertainty * .pi / 180 : u.uncertainty
-                let u_rad = UncertainValue(value: valRad, uncertainty: uncRad)
-                let result_u = u_rad.propagate(derivative: 1.0 / pow(cos(valRad), 2))
-                return .uncertain(UncertainValue(value: tan(valRad), uncertainty: result_u.uncertainty))
+                let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
+                
+                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0)
+                let propagated_u = u_rad_total.propagate(derivative: 1.0 / pow(cos(valRad), 2))
+                
+                let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
+                
+                return .uncertain(UncertainValue(value: tan(valRad),
+                                                 randomUncertainty: propagated_u.randomUncertainty * randomRatio,
+                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .scalar(tan(valRad))
         },
@@ -432,10 +453,8 @@ extension Evaluator {
             guard node.arguments.count == 1 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "1", found: node.arguments.count) }
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             
-            // NEW: Handle uncertainty propagation for scalar functions
             if case .uncertain(let u) = arg {
                 let val = u.value
-                let unc = u.uncertainty
                 let resultVal = scalarFunc(val)
                 var derivative: Double
                 switch node.name {
@@ -444,7 +463,8 @@ extension Evaluator {
                 case "asinh": derivative = 1 / sqrt(pow(val, 2) + 1); case "acosh": derivative = 1 / sqrt(pow(val, 2) - 1); case "atanh": derivative = 1 / (1 - pow(val, 2))
                 default: derivative = 0 // Should not happen
                 }
-                return (.uncertain(UncertainValue(value: resultVal, uncertainty: abs(derivative * unc))), argUsedAngle)
+                let propagated = u.propagate(derivative: derivative)
+                return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty)), argUsedAngle)
             }
             
             guard case .scalar(let s) = arg else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: arg.typeName) }
@@ -490,7 +510,7 @@ extension Evaluator {
             case .matrix(let m): return .matrix(Matrix(values: m.values.map { -$0 }, rows: m.rows, columns: m.columns))
             case .complexVector(let cv): return .complexVector(ComplexVector(values: cv.values.map { $0 * -1.0 }))
             case .complexMatrix(let cm): return .complexMatrix(ComplexMatrix(values: cm.values.map { $0 * -1.0 }, rows: cm.rows, columns: cm.columns))
-            case .uncertain(let u): return .uncertain(-u) // NEW
+            case .uncertain(let u): return .uncertain(-u)
             default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
             }
         case "'":
@@ -512,10 +532,10 @@ extension Evaluator {
         if case .tuple = right { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         
         switch (left, right) {
-        // --- NEW: Uncertainty propagation rules ---
+        // --- Uncertainty propagation rules ---
         case (.uncertain(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, r))
-        case (.uncertain(let l), .scalar(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r, uncertainty: 0)))
-        case (.scalar(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l, uncertainty: 0), r))
+        case (.uncertain(let l), .scalar(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r, randomUncertainty: 0, systematicUncertainty: 0)))
+        case (.scalar(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l, randomUncertainty: 0, systematicUncertainty: 0), r))
             
         // --- Standard rules ---
         case (.scalar(let l), .scalar(let r)): return .scalar(try performScalarScalarOp(op.rawValue, l, r))
