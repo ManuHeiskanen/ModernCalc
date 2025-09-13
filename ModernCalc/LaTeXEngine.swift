@@ -47,12 +47,10 @@ struct LaTeXEngine {
         case let numberNode as NumberNode:
             return formatScalar(numberNode.value, settings: settings)
             
-        // FIX: Added case for the new UnitAndExponentNode to format units with exponents correctly.
         case let unitNode as UnitAndExponentNode:
             var latex = "\\text{\(unitNode.unitSymbol)}"
             if let exponentNode = unitNode.exponent {
                 let exponentLaTeX = formatNode(exponentNode, evaluator: evaluator, settings: settings)
-                // Avoid showing an exponent of 1.
                 if exponentLaTeX != "1" {
                     latex += "^{\(exponentLaTeX)}"
                 }
@@ -107,8 +105,6 @@ struct LaTeXEngine {
                     let rightIsConstant = binaryNode.right is ConstantNode
                     let rightIsFuncCall = binaryNode.right is FunctionCallNode
                     let rightIsVectorOrMatrix = binaryNode.right is VectorNode || binaryNode.right is MatrixNode || binaryNode.right is ComplexVectorNode || binaryNode.right is ComplexMatrixNode
-                    
-                    // FIX: Also check for the new UnitAndExponentNode to allow for implicit multiplication like "3m"
                     let rightIsUnit = binaryNode.right is UnitAndExponentNode
                     
                     if (leftIsNumber || leftIsConstant) && (rightIsConstant || rightIsFuncCall || rightIsVectorOrMatrix || rightIsUnit) {
@@ -259,6 +255,16 @@ struct LaTeXEngine {
         case .dimensionless(let doubleValue):
             return formatScalar(doubleValue, settings: settings)
         case .unitValue(let u):
+            if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
+                let convertedValue = u.value / bestUnit.conversionFactor
+                let valStr = formatScalar(convertedValue, settings: settings)
+                if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
+                     return valStr
+                }
+                let unitStr = "\\text{\(bestUnit.symbol)}"
+                return "\(valStr) \\, \(unitStr)"
+            }
+            
             let valStr = formatScalar(u.value, settings: settings)
             let unitStr = format(dimensions: u.dimensions)
             if unitStr.isEmpty { return valStr }
@@ -318,6 +324,33 @@ struct LaTeXEngine {
             let uncStr = formatScalar(u.totalUncertainty, settings: settings)
             return "\(valStr) \\pm \(uncStr)"
         }
+    }
+    
+    private static func findBestUnitFor(dimensions: UnitDimension) -> UnitDefinition? {
+        if dimensions == [.meter: 3] {
+            return nil
+        }
+        
+        let preferredSymbols = ["N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "ha", "g"]
+
+        var potentialMatches: [UnitDefinition] = []
+        for (_, unitDef) in UnitStore.units {
+            if unitDef.dimensions == dimensions {
+                potentialMatches.append(unitDef)
+            }
+        }
+
+        if potentialMatches.isEmpty {
+            return nil
+        }
+
+        for symbol in preferredSymbols {
+            if let match = potentialMatches.first(where: { $0.symbol == symbol }) {
+                return match
+            }
+        }
+        
+        return potentialMatches.first(where: { !$0.symbol.contains(where: "kcmμn".contains) }) ?? potentialMatches.first
     }
     
     private static func format(dimensions: UnitDimension) -> String {

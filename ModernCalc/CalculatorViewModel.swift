@@ -274,7 +274,9 @@ class CalculatorViewModel: ObservableObject {
             resetNavigation()
             
             if !textToInsert.isEmpty {
-                self.insertTextAtCursor(textToInsert)
+                Task {
+                    self.insertTextAtCursor(textToInsert)
+                }
             }
             
             return nil
@@ -380,7 +382,9 @@ class CalculatorViewModel: ObservableObject {
     
     func insertTextAtCursor(_ textToInsert: String) {
         guard let range = Range(cursorPosition, in: rawExpression) else {
-            rawExpression += textToInsert; let newLocation = rawExpression.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
+            Task {
+                rawExpression += textToInsert; let newLocation = rawExpression.utf16.count; cursorPosition = NSRange(location: newLocation, length: 0)
+            }
             return
         }
         rawExpression.replaceSubrange(range, with: textToInsert)
@@ -478,7 +482,7 @@ class CalculatorViewModel: ObservableObject {
             let valStr = formatScalarForParsing(u.value)
             let unitStr = formatDimensionsForParsing(u.dimensions)
             if unitStr.isEmpty { return valStr }
-            return "(\(valStr))*\(unitStr)"
+            return "\(valStr) \(unitStr)"
         case .complex(let c): return formatComplexForParsing(c)
         case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
         case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
@@ -593,14 +597,14 @@ class CalculatorViewModel: ObservableObject {
             if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
                  return ""
             }
-            return bestUnit.symbol
+            return ".\(bestUnit.symbol)"
         }
         
         let allDims = dimensions.sorted { $0.key.rawValue < $1.key.rawValue }
         
         return allDims.map { (unit, exponent) -> String in
             let symbol = UnitStore.units.first(where: { $0.value.dimensions == [unit: 1] && $0.value.conversionFactor == 1.0 })?.key ?? unit.rawValue
-            return "\(symbol)\(exponent == 1 ? "" : "^\(exponent)")"
+            return ".\(symbol)\(exponent == 1 ? "" : "^\(exponent)")"
         }.joined(separator: " ")
     }
 

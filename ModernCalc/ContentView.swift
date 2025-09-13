@@ -194,7 +194,7 @@ struct HistoryView: View {
                                                     withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
                                                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                                 }
-                                                .onTapGesture { viewModel.insertTextAtCursor(calculation.expression.replacingOccurrences(of: " ", with: "")) }
+                                                .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
                                             
                                             Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
                                         }
@@ -239,7 +239,7 @@ struct HistoryView: View {
                                                 withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
                                                 if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                             }
-                                            .onTapGesture { viewModel.insertTextAtCursor(calculation.expression.replacingOccurrences(of: " ", with: "")) }
+                                            .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
 
                                             Text("=").font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.secondary)
                                             
@@ -517,3 +517,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
