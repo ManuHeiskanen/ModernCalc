@@ -13,6 +13,7 @@ enum MathError: Error, CustomStringConvertible {
     case requiresAtLeastOneArgument(function: String)
     case plotError(reason: String)
     case unitConversionError(from: String, to: String)
+    case solverFailed(reason: String)
 
     var description: String {
         switch self {
@@ -37,6 +38,7 @@ enum MathError: Error, CustomStringConvertible {
         case .requiresAtLeastOneArgument(let function): return "Error: Function '\(function)' requires at least one argument."
         case .plotError(let reason): return "Plot Error: \(reason)."
         case .unitConversionError(let from, let to): return "Error: Cannot convert from \(from) to \(to). Units must have the same physical dimension."
+        case .solverFailed(let reason): return "Solver Error: \(reason)."
         }
     }
 }
@@ -378,6 +380,9 @@ struct Evaluator {
 
         case let scatterNode as ScatterplotNode:
             return try (evaluateScatterplot(scatterNode, variables: &variables, functions: &functions), false)
+
+        case let solveNode as SolveNode:
+            return try (evaluateSolve(solveNode, variables: &variables, functions: &functions, angleMode: angleMode), false)
 
         case is ImportCSVNode:
             return (.triggerCSVImport, false)

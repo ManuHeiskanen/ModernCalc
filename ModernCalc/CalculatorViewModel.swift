@@ -483,6 +483,10 @@ class CalculatorViewModel: ObservableObject {
                 return "\(val) ± \(unc) (R: \(rand), S: \(sys))"
             }
             return "\(val) ± \(unc)"
+        case .roots(let roots):
+            if roots.isEmpty { return "No real roots found" }
+            let rootsString = roots.map { formatScalarForDisplay($0) }.joined(separator: ", ")
+            return "x = { \(rootsString) }"
         }
     }
     
@@ -526,6 +530,8 @@ class CalculatorViewModel: ObservableObject {
                 parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))")
             }
             return "uncert(\(parts.joined(separator: ", ")))"
+        case .roots(let roots):
+            return roots.first.map { formatScalarForParsing($0) } ?? ""
         }
     }
 

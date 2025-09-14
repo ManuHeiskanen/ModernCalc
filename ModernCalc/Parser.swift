@@ -115,6 +115,18 @@ struct ScatterplotNode: ExpressionNode {
     var description: String { "scatterplot(\(arguments.map { $0.description }.joined(separator: ", ")))" }
 }
 
+struct SolveNode: ExpressionNode {
+    let equation: ExpressionNode
+    let variable: ConstantNode
+    let guess: ExpressionNode?
+    var description: String {
+        if let guess = guess {
+            return "solve(\(equation.description), for: \(variable.description), near: \(guess.description))"
+        }
+        return "solve(\(equation.description), for: \(variable.description))"
+    }
+}
+
 struct ImportCSVNode: ExpressionNode {
     var description: String { "importcsv()" }
 }
@@ -304,6 +316,7 @@ class Parser {
                 case "scatterplot": return try parseScatterplot()
                 case "importcsv": return try parseImportCSV()
                 case "uncert": return try parseUncert()
+                case "solve": return try parseSolve()
                 default: return try parseFunctionCall(name: name)
                 }
             } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
@@ -346,6 +359,28 @@ class Parser {
         return FunctionCallNode(name: name, arguments: arguments)
     }
     
+    private func parseSolve() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for solve call"))
+        let equation = try parseExpression()
+        
+        try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "',' after expression"))
+        
+        let variableToken = try advance()
+        guard case .identifier(let varName) = variableToken.type else {
+            throw ParserError.unexpectedToken(token: variableToken, expected: "variable name")
+        }
+        let variableNode = ConstantNode(name: varName)
+        
+        var guess: ExpressionNode? = nil
+        if let separator = peek(), case .separator(let char) = separator.type, char == "," {
+            try advance()
+            guess = try parseExpression()
+        }
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close solve call"))
+        return SolveNode(equation: equation, variable: variableNode, guess: guess)
+    }
+
     private func parseUncert() throws -> ExpressionNode {
         try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for uncert call"))
 

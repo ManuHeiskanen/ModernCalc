@@ -94,6 +94,7 @@ struct TextContents {
         .init(name: "side", signature: "side(hyp, sideA)", description: "Calculates the missing side of a right triangle."),
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
         .init(name: "sinh", signature: "sinh(value)", description: "Calculates the hyperbolic sine."),
+        .init(name: "solve", signature: "solve(equation, var, [guess])", description: "Numerically finds real root(s) of an equation for a variable. E.g., solve(x^2 == 4, x)."),
         .init(name: "sort", signature: "sort(vector, [asc or desc])", description: "Sorts a vector in ascending (default) or descending order."),
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
         .init(name: "stddev", signature: "stddev(a, b, ...)", description: "Calculates the sample standard deviation."),
@@ -206,3 +207,4 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
+

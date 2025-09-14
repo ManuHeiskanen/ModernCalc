@@ -777,10 +777,11 @@ enum MathValue: Codable, Equatable {
     case plot(PlotData)
     case triggerCSVImport // This is a non-codable, transient value used as a signal.
     case uncertain(UncertainValue)
+    case roots([Double])
 
     var typeName: String {
         switch self {
-        case .dimensionless: return "Dimensionless"; case .unitValue: return "UnitValue"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"; case .uncertain: return "UncertainValue"
+        case .dimensionless: return "Dimensionless"; case .unitValue: return "UnitValue"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"; case .uncertain: return "UncertainValue"; case .roots: return "Roots"
         }
     }
     
@@ -812,6 +813,9 @@ enum MathValue: Codable, Equatable {
         case .uncertain(let u):
             try container.encode("uncertain", forKey: .type)
             try container.encode(u, forKey: .value)
+        case .roots(let r):
+            try container.encode("roots", forKey: .type)
+            try container.encode(r, forKey: .value)
         case .plot:
             try container.encode("plot", forKey: .type)
         case .triggerCSVImport:
@@ -845,6 +849,8 @@ enum MathValue: Codable, Equatable {
              self = .constant(try container.decode(String.self, forKey: .value))
         case "uncertain":
             self = .uncertain(try container.decode(UncertainValue.self, forKey: .value))
+        case "roots":
+            self = .roots(try container.decode([Double].self, forKey: .value))
         case "plot":
             self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
@@ -869,6 +875,7 @@ enum MathValue: Codable, Equatable {
         case (.triggerCSVImport, .triggerCSVImport): return true
         case (.constant(let a), .constant(let b)): return a == b
         case (.uncertain(let a), .uncertain(let b)): return a == b
+        case (.roots(let a), .roots(let b)): return a == b
         default: return false
         }
     }
@@ -902,3 +909,4 @@ extension Array {
         }
     }
 }
+

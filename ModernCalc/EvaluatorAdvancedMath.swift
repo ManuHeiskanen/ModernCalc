@@ -363,6 +363,103 @@ extension Evaluator {
         }
         return .plot(plotData)
     }
+    
+    // MARK: - Equation Solving
+    
+    func evaluateSolve(_ node: SolveNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
+        let varName = node.variable.name
+        
+        let functionBody: ExpressionNode
+        if let binaryNode = node.equation as? BinaryOpNode, binaryNode.op.rawValue == "==" {
+            functionBody = BinaryOpNode(op: Token(type: .op("-"), rawValue: "-"), left: binaryNode.left, right: binaryNode.right)
+        } else {
+            functionBody = node.equation
+        }
+
+        // Capture variables and functions to prevent escaping closure error with inout parameters.
+        let capturedVariables = variables
+        let capturedFunctions = functions
+
+        let f: (Double) throws -> Double = { x in
+            var tempVars = capturedVariables // Use the captured copy
+            var tempFuncs = capturedFunctions // Use the captured copy
+            tempVars[varName] = .dimensionless(x)
+            let result = try self._evaluateSingle(node: functionBody, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode).result
+            return try result.asScalar()
+        }
+        
+        let f_prime: (Double) throws -> Double = { x in
+            var tempVars = capturedVariables // Use the captured copy
+            var tempFuncs = capturedFunctions // Use the captured copy
+            return try self.calculateNthDerivative(bodyNode: functionBody, varName: varName, at: x, order: 1, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
+        }
+
+        var initialGuesses: [Double] = [-10, -5, -2, -1, 0, 1, 2, 5, 10]
+        if let guessNode = node.guess {
+            let (guessValue, _) = try _evaluateSingle(node: guessNode, variables: &variables, functions: &functions, angleMode: angleMode)
+            let guessScalar = try guessValue.asScalar()
+            initialGuesses.insert(guessScalar, at: 0)
+        }
+        
+        var roots = Set<Double>()
+        for guess in initialGuesses {
+            if let root = try findRootNewtonRaphson(f: f, f_prime: f_prime, initialGuess: guess) {
+                // Round to a certain precision to catch duplicates
+                let roundedRoot = (root * 1e9).rounded() / 1e9
+                if !roundedRoot.isNaN && !roundedRoot.isInfinite {
+                    roots.insert(roundedRoot)
+                }
+            }
+        }
+        
+        if roots.isEmpty {
+            // If Newton's method fails, try a simple grid search as a fallback
+            let searchRange = -100.0...100.0
+            let steps = 2000
+            let stepSize = (searchRange.upperBound - searchRange.lowerBound) / Double(steps)
+            var lastValue: Double? = nil
+
+            for i in 0...steps {
+                let x = searchRange.lowerBound + Double(i) * stepSize
+                if let y = try? f(x), let lastY = lastValue {
+                    if (y > 0 && lastY < 0) || (y < 0 && lastY > 0) {
+                         if let root = try findRootNewtonRaphson(f: f, f_prime: f_prime, initialGuess: x) {
+                            let roundedRoot = (root * 1e9).rounded() / 1e9
+                            if !roundedRoot.isNaN && !roundedRoot.isInfinite {
+                                roots.insert(roundedRoot)
+                            }
+                        }
+                    }
+                }
+                lastValue = try? f(x)
+            }
+        }
+
+        return .roots(Array(roots).sorted())
+    }
+
+    private func findRootNewtonRaphson(f: (Double) throws -> Double, f_prime: (Double) throws -> Double, initialGuess: Double) throws -> Double? {
+        var x = initialGuess
+        let maxIterations = 50
+        let tolerance = 1e-9
+
+        for _ in 0..<maxIterations {
+            let y = try f(x)
+            let y_prime = try f_prime(x)
+
+            if abs(y_prime) < 1e-12 { // Avoid division by zero for flat gradients
+                return nil
+            }
+            
+            let next_x = x - y / y_prime
+
+            if abs(next_x - x) < tolerance {
+                return next_x
+            }
+            x = next_x
+        }
+        return nil // Did not converge
+    }
 }
 
 /// Solves a system of linear equations Ax = b using Gaussian elimination with partial pivoting.
@@ -445,3 +542,4 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
     let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
     return coefficients
 }
+
