@@ -92,6 +92,11 @@ extension Evaluator {
     ]
     
     static let multiArgumentFunctions: [String: ([MathValue]) throws -> MathValue] = [
+        "if": { args in
+            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "if", expected: "3", found: args.count) }
+            let condition = try args[0].asScalar()
+            return condition != 0 ? args[1] : args[2]
+        },
         "range": { args in
             guard args.count == 2 || args.count == 3 else { throw MathError.incorrectArgumentCount(function: "range", expected: "2 or 3", found: args.count) }
             let start = try args[0].asScalar()
@@ -171,7 +176,37 @@ extension Evaluator {
             }
             let sortedValues = descending ? values.sorted(by: >) : values.sorted(by: <)
             return .vector(Vector(values: sortedValues))
-        }
+        },
+        "zeros": { args in
+            switch args.count {
+            case 1:
+                let rows_s = try args[0].asScalar()
+                guard rows_s > 0, rows_s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "zeros", typeA: "dimensions must be positive integers", typeB: nil) }
+                return .vector(Vector(values: [Double](repeating: 0, count: Int(rows_s))))
+            case 2:
+                let rows_s = try args[0].asScalar(); let cols_s = try args[1].asScalar()
+                guard rows_s > 0, cols_s > 0, rows_s.truncatingRemainder(dividingBy: 1) == 0, cols_s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "zeros", typeA: "dimensions must be positive integers", typeB: nil) }
+                let rows = Int(rows_s); let cols = Int(cols_s)
+                return .matrix(Matrix(values: [Double](repeating: 0, count: rows*cols), rows: rows, columns: cols))
+            default:
+                throw MathError.incorrectArgumentCount(function: "zeros", expected: "1 or 2", found: args.count)
+            }
+        },
+        "ones": { args in
+            switch args.count {
+            case 1:
+                let rows_s = try args[0].asScalar()
+                guard rows_s > 0, rows_s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "ones", typeA: "dimensions must be positive integers", typeB: nil) }
+                return .vector(Vector(values: [Double](repeating: 1, count: Int(rows_s))))
+            case 2:
+                let rows_s = try args[0].asScalar(); let cols_s = try args[1].asScalar()
+                guard rows_s > 0, cols_s > 0, rows_s.truncatingRemainder(dividingBy: 1) == 0, cols_s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "ones", typeA: "dimensions must be positive integers", typeB: nil) }
+                let rows = Int(rows_s); let cols = Int(cols_s)
+                return .matrix(Matrix(values: [Double](repeating: 1, count: rows*cols), rows: rows, columns: cols))
+            default:
+                throw MathError.incorrectArgumentCount(function: "ones", expected: "1 or 2", found: args.count)
+            }
+        },
     ]
 
     static let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
@@ -184,6 +219,34 @@ extension Evaluator {
             case .uncertain(let u): return .dimensionless(abs(u.value))
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, or UncertainValue", found: arg.typeName)
             }
+        },
+        "norm": { arg in
+             switch arg {
+             case .vector(let v): return .dimensionless(v.magnitude())
+             case .matrix(let m): return .dimensionless(m.frobeniusNorm())
+             default: throw MathError.typeMismatch(expected: "Vector or Matrix", found: arg.typeName)
+             }
+        },
+        "rank": { arg in
+            guard case .matrix(let m) = arg else { throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName) }
+            return .dimensionless(Double(m.rank()))
+        },
+        "eye": { arg in
+            let n_s = try arg.asScalar()
+            guard n_s > 0, n_s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "eye", typeA: "size must be a positive integer", typeB: nil) }
+            let n = Int(n_s)
+            var values = [Double](repeating: 0, count: n*n)
+            for i in 0..<n { values[i*n + i] = 1 }
+            return .matrix(Matrix(values: values, rows: n, columns: n))
+        },
+        "iqr": { arg in
+            let values = try extractDoubles(from: arg).sorted()
+            guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "iqr") }
+            
+            let q1 = performPercentile(values: values, p: 25)
+            let q3 = performPercentile(values: values, p: 75)
+            
+            return .dimensionless(q3 - q1)
         },
         "sign": { arg in
             let s = try arg.asScalar()
@@ -331,6 +394,16 @@ extension Evaluator {
     ]
     
     static let twoArgumentFunctions: [String: (MathValue, MathValue) throws -> MathValue] = [
+        "quartile": { data, q_val in
+            let values = try extractDoubles(from: data).sorted()
+            guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "quartile") }
+            let q = try q_val.asScalar()
+            guard [1, 2, 3].contains(q) && q.truncatingRemainder(dividingBy: 1) == 0 else {
+                throw MathError.unsupportedOperation(op: "quartile", typeA: "q must be 1, 2, or 3", typeB: nil)
+            }
+            let p = q * 25.0
+            return .dimensionless(performPercentile(values: values, p: p))
+        },
         "rmse": { a, b in
             guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSE.") }
@@ -467,20 +540,7 @@ extension Evaluator {
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "percentile") }
             let p = try p_val.asScalar()
             guard p >= 0 && p <= 100 else { throw MathError.unsupportedOperation(op: "percentile", typeA: "p must be between 0 and 100", typeB: nil) }
-            
-            if p == 100 { return .dimensionless(values.last!) }
-            
-            let rank = (p / 100.0) * Double(values.count - 1)
-            let lowerIndex = Int(floor(rank))
-            let upperIndex = Int(ceil(rank))
-            
-            if lowerIndex == upperIndex {
-                return .dimensionless(values[lowerIndex])
-            } else {
-                let lowerValue = values[lowerIndex]
-                let upperValue = values[upperIndex]
-                return .dimensionless(lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue))
-            }
+            return .dimensionless(performPercentile(values: values, p: p))
         },
         "gcd": { a, b in
             return try performElementWiseIntegerOp(a, b, opName: "gcd", operation: performGcd)
@@ -768,6 +828,13 @@ extension Evaluator {
         case "/": guard r != 0 else { throw MathError.divisionByZero }; return l / r
         case "%": guard r != 0 else { throw MathError.divisionByZero }; return l.truncatingRemainder(dividingBy: r)
         case "^": return pow(l, r)
+        // New comparison operators
+        case ">": return l > r ? 1.0 : 0.0
+        case "<": return l < r ? 1.0 : 0.0
+        case ">=": return l >= r ? 1.0 : 0.0
+        case "<=": return l <= r ? 1.0 : 0.0
+        case "==": return l == r ? 1.0 : 0.0
+        case "!=": return l != r ? 1.0 : 0.0
         default: throw MathError.unknownOperator(op: op)
         }
     }
@@ -1073,4 +1140,21 @@ fileprivate func performFactor(_ n: Double) throws -> [Double] {
     }
     
     return factors
+}
+
+/// Helper for percentile and quartile functions
+fileprivate func performPercentile(values: [Double], p: Double) -> Double {
+    if p == 100 { return values.last! }
+    
+    let rank = (p / 100.0) * Double(values.count - 1)
+    let lowerIndex = Int(floor(rank))
+    let upperIndex = Int(ceil(rank))
+    
+    if lowerIndex == upperIndex {
+        return values[lowerIndex]
+    } else {
+        let lowerValue = values[lowerIndex]
+        let upperValue = values[upperIndex]
+        return lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue)
+    }
 }

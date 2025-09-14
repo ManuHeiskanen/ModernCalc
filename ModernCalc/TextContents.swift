@@ -37,6 +37,7 @@ struct TextContents {
         .init(name: "derivative", signature: "derivative(expr, var, point, [order])", description: "Finds the instantaneous rate of change (slope). Can calculate higher-order derivatives (e.g., order 2 for concavity)."),
         .init(name: "det", signature: "det(matrix)", description: "Calculates the determinant of a square matrix."),
         .init(name: "dot", signature: "dot(vectorA, vectorB)", description: "Calculates the dot product of two vectors (real or complex)."),
+        .init(name: "eye", signature: "eye(n)", description: "Creates an n x n identity matrix."),
         .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),
         .init(name: "factor", signature: "factor(integer)", description: "Returns a vector containing the prime factors of an integer."),
         .init(name: "find", signature: "find(data, value)", description: "Returns a vector of 1-based indices for all occurrences of a value."),
@@ -48,10 +49,12 @@ struct TextContents {
         .init(name: "grad", signature: "grad(f, pointVector)", description: "Calculates the gradient of a multivariable function 'f' at a specific point."),
         .init(name: "harmean", signature: "harmean(a, b, ...)", description: "Calculates the harmonic mean of a list of non-zero numbers or a vector/matrix."),
         .init(name: "hypot", signature: "hypot(sideA, sideB)", description: "Calculates the hypotenuse of a right triangle."),
+        .init(name: "if", signature: "if(condition, true_val, false_val)", description: "Returns true_val if condition is non-zero, otherwise returns false_val."),
         .init(name: "imag", signature: "imag(complex)", description: "Extracts the imaginary part of a complex number."),
         .init(name: "importcsv", signature: "importcsv()", description: "Opens a file dialog to import data from a CSV file."),
         .init(name: "integral", signature: "integral(expr, var, from, to)", description: "Calculates the total area under a function's curve between two points."),
         .init(name: "inv", signature: "inv(matrix)", description: "Calculates the inverse of a square matrix."),
+        .init(name: "iqr", signature: "iqr(data)", description: "Calculates the interquartile range (Q3 - Q1) of a dataset."),
         .init(name: "isprime", signature: "isprime(integer)", description: "Checks if an integer is a prime number. Returns 1 for true, 0 for false."),
         .init(name: "lcm", signature: "lcm(a, b)", description: "Finds the least common multiple of two integers."),
         .init(name: "lg", signature: "lg(number)", description: "Alias for the common (base-10) logarithm."),
@@ -59,7 +62,7 @@ struct TextContents {
         .init(name: "linsolve", signature: "linsolve(A, b)", description: "Solves a system of linear equations Ax = b for x, where A is a matrix and b is a vector."),
         .init(name: "linspace", signature: "linspace(start, end, count)", description: "Creates a vector with 'count' evenly spaced values from 'start' to 'end'."),
         .init(name: "ln", signature: "ln(number)", description: "Calculates the natural (base-e) logarithm."),
-        .init(name: "log", signature: "log(number)", description: "Calculates the common (base-10) logarithm."),
+        .init(name: "log", signature: "log(number) or log(base, number)", description: "Calculates the common (base-10) or custom base logarithm."),
         .init(name: "matrix", signature: "matrix(a, b ; c, d ; ...)", description: "Forms a matrix of given real numbers."),
         .init(name: "max", signature: "max(a, b, ...)", description: "Finds the maximum value in a list of numbers or a vector/matrix."),
         .init(name: "mean", signature: "mean(a, b, ...)", description: "Calculates the arithmetic mean (average) of a list of numbers or a vector/matrix."),
@@ -68,16 +71,20 @@ struct TextContents {
         .init(name: "mod", signature: "mod(a, b)", description: "Calculates the mathematical modulo (remainder of division)."),
         .init(name: "mode", signature: "mode(a, b, ...)", description: "Finds the most frequent value(s) in a list of numbers or a vector/matrix."),
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
+        .init(name: "norm", signature: "norm(vector or matrix)", description: "Calculates the magnitude (Euclidean or L2 norm) of a vector or the Frobenius norm of a matrix."),
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
         .init(name: "normdist", signature: "normdist(x, mean, stddev)", description: "Calculates the normal distribution probability density."),
+        .init(name: "ones", signature: "ones(rows, [cols])", description: "Creates a vector or matrix filled with ones."),
         .init(name: "percentile", signature: "percentile(data, p)", description: "Calculates the p-th percentile of a dataset (e.g., percentile(data, 75))."),
         .init(name: "plot", signature: "plot(expr, var, x_min, x_max, [y_min, y_max])", description: "Plots expressions over a specified range with optional y-axis limits."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
         .init(name: "polyfit", signature: "polyfit(x_vec, y_vec, degree)", description: "Fits a polynomial of the given degree to the data points and returns the coefficients."),
+        .init(name: "quartile", signature: "quartile(data, q)", description: "Calculates the q-th quartile (1, 2, or 3) of a dataset."),
         .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
         .init(name: "randm", signature: "randm(rows, cols)", description: "Creates a matrix with the specified dimensions, filled with random numbers between 0 and 1."),
         .init(name: "randv", signature: "randv(size)", description: "Creates a vector of the specified size, filled with random numbers between 0 and 1."),
         .init(name: "range", signature: "range(start, end, [step])", description: "Creates a vector from 'start' to 'end' with an optional 'step' (default is 1)."),
+        .init(name: "rank", signature: "rank(matrix)", description: "Calculates the rank of a matrix."),
         .init(name: "real", signature: "real(complex)", description: "Extracts the real part of a complex number."),
         .init(name: "rmse", signature: "rmse(vectorA, vectorB)", description: "Calculates the root-mean-square error between two datasets."),
         .init(name: "rmsd", signature: "rmsd(vectorA, vectorB)", description: "Alias for rmse. Calculates the root-mean-square deviation."),
@@ -96,7 +103,6 @@ struct TextContents {
         .init(name: "tanh", signature: "tanh(value)", description: "Calculates the hyperbolic tangent."),
         .init(name: "trace", signature: "trace(matrix)", description: "Calculates the trace of a square matrix (sum of diagonal elements)."),
         .init(name: "transpose", signature: "transpose(matrix)", description: "Transposes a matrix (rows become columns). For complex matrices, this is not the conjugate transpose."),
-        // FIX: Clean up the signature to be clear and unambiguous, using the conventional ':' for named arguments.
         .init(name: "uncert", signature: "uncert(value, name: value, ...)", description: "Creates a value with uncertainty. Use named arguments like 'random', 'resolution', 'accuracy', and their aliases 'r', 'res', 'a'."),
         .init(name: "unique", signature: "unique(data)", description: "Returns a vector of the unique elements from a vector or matrix."),
         .init(name: "unit", signature: "unit(vector)", description: "Returns the unit vector (vector with magnitude 1)."),
@@ -106,6 +112,7 @@ struct TextContents {
         .init(name: "vol_cube", signature: "vol_cube(s)", description: "Volume of a cube."),
         .init(name: "vol_cylinder", signature: "vol_cylinder(r, h)", description: "Volume of a cylinder."),
         .init(name: "vol_sphere", signature: "vol_sphere(r)", description: "Volume of a sphere."),
+        .init(name: "zeros", signature: "zeros(rows, [cols])", description: "Creates a vector or matrix filled with zeros."),
         
         // New Functions
         .init(name: "sec", signature: "sec(angle)", description: "Calculates the secant."),
@@ -156,14 +163,14 @@ struct TextContents {
         .init(title: "Units & Conversions", content: "Attach units to numbers using a dot, like `20.m` or `9.8.m/s^2`. You can convert between compatible units using the `in` operator, for example: `1.year in .day`."),
         // FIX: Correct the factual error about linear addition and update the syntax to use colons.
         .init(title: "Uncertainty", content: "Create a value with uncertainty using `uncert(value, random: 0.1, resolution: 0.05)`. Calculations will propagate errors according to standard rules: random (statistical) errors are combined in quadrature, and systematic errors (from resolution and accuracy) are also combined in quadrature.\n- **value**: The nominal value of the measurement.\n- **random** (or **r**): (Type A) The statistical uncertainty, like a standard deviation.\n- **resolution** (or **res**): (Type B) Systematic uncertainty from instrument resolution.\n- **accuracy** (or **a**): (Type B) Systematic uncertainty from instrument accuracy."),
-        .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
+        .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %` as well as comparison operators like `>` and `==` which return 1 for true and 0 for false. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
-        .init(title: "Linear Algebra", content: "Solve systems of linear equations of the form `Ax = b` with `linsolve(A, b)`. Standard matrix operations like inverse (`inv`), determinant (`det`), and trace (`trace`) are also available."),
+        .init(title: "Linear Algebra", content: "Solve systems of linear equations of the form `Ax = b` with `linsolve(A, b)`. Standard matrix operations like inverse (`inv`), determinant (`det`), trace (`trace`), and rank (`rank`) are also available. Create identity, zero, or one matrices with `eye`, `zeros`, and `ones`."),
         .init(title: "Plotting & Data Analysis", content: "**Function Plotting:** Use `autoplot(sin(x))` for quick graphs, or `plot(expr, var, x_min, x_max)` for detailed control. \n**Scatter Plots:** Visualize data with `scatterplot(x_vector, y_vector)`. You can add an optional third argument for the degree of a polynomial fit, e.g., `scatterplot(x, y, 1)` for a linear fit or `scatterplot(x, y, 2)` for a quadratic fit. \n**Regression:** Use `polyfit(x_vector, y_vector, degree)` to get the coefficients of a best-fit polynomial."),
         .init(title: "Data Querying", content: "Ask questions about your data with functions like `count`, `countabove`, `countbelow`, and `find`. For example, `count(my_data, 5)` finds the number of 5s, and `find(my_data, 5)` returns their indices."),
         .init(title: "CSV Import & Data Handling", content: "Use the `importcsv()` command or the \".csv\" button to open a file dialog. The interactive window allows you to select which rows and columns to import, and then assign the selected data to a matrix variable. \nOnce your data is in a matrix, you can extract a specific column or row into a vector using the `getcolumn(matrix, index)` and `getrow(matrix, index)` functions. **Note:** All indices are 1-based."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
-        .init(title: "Statistics & Number Theory", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, `median`, `percentile`, `corr`, and `sort`. Generate datasets using `range` or `linspace`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
+        .init(title: "Statistics & Number Theory", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, `median`, `percentile`, `quartile`, `iqr`, `corr`, and `sort`. Generate datasets using `range` or `linspace`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
     ]
     
     static let siPrefixes: Set<String> = [
@@ -180,7 +187,10 @@ struct TextContents {
         .init(symbol: ".+@", name: "Add to Element", insertionText: ".+@(index, value)"),
         .init(symbol: ".-@", name: "Subtract from Element", insertionText: ".-@(index, value)"),
         .init(symbol: ".*@", name: "Multiply Element", insertionText: ".*@(index, value)"),
-        .init(symbol: "./@", name: "Divide Element", insertionText: "./@(index, value)")
+        .init(symbol: "./@", name: "Divide Element", insertionText: "./@(index, value)"),
+        // New Comparison Operators
+        .init(symbol: ">", name: "Greater Than"), .init(symbol: "<", name: "Less Than"), .init(symbol: "≥", name: "Greater Than or Equal", insertionText: ">="),
+        .init(symbol: "≤", name: "Less Than or Equal", insertionText: "<="), .init(symbol: "=", name: "Equal", insertionText: "=="), .init(symbol: "≠", name: "Not Equal", insertionText: "!=")
     ]
     
     static let greekSymbols: [MathSymbol] = [
@@ -198,4 +208,3 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
-

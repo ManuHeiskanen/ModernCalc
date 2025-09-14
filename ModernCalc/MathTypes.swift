@@ -452,6 +452,47 @@ struct Matrix: Equatable, Codable {
         return sum
     }
     
+    func frobeniusNorm() -> Double {
+        return sqrt(self.values.map { $0 * $0 }.reduce(0, +))
+    }
+
+    func rank() -> Int {
+        var matrix = self.values.chunks(ofCount: self.columns).map { Array($0) }
+        var rank = 0
+        var pivotRow = 0
+        let rowCount = self.rows
+        let colCount = self.columns
+        
+        for j in 0..<colCount { // Iterate through columns
+            if pivotRow >= rowCount { break }
+            
+            var i = pivotRow
+            while i < rowCount && abs(matrix[i][j]) < 1e-10 {
+                i += 1
+            }
+            
+            if i < rowCount {
+                matrix.swapAt(pivotRow, i)
+                let pivotValue = matrix[pivotRow][j]
+                for k in 0..<colCount {
+                    matrix[pivotRow][k] /= pivotValue
+                }
+                
+                for i in 0..<rowCount {
+                    if i != pivotRow {
+                        let factor = matrix[i][j]
+                        for k in 0..<colCount {
+                            matrix[i][k] -= factor * matrix[pivotRow][k]
+                        }
+                    }
+                }
+                pivotRow += 1
+                rank += 1
+            }
+        }
+        return rank
+    }
+
     func hadamard(with other: Matrix) throws -> Matrix {
         guard self.rows == other.rows && self.columns == other.columns else { throw MathError.dimensionMismatch(reason: "Matrices must have same dimensions for element-wise multiplication.") }
         return Matrix(values: zip(self.values, other.values).map(*), rows: self.rows, columns: self.columns)
@@ -847,6 +888,17 @@ extension MathValue {
             return u.value // Allow uncertain values to be coerced
         default:
             throw MathError.typeMismatch(expected: "Dimensionless or UncertainValue", found: self.typeName)
+        }
+    }
+}
+
+
+// Helper extension to chunk an array into smaller arrays.
+// Used for converting a flat list of values into matrix rows for rank calculation.
+extension Array {
+    func chunks(ofCount chunkSize: Int) -> [[Element]] {
+        return stride(from: 0, to: self.count, by: chunkSize).map {
+            Array(self[$0..<Swift.min($0 + chunkSize, self.count)])
         }
     }
 }
