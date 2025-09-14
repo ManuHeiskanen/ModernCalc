@@ -160,17 +160,18 @@ class Lexer {
                     currentToken = Token(type: .unknown(advance()!), rawValue: ",")
                 }
             case ".":
-                let (unitSymbol, charsConsumed) = peekAheadForUnit()
-                if !unitSymbol.isEmpty {
-                    for _ in 0..<charsConsumed { advance() }
-                    currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
-                } else {
-                    if argumentSeparator == "." {
-                        advance()
-                        currentToken = Token(type: .separator("."), rawValue: ".")
+                 // FIX: Check if the character AFTER the dot is a letter. If not, it's not a unit.
+                if let nextChar = peek(offset: 1), nextChar.isLetter {
+                    let (unitSymbol, charsConsumed) = peekAheadForUnit()
+                    if !unitSymbol.isEmpty {
+                        for _ in 0..<charsConsumed { advance() }
+                        currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
                     } else {
-                        currentToken = lexDotOperator()
+                         // This case might not be reachable with the new check but is safe to keep.
+                        currentToken = lexDotOperatorOrUnknown()
                     }
+                } else {
+                    currentToken = lexDotOperatorOrUnknown()
                 }
             case "°":
                 advance()
@@ -202,6 +203,14 @@ class Lexer {
         return tokens
     }
     
+    private func lexDotOperatorOrUnknown() -> Token {
+        if let separatorChar = (decimalSeparator == .period ? Character(".") : nil), separatorChar == "." {
+            advance()
+            return Token(type: .separator("."), rawValue: ".")
+        }
+        return lexDotOperator()
+    }
+
     private func lexDotOperator() -> Token {
         if peek(offset: 1) == "=" && peek(offset: 2) == "@" {
             advance(); advance(); advance()
@@ -225,6 +234,7 @@ class Lexer {
             advance(); advance()
             return Token(type: .op("./"), rawValue: "./")
         } else {
+            // Treat a lone dot that isn't a separator as an unknown token.
             return Token(type: .unknown(advance()!), rawValue: ".")
         }
     }
@@ -233,21 +243,26 @@ class Lexer {
         var potentialUnit = ""
         var offset = 0
         
+        // Consume the dot itself
         offset += 1
         
+        // Skip any whitespace between the dot and the unit name
         while let char = peek(offset: offset), char.isWhitespace {
             offset += 1
         }
         
-        while let char = peek(offset: offset), char.isLetter || char == "μ" {
+        // Read the potential unit name (letters only)
+        while let char = peek(offset: offset), char.isLetter || char == "μ" || char == "Ω" {
             potentialUnit.append(char)
             offset += 1
         }
         
+        // Check if the accumulated string is a valid unit.
         if UnitStore.units[potentialUnit] != nil {
             return (potentialUnit, offset)
         }
         
+        // If not a valid unit, backtrack and return nothing.
         return ("", 0)
     }
 
@@ -259,6 +274,8 @@ class Lexer {
             if char.isNumber {
                 advance()
             } else if char == decimalSeparator.character && !hasDecimal {
+                // Look ahead to ensure there's a digit after the decimal.
+                // This prevents "5." from being lexed as a number.
                 if peek(offset: 1)?.isNumber ?? false {
                     hasDecimal = true
                     advance()
@@ -322,3 +339,4 @@ class Lexer {
         return char
     }
 }
+

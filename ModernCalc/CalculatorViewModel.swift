@@ -199,21 +199,24 @@ class CalculatorViewModel: ObservableObject {
                 else if case .complexMatrix(let cm) = value, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
 
                 if isResultTooLargeForPreview {
+                    // FIX: Pass the 'expression' string to the formatter call.
                     switch value {
                     case .vector(let v): resultLaTeX = "\\text{\(v.dimension)-element Vector}"
                     case .matrix(let m): resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
                     case .complexVector(let cv): resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
                     case .complexMatrix(let cm): resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
-                    default: resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                    default: resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings, expression: expression)
                     }
                 } else {
                     if self.settings.enableLiveRounding {
                         let liveSettings = self.settings.makeTemporaryCopy()
                         liveSettings.displayMode = .fixed
                         liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
-                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings)
+                        // FIX: Pass the 'expression' string to the formatter call.
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings, expression: expression)
                     } else {
-                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings)
+                        // FIX: Pass the 'expression' string to the formatter call.
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings, expression: expression)
                     }
                 }
                 finalLiveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
@@ -791,5 +794,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
-

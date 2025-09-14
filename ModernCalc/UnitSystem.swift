@@ -33,6 +33,20 @@ struct UnitDefinition {
 // A static store for all predefined units known to the calculator.
 // This acts as a central database for unit conversions and dimensional analysis.
 struct UnitStore {
+    
+    /// FIX: Added the missing 'baseUnitSymbols' dictionary.
+    /// Maps a BaseUnit enum to its standard SI symbol string. This is required by the LaTeXEngine
+    /// to correctly format unit dimensions.
+    static let baseUnitSymbols: [BaseUnit: String] = [
+        .meter: "m",
+        .kilogram: "kg",
+        .second: "s",
+        .ampere: "A",
+        .kelvin: "K",
+        .mole: "mol",
+        .candela: "cd"
+    ]
+    
     static let units: [String: UnitDefinition] = buildUnitMap()
 
     private static func buildUnitMap() -> [String: UnitDefinition] {

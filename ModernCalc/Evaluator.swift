@@ -95,34 +95,40 @@ struct Evaluator {
         
         case let conversionNode as ConversionNode:
             let (sourceResult, sourceUsedAngle) = try _evaluateSingle(node: conversionNode.valueNode, variables: &variables, functions: &functions, angleMode: angleMode)
-            
-            guard let targetUnitNode = conversionNode.targetUnitNode as? BinaryOpNode,
-                  let unitAndExpNode = targetUnitNode.right as? UnitAndExponentNode,
-                  let numberNode = targetUnitNode.left as? NumberNode,
-                  numberNode.value == 1.0,
-                  unitAndExpNode.exponent == nil else {
-                throw MathError.typeMismatch(expected: "a simple unit (e.g., .cm)", found: "a complex expression")
-            }
-            
-            let targetUnitSymbol = unitAndExpNode.unitSymbol
-            
-            guard let targetUnitDef = UnitStore.units[targetUnitSymbol] else {
-                throw MathError.unknownConstant(name: targetUnitSymbol)
-            }
+            let (targetResult, targetUsedAngle) = try _evaluateSingle(node: conversionNode.targetUnitNode, variables: &variables, functions: &functions, angleMode: angleMode)
 
             guard case .unitValue(var sourceUnitValue) = sourceResult else {
                 throw MathError.typeMismatch(expected: "Value with units", found: sourceResult.typeName)
             }
+            
+            guard case .unitValue(let targetUnit) = targetResult else {
+                throw MathError.typeMismatch(expected: "A target unit (e.g., .cm)", found: targetResult.typeName)
+            }
 
-            guard sourceUnitValue.dimensions == targetUnitDef.dimensions else {
+            // Helper to recursively find the base unit symbol from the AST (e.g., 'm' from '.m^3')
+            func findBaseSymbol(node: ExpressionNode) -> String? {
+                if let unitNode = node as? UnitAndExponentNode {
+                    return unitNode.unitSymbol
+                }
+                if let binaryNode = node as? BinaryOpNode {
+                    // This handles implicit multiplication like `1 * .m^3`
+                    return findBaseSymbol(node: binaryNode.right)
+                }
+                return nil
+            }
+
+            guard let symbol = findBaseSymbol(node: conversionNode.targetUnitNode) else {
+                throw MathError.unknownConstant(name: "target unit for conversion")
+            }
+            
+            guard sourceUnitValue.dimensions == targetUnit.dimensions else {
                 throw MathError.dimensionMismatch(reason: "Cannot convert between incompatible units")
             }
 
-            sourceUnitValue.preferredDisplayUnit = targetUnitSymbol
+            sourceUnitValue.preferredDisplayUnit = symbol
             
-            return (.unitValue(sourceUnitValue), sourceUsedAngle)
+            return (.unitValue(sourceUnitValue), sourceUsedAngle || targetUsedAngle)
 
-        // FIX: Added a new case to handle the unit-with-exponent node.
         case let unitNode as UnitAndExponentNode:
             guard let unitDef = UnitStore.units[unitNode.unitSymbol] else {
                 throw MathError.unknownConstant(name: unitNode.unitSymbol)
@@ -136,12 +142,9 @@ struct Evaluator {
                 expUsedAngle = usedAngle
             }
 
-            // The conversion factor and dimensions are adjusted by the exponent.
             let finalConversionFactor = Foundation.pow(unitDef.conversionFactor, exponent)
             let finalDimensions = unitDef.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
 
-            // This node evaluates to a UnitValue with a numeric value of its conversion factor,
-            // ready to be multiplied by the actual number.
             let resultUnitValue = UnitValue(value: finalConversionFactor, dimensions: finalDimensions)
             return (.unitValue(resultUnitValue), expUsedAngle)
 
