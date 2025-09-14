@@ -50,11 +50,11 @@ struct Evaluator {
     let h = 1e-5 // A small step size for numerical differentiation
 
     /// A helper function to evaluate an expression with a temporary variable, used for calculus operations.
-    func evaluateWithTempVar(node: ExpressionNode, varName: String, varValue: Double, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
+    func evaluateWithTempVar(node: ExpressionNode, varName: String, varValue: Double, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         var tempVars = variables
         tempVars[varName] = .dimensionless(varValue)
-        let (result, _) = try _evaluateSingle(node: node, variables: &tempVars, functions: &functions, angleMode: angleMode)
-        return result
+        let (result, usedAngle) = try _evaluateSingle(node: node, variables: &tempVars, functions: &functions, angleMode: angleMode)
+        return (result, usedAngle)
     }
     
     /// The main entry point for evaluating an expression node. It handles expanding multi-value results (from `±`).
@@ -312,7 +312,7 @@ struct Evaluator {
 
             var tempVarsForDryRun = variables
             tempVarsForDryRun[varName] = .dimensionless(0)
-            let bodyUsedAngle = (try? _evaluateSingle(node: bodyNode, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
+            let (bodyResult, bodyUsedAngle) = try _evaluateSingle(node: bodyNode, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode)
             
             let result = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: point, order: order, variables: &variables, functions: &functions, angleMode: angleMode)
             return (.dimensionless(result), pointUsedAngle || bodyUsedAngle)
@@ -324,14 +324,11 @@ struct Evaluator {
             let a = try lowerValue.asScalar()
             let b = try upperValue.asScalar()
 
-            var tempVarsForDryRun = variables
-            tempVarsForDryRun[integralNode.variable.name] = .dimensionless(0)
-            let bodyUsedAngle = (try? _evaluateSingle(node: integralNode.body, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
-
+            var bodyUsedAngle = false
             let f: (Double) throws -> Double = { x in
                 var localVars = variables
                 var localFuncs = functions
-                let value = try self.evaluateWithTempVar(
+                let (value, f_usedAngle) = try self.evaluateWithTempVar(
                     node: integralNode.body,
                     varName: integralNode.variable.name,
                     varValue: x,
@@ -339,6 +336,7 @@ struct Evaluator {
                     functions: &localFuncs,
                     angleMode: angleMode
                 )
+                bodyUsedAngle = bodyUsedAngle || f_usedAngle
                 return try value.asScalar()
             }
                 
@@ -361,10 +359,10 @@ struct Evaluator {
 
             var tempVars = variables
             tempVars[varName] = .dimensionless(point)
-            let bodyUsedAngle = (try? _evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &functions, angleMode: angleMode))?.usedAngle ?? false
+            let (_, bodyUsedAngle) = try _evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &functions, angleMode: angleMode)
 
-            let valPlus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
-            let valMinus = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (valPlus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (valMinus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
             
             let scalarPlus = try valPlus.asScalar()
             let scalarMinus = try valMinus.asScalar()
@@ -382,7 +380,7 @@ struct Evaluator {
             return try (evaluateScatterplot(scatterNode, variables: &variables, functions: &functions), false)
 
         case let solveNode as SolveNode:
-            return try (evaluateSolve(solveNode, variables: &variables, functions: &functions, angleMode: angleMode), false)
+            return try evaluateSolve(solveNode, variables: &variables, functions: &functions, angleMode: angleMode)
 
         case is ImportCSVNode:
             return (.triggerCSVImport, false)
@@ -392,4 +390,3 @@ struct Evaluator {
         }
     }
 }
-

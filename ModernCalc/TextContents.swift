@@ -73,6 +73,7 @@ struct TextContents {
         .init(name: "nCr", signature: "nCr(n, k)", description: "Calculates the number of combinations."),
         .init(name: "norm", signature: "norm(vector or matrix)", description: "Calculates the magnitude (Euclidean or L2 norm) of a vector or the Frobenius norm of a matrix."),
         .init(name: "nPr", signature: "nPr(n, k)", description: "Calculates the number of permutations."),
+        .init(name: "nsolve", signature: "nsolve(equation, var, [guess])", description: "Alias for solve. Numerically finds real root(s) of an equation."),
         .init(name: "normdist", signature: "normdist(x, mean, stddev)", description: "Calculates the normal distribution probability density."),
         .init(name: "ones", signature: "ones(rows, [cols])", description: "Creates a vector or matrix filled with ones."),
         .init(name: "percentile", signature: "percentile(data, p)", description: "Calculates the p-th percentile of a dataset (e.g., percentile(data, 75))."),
@@ -94,7 +95,7 @@ struct TextContents {
         .init(name: "side", signature: "side(hyp, sideA)", description: "Calculates the missing side of a right triangle."),
         .init(name: "sin", signature: "sin(angle)", description: "Calculates the sine of an angle."),
         .init(name: "sinh", signature: "sinh(value)", description: "Calculates the hyperbolic sine."),
-        .init(name: "solve", signature: "solve(equation, var, [guess])", description: "Numerically finds real root(s) of an equation for a variable. E.g., solve(x^2 == 4, x)."),
+        .init(name: "solve", signature: "solve(equation, var, [guess])", description: "Numerically finds real root(s) of an equation for a variable. E.g., solve(x^2 == 4, x). Searches a wide range for solutions. Providing a guess will focus the search around that value."),
         .init(name: "sort", signature: "sort(vector, [asc or desc])", description: "Sorts a vector in ascending (default) or descending order."),
         .init(name: "sqrt", signature: "sqrt(number)", description: "Calculates the square root. Handles complex numbers."),
         .init(name: "stddev", signature: "stddev(a, b, ...)", description: "Calculates the sample standard deviation."),
@@ -207,4 +208,3 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
-

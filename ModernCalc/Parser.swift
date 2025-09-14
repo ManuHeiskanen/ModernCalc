@@ -316,7 +316,7 @@ class Parser {
                 case "scatterplot": return try parseScatterplot()
                 case "importcsv": return try parseImportCSV()
                 case "uncert": return try parseUncert()
-                case "solve": return try parseSolve()
+                case "solve", "nsolve": return try parseSolve()
                 default: return try parseFunctionCall(name: name)
                 }
             } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
@@ -741,4 +741,3 @@ class Parser {
         try advance()
     }
 }
-

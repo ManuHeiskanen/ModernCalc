@@ -8,8 +8,8 @@ extension Evaluator {
     
     func calculateNthDerivative(bodyNode: ExpressionNode, varName: String, at a: Double, order n: Int, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> Double {
         if n == 1 {
-            let valPlus = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a + h, variables: &variables, functions: &functions, angleMode: angleMode)
-            let valMinus = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a - h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (valPlus, _) = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a + h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (valMinus, _) = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: a - h, variables: &variables, functions: &functions, angleMode: angleMode)
             
             // FIX: Use asScalar() to handle dimensionless and unitless values correctly.
             let scalarPlus = try valPlus.asScalar()
@@ -43,29 +43,31 @@ extension Evaluator {
         let capturedFunctions = functions
         
         var partialDerivatives: [Double] = []
+        var overallUsedAngle = pointUsedAngle
         
         for (i,_) in varNames.enumerated() {
             let pointForThisVar = pointVector.values[i]
-            let f: (Double) throws -> Double = { x_perturbed in
+            let f: (Double) throws -> (Double, Bool) = { x_perturbed in
                 var tempVars = capturedVariables
                 for (j, otherVarName) in varNames.enumerated() {
                     // FIX: Changed .scalar to .dimensionless
                     tempVars[otherVarName] = .dimensionless((j == i) ? x_perturbed : pointVector.values[j])
                 }
                 var tempFuncs = capturedFunctions
-                let (result, _) = try self._evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
+                let (result, usedAngle) = try self._evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
                 // FIX: Use asScalar() to correctly extract the double value.
                 let scalarResult = try result.asScalar()
-                return scalarResult
+                return (scalarResult, usedAngle)
             }
             
-            let valPlus = try f(pointForThisVar + h)
-            let valMinus = try f(pointForThisVar - h)
+            let (valPlus, usedAnglePlus) = try f(pointForThisVar + h)
+            let (valMinus, usedAngleMinus) = try f(pointForThisVar - h)
+            overallUsedAngle = overallUsedAngle || usedAnglePlus || usedAngleMinus
             
             let derivative = (valPlus - valMinus) / (2 * h)
             partialDerivatives.append(derivative)
         }
-        return (.vector(Vector(values: partialDerivatives)), pointUsedAngle)
+        return (.vector(Vector(values: partialDerivatives)), overallUsedAngle)
     }
 
     func adaptiveSimpson(f: (Double) throws -> Double, a: Double, b: Double, tolerance: Double) throws -> Double {
@@ -162,8 +164,8 @@ extension Evaluator {
                 let t = defaultRange.lowerBound + Double(i) * step
                 var localVars = capturedVariables; var localFuncs = capturedFunctions
                 do {
-                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    let (xValue, _) = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    let (yValue, _) = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
                     // FIX: Use asScalar() for type safety
                     let x = try xValue.asScalar()
                     let y = try yValue.asScalar()
@@ -198,7 +200,7 @@ extension Evaluator {
                     let x = defaultRange.lowerBound + Double(i) * step
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
-                        let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                        let (yValue, _) = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
                         // FIX: Use asScalar() for type safety
                         let y = try yValue.asScalar()
                         if y.isFinite {
@@ -316,8 +318,8 @@ extension Evaluator {
                 let t = plotRange.lowerBound + Double(i) * step
                 var localVars = capturedVariables; var localFuncs = capturedFunctions
                 do {
-                    let xValue = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                    let yValue = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    let (xValue, _) = try evaluateWithTempVar(node: xBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    let (yValue, _) = try evaluateWithTempVar(node: yBody, varName: varName, varValue: t, variables: &localVars, functions: &localFuncs, angleMode: .radians)
                     // FIX: Use asScalar()
                     let x = try xValue.asScalar()
                     let y = try yValue.asScalar()
@@ -344,7 +346,7 @@ extension Evaluator {
                     let x = plotRange.lowerBound + Double(i) * step
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
-                        let yValue = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                        let (yValue, _) = try evaluateWithTempVar(node: body, varName: varName, varValue: x, variables: &localVars, functions: &localFuncs, angleMode: .radians)
                         // FIX: Use asScalar()
                         let y = try yValue.asScalar()
                         if y.isFinite {
@@ -366,7 +368,7 @@ extension Evaluator {
     
     // MARK: - Equation Solving
     
-    func evaluateSolve(_ node: SolveNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> MathValue {
+    func evaluateSolve(_ node: SolveNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         let varName = node.variable.name
         
         let functionBody: ExpressionNode
@@ -376,89 +378,76 @@ extension Evaluator {
             functionBody = node.equation
         }
 
-        // Capture variables and functions to prevent escaping closure error with inout parameters.
         let capturedVariables = variables
         let capturedFunctions = functions
+        
+        var usedAngle = false
 
         let f: (Double) throws -> Double = { x in
-            var tempVars = capturedVariables // Use the captured copy
-            var tempFuncs = capturedFunctions // Use the captured copy
+            var tempVars = capturedVariables
+            var tempFuncs = capturedFunctions
             tempVars[varName] = .dimensionless(x)
-            let result = try self._evaluateSingle(node: functionBody, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode).result
+            let (result, f_usedAngle) = try self._evaluateSingle(node: functionBody, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
+            usedAngle = usedAngle || f_usedAngle
             return try result.asScalar()
         }
         
-        let f_prime: (Double) throws -> Double = { x in
-            var tempVars = capturedVariables // Use the captured copy
-            var tempFuncs = capturedFunctions // Use the captured copy
-            return try self.calculateNthDerivative(bodyNode: functionBody, varName: varName, at: x, order: 1, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
-        }
-
-        var initialGuesses: [Double] = [-10, -5, -2, -1, 0, 1, 2, 5, 10]
-        if let guessNode = node.guess {
-            let (guessValue, _) = try _evaluateSingle(node: guessNode, variables: &variables, functions: &functions, angleMode: angleMode)
-            let guessScalar = try guessValue.asScalar()
-            initialGuesses.insert(guessScalar, at: 0)
-        }
-        
         var roots = Set<Double>()
-        for guess in initialGuesses {
-            if let root = try findRootNewtonRaphson(f: f, f_prime: f_prime, initialGuess: guess) {
-                // Round to a certain precision to catch duplicates
-                let roundedRoot = (root * 1e9).rounded() / 1e9
-                if !roundedRoot.isNaN && !roundedRoot.isInfinite {
-                    roots.insert(roundedRoot)
-                }
-            }
+        let precision = 1e-9
+
+        let searchRanges: [ClosedRange<Double>]
+        if let guessNode = node.guess {
+            let (guessValue, guessUsedAngle) = try _evaluateSingle(node: guessNode, variables: &variables, functions: &functions, angleMode: angleMode)
+            usedAngle = usedAngle || guessUsedAngle
+            let guessScalar = try guessValue.asScalar()
+            searchRanges = [(guessScalar - 100.0)...(guessScalar + 100.0)] // Search around the guess
+        } else {
+            // Default broad search ranges
+            searchRanges = [-1000...(-100), -100...100, 100...1000]
         }
         
-        if roots.isEmpty {
-            // If Newton's method fails, try a simple grid search as a fallback
-            let searchRange = -100.0...100.0
-            let steps = 2000
-            let stepSize = (searchRange.upperBound - searchRange.lowerBound) / Double(steps)
-            var lastValue: Double? = nil
+        let stepsPerRange = 5000
 
-            for i in 0...steps {
-                let x = searchRange.lowerBound + Double(i) * stepSize
-                if let y = try? f(x), let lastY = lastValue {
-                    if (y > 0 && lastY < 0) || (y < 0 && lastY > 0) {
-                         if let root = try findRootNewtonRaphson(f: f, f_prime: f_prime, initialGuess: x) {
-                            let roundedRoot = (root * 1e9).rounded() / 1e9
-                            if !roundedRoot.isNaN && !roundedRoot.isInfinite {
+        for range in searchRanges {
+            let stepSize = (range.upperBound - range.lowerBound) / Double(stepsPerRange)
+            var lastY: Double? = nil
+            var lastX: Double? = nil
+
+            for i in 0...stepsPerRange {
+                let x = range.lowerBound + Double(i) * stepSize
+                do {
+                    let y = try f(x)
+                    if y.isInfinite || y.isNaN {
+                        lastY = nil; lastX = nil; continue
+                    }
+                    
+                    // Check if y is very close to zero, indicating a root or a touch point
+                    if abs(y) < precision {
+                        let roundedRoot = (x * 1/precision).rounded() * precision
+                        roots.insert(roundedRoot)
+                    }
+
+                    if let prevY = lastY, let prevX = lastX {
+                        // Check for sign change which indicates a bracketed root
+                        if prevY * y < 0 {
+                            if let root = try Solver.brent(f: f, x1: prevX, x2: x) {
+                                let roundedRoot = (root * 1/precision).rounded() * precision
                                 roots.insert(roundedRoot)
                             }
                         }
                     }
+                    lastY = y
+                    lastX = x
+                } catch {
+                    // If the function fails to evaluate at a point (e.g., log of negative),
+                    // reset the last point and continue scanning.
+                    lastY = nil
+                    lastX = nil
                 }
-                lastValue = try? f(x)
             }
         }
-
-        return .roots(Array(roots).sorted())
-    }
-
-    private func findRootNewtonRaphson(f: (Double) throws -> Double, f_prime: (Double) throws -> Double, initialGuess: Double) throws -> Double? {
-        var x = initialGuess
-        let maxIterations = 50
-        let tolerance = 1e-9
-
-        for _ in 0..<maxIterations {
-            let y = try f(x)
-            let y_prime = try f_prime(x)
-
-            if abs(y_prime) < 1e-12 { // Avoid division by zero for flat gradients
-                return nil
-            }
-            
-            let next_x = x - y / y_prime
-
-            if abs(next_x - x) < tolerance {
-                return next_x
-            }
-            x = next_x
-        }
-        return nil // Did not converge
+        
+        return (result: .roots(Array(roots).sorted()), usedAngle: usedAngle)
     }
 }
 
@@ -542,4 +531,3 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
     let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
     return coefficients
 }
-
