@@ -46,7 +46,21 @@ struct LaTeXEngine {
             
         case let conversionNode as ConversionNode:
             let value = formatNode(conversionNode.valueNode, evaluator: evaluator, settings: settings)
-            let target = formatNode(conversionNode.targetUnitNode, evaluator: evaluator, settings: settings)
+
+            // Special formatting for the target unit to avoid showing an implicit "1".
+            // E.g., for ".ft", this ensures we format it as "ft", not "1 ft".
+            func formatTargetUnit(node: ExpressionNode) -> String {
+                if let binaryNode = node as? BinaryOpNode,
+                   let numberNode = binaryNode.left as? NumberNode,
+                   numberNode.value == 1.0 {
+                    // This is the case `1 * .unit`, so we only format the unit part.
+                    return formatNode(binaryNode.right, evaluator: evaluator, settings: settings)
+                }
+                // Otherwise (e.g., just `.ft` or a complex expression like `2*.ft`), format normally.
+                return formatNode(node, evaluator: evaluator, settings: settings)
+            }
+            
+            let target = formatTargetUnit(node: conversionNode.targetUnitNode)
             return "\(value) \\rightarrow \(target)"
 
         case let unitNode as UnitAndExponentNode:
@@ -412,3 +426,4 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
+
