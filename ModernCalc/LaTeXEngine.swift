@@ -15,10 +15,10 @@ struct LaTeXEngine {
         let expressionLaTeX = formatExpression(calculation.expression, evaluator: evaluator, settings: settings)
         
         switch calculation.type {
-        case .evaluation, .variableAssignment:
+        case .evaluation:
             let resultLaTeX = formatMathValue(calculation.result, angleMode: angleMode, settings: settings, expression: calculation.expression)
             return "\(expressionLaTeX) = \(resultLaTeX)"
-        case .functionDefinition, .plot:
+        case .variableAssignment, .functionDefinition, .plot:
             return expressionLaTeX
         }
     }
@@ -426,4 +426,3 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
-
