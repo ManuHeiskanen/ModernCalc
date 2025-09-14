@@ -86,6 +86,7 @@ struct UnitStore {
         
         unitMap["deg"] = UnitDefinition(symbol: "deg", dimensions: [:], conversionFactor: .pi / 180.0) // Dimensionless, but convertible
         unitMap["rad"] = UnitDefinition(symbol: "rad", dimensions: [:], conversionFactor: 1.0) // Dimensionless
+        unitMap["sr"] = UnitDefinition(symbol: "sr", dimensions: [:], conversionFactor: 1.0) // Steradian
         
         // Volume
         unitMap["L"] = UnitDefinition(symbol: "L", dimensions: [.meter: 3], conversionFactor: 0.001) // Liter
