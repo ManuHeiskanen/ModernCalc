@@ -136,6 +136,8 @@ struct TextContents {
     static let helpTopics: [HelpTopic] = [
         .init(title: "Quick Start", content: "Enter a mathematical expression to see a live result. Press **Enter** to add it to your history. Use the `ans` variable to reference the last result. Use the arrow keys or your mouse to navigate your history and reuse previous equations, results or plots."),
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
+        // --- NEW: Add a help topic for the new feature ---
+        .init(title: "Units & Conversions", content: "Attach units to numbers using a dot, like `20.m` or `9.8.m/s^2`. You can convert between compatible units using the `in` operator, for example: `1.year in .day`."),
         // FIX: Correct the factual error about linear addition and update the syntax to use colons.
         .init(title: "Uncertainty", content: "Create a value with uncertainty using `uncert(value, random: 0.1, resolution: 0.05)`. Calculations will propagate errors according to standard rules: random (statistical) errors are combined in quadrature, and systematic errors (from resolution and accuracy) are also combined in quadrature.\n- **value**: The nominal value of the measurement.\n- **random** (or **r**): (Type A) The statistical uncertainty, like a standard deviation.\n- **resolution** (or **res**): (Type B) Systematic uncertainty from instrument resolution.\n- **accuracy** (or **a**): (Type B) Systematic uncertainty from instrument accuracy."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %`. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
@@ -180,4 +182,3 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
-

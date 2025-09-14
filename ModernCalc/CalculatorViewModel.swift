@@ -439,6 +439,12 @@ class CalculatorViewModel: ObservableObject {
         switch value {
         case .dimensionless(let d): return formatScalarForDisplay(d)
         case .unitValue(let u):
+            if let preferredUnitSymbol = u.preferredDisplayUnit,
+               let preferredUnitDef = UnitStore.units[preferredUnitSymbol] {
+                let convertedValue = u.value / preferredUnitDef.conversionFactor
+                return "\(formatScalarForDisplay(convertedValue)) \(preferredUnitSymbol)"
+            }
+
             if u.dimensions.isEmpty {
                 return formatScalarForDisplay(u.value)
             }

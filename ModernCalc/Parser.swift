@@ -4,6 +4,11 @@ import Foundation
 protocol ExpressionNode {
     var description: String { get }
 }
+struct ConversionNode: ExpressionNode {
+    let valueNode: ExpressionNode
+    let targetUnitNode: ExpressionNode
+    var description: String { "(\(valueNode.description) in \(targetUnitNode.description))" }
+}
 struct FunctionDefinitionNode: ExpressionNode {
     let name: String, parameterNames: [String], body: ExpressionNode
     var description: String { "\(name)(\(parameterNames.joined(separator: ", "))) := \(body.description)" }
@@ -208,7 +213,10 @@ class Parser {
                     try advance()
                 }
                 
-                if op.rawValue.hasSuffix("@") {
+                if op.rawValue == "in" {
+                    let targetUnit = try parsePrimary()
+                    left = ConversionNode(valueNode: left, targetUnitNode: targetUnit)
+                } else if op.rawValue.hasSuffix("@") {
                      try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for indexed operation"))
                      let index = try parseExpression()
                      try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "argument separator"))
@@ -636,16 +644,17 @@ class Parser {
         try advance()
     }
 
-    private func unaryOperatorPrecedence() -> Int { return 6 }
+    private func unaryOperatorPrecedence() -> Int { return 7 }
     private func implicitMultiplicationPrecedence() -> Int { return 4 }
     private func infixOperatorPrecedence(for token: Token) -> Int? {
         if case .op(let opString) = token.type {
             switch opString {
-            case "±": return 1
-            case "+", "-": return 2
-            case "*", "/", "∠", ".*", "./": return 3
-            case ".=@", ".+@", ".-@", ".*@", "./@": return 4
-            case "^": return 5
+            case "in": return 1
+            case "±": return 2
+            case "+", "-": return 3
+            case "*", "/", "∠", ".*", "./": return 4
+            case ".=@", ".+@", ".-@", ".*@", "./@": return 5
+            case "^": return 6
             default: return nil
             }
         }
@@ -691,3 +700,4 @@ class Parser {
         try advance()
     }
 }
+

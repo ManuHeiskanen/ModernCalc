@@ -47,6 +47,11 @@ struct LaTeXEngine {
         case let numberNode as NumberNode:
             return formatScalar(numberNode.value, settings: settings)
             
+        case let conversionNode as ConversionNode:
+            let valueLaTeX = formatNode(conversionNode.valueNode, evaluator: evaluator, settings: settings)
+            let targetLaTeX = formatNode(conversionNode.targetUnitNode, evaluator: evaluator, settings: settings)
+            return "\(valueLaTeX) \\rightarrow \(targetLaTeX)"
+
         case let unitNode as UnitAndExponentNode:
             var latex = "\\text{\(unitNode.unitSymbol)}"
             if let exponentNode = unitNode.exponent {
@@ -255,6 +260,14 @@ struct LaTeXEngine {
         case .dimensionless(let doubleValue):
             return formatScalar(doubleValue, settings: settings)
         case .unitValue(let u):
+            if let preferredUnitSymbol = u.preferredDisplayUnit,
+               let preferredUnitDef = UnitStore.units[preferredUnitSymbol] {
+                let convertedValue = u.value / preferredUnitDef.conversionFactor
+                let valStr = formatScalar(convertedValue, settings: settings)
+                let unitStr = "\\text{\(preferredUnitSymbol)}"
+                return "\(valStr) \\, \(unitStr)"
+            }
+
             if u.dimensions.isEmpty {
                 return formatScalar(u.value, settings: settings)
             }
@@ -412,11 +425,12 @@ struct LaTeXEngine {
 
     private static func operatorPrecedence(for op: String) -> Int {
         switch op {
-        case "±": return 1
-        case "+", "-": return 2
-        case "*", "/", "×", "÷": return 3
-        case ".=@", ".+@", ".-@", ".*@", "./@": return 4
-        case "^": return 5
+        case "in": return 1
+        case "±": return 2
+        case "+", "-": return 3
+        case "*", "/", "×", "÷": return 4
+        case ".=@", ".+@", ".-@", ".*@", "./@": return 5
+        case "^": return 6
         default: return 0
         }
     }

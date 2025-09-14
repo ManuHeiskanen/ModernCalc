@@ -270,6 +270,9 @@ class Lexer {
             advance()
         }
         let identifierString = String(input[startIndex..<currentIndex])
+        if identifierString == "in" {
+            return Token(type: .op("in"), rawValue: "in")
+        }
         if identifierString == "π" { return Token(type: .identifier("pi"), rawValue: "π") }
         return Token(type: .identifier(identifierString), rawValue: identifierString)
     }
@@ -289,3 +292,4 @@ class Lexer {
         return char
     }
 }
+

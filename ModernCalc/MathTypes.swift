@@ -4,6 +4,7 @@ import Foundation
 struct UnitValue: Equatable, Codable {
     var value: Double
     var dimensions: UnitDimension
+    var preferredDisplayUnit: String? = nil
 
     // A dimensionless value, for convenience.
     static func dimensionless(_ value: Double) -> UnitValue {

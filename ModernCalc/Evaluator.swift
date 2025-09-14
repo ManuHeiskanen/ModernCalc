@@ -12,6 +12,7 @@ enum MathError: Error, CustomStringConvertible {
     case incorrectArgumentCount(function: String, expected: String, found: Int)
     case requiresAtLeastOneArgument(function: String)
     case plotError(reason: String)
+    case unitConversionError(from: String, to: String)
 
     var description: String {
         switch self {
@@ -35,6 +36,7 @@ enum MathError: Error, CustomStringConvertible {
         case .incorrectArgumentCount(let function, let expected, let found): return "Error: Function '\(function)' expects \(expected) argument(s), but received \(found)."
         case .requiresAtLeastOneArgument(let function): return "Error: Function '\(function)' requires at least one argument."
         case .plotError(let reason): return "Plot Error: \(reason)."
+        case .unitConversionError(let from, let to): return "Error: Cannot convert from \(from) to \(to). Units must have the same physical dimension."
         }
     }
 }
@@ -91,6 +93,35 @@ struct Evaluator {
         case let numberNode as NumberNode:
             return (.dimensionless(numberNode.value), usedAngle)
         
+        case let conversionNode as ConversionNode:
+            let (sourceResult, sourceUsedAngle) = try _evaluateSingle(node: conversionNode.valueNode, variables: &variables, functions: &functions, angleMode: angleMode)
+            
+            guard let targetUnitNode = conversionNode.targetUnitNode as? BinaryOpNode,
+                  let unitAndExpNode = targetUnitNode.right as? UnitAndExponentNode,
+                  let numberNode = targetUnitNode.left as? NumberNode,
+                  numberNode.value == 1.0,
+                  unitAndExpNode.exponent == nil else {
+                throw MathError.typeMismatch(expected: "a simple unit (e.g., .cm)", found: "a complex expression")
+            }
+            
+            let targetUnitSymbol = unitAndExpNode.unitSymbol
+            
+            guard let targetUnitDef = UnitStore.units[targetUnitSymbol] else {
+                throw MathError.unknownConstant(name: targetUnitSymbol)
+            }
+
+            guard case .unitValue(var sourceUnitValue) = sourceResult else {
+                throw MathError.typeMismatch(expected: "Value with units", found: sourceResult.typeName)
+            }
+
+            guard sourceUnitValue.dimensions == targetUnitDef.dimensions else {
+                throw MathError.dimensionMismatch(reason: "Cannot convert between incompatible units")
+            }
+
+            sourceUnitValue.preferredDisplayUnit = targetUnitSymbol
+            
+            return (.unitValue(sourceUnitValue), sourceUsedAngle)
+
         // FIX: Added a new case to handle the unit-with-exponent node.
         case let unitNode as UnitAndExponentNode:
             guard let unitDef = UnitStore.units[unitNode.unitSymbol] else {
@@ -353,3 +384,4 @@ struct Evaluator {
         }
     }
 }
+
