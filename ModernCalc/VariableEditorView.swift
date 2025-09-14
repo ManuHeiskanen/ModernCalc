@@ -87,7 +87,7 @@ struct VariableEditorView: View {
     private func groupFunctions(_ functions: [BuiltinFunction]) -> [FunctionCategory] {
         // This dictionary defines the keywords that assign a function to a category.
         let categoryKeywords: [String: [String]] = [
-            "Calculus": ["derivative", "grad", "integral"],
+            "Calculus": ["derivative", "grad", "integral", "solve"],
             "Complex Numbers": ["abs", "arg", "conj", "imag", "polar", "real"],
             "Data Generation & IO": ["importcsv", "linspace", "random", "randm", "randv", "range"],
             "Geometry": ["angle", "area_circle", "area_rect", "area_tri", "circum_circle", "hypot", "side", "unit", "vol_cone", "vol_cube", "vol_cylinder", "vol_sphere"],
