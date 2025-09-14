@@ -234,24 +234,42 @@ class Parser {
     }
 
     private func parsePrimary() throws -> ExpressionNode {
-        var node = try parsePrefix()
+        var node: ExpressionNode
         
+        // Case 1: Standalone unit, e.g., ".s^2". The evaluator will treat this as having a value of 1.
         if let token = peek(), case .unit(let unitSymbol) = token.type {
-            try advance()
-
+            try advance() // Consume the unit token.
+            
             var exponentNode: ExpressionNode? = nil
             if let opToken = peek(), opToken.type == .op("^") {
                 try advance()
-                exponentNode = try parseExpression(currentPrecedence: 8) // High precedence for unit exponents
+                exponentNode = try parseExpression(currentPrecedence: 8) // High precedence for exponents
             }
-
-            let unitPart = UnitAndExponentNode(unitSymbol: unitSymbol, exponent: exponentNode)
             
-            node = BinaryOpNode(
-                op: Token(type: .op("*"), rawValue: "*"),
-                left: node,
-                right: unitPart
-            )
+            node = UnitAndExponentNode(unitSymbol: unitSymbol, exponent: exponentNode)
+        
+        // Case 2: A regular primary expression (number, variable, parenthesized expression).
+        } else {
+            node = try parsePrefix()
+            
+            // After parsing a value, check if a unit is attached to it (e.g., the ".m" in "5.m").
+            if let token = peek(), case .unit(let unitSymbol) = token.type {
+                try advance()
+                
+                var exponentNode: ExpressionNode? = nil
+                if let opToken = peek(), opToken.type == .op("^") {
+                    try advance()
+                    exponentNode = try parseExpression(currentPrecedence: 8)
+                }
+                
+                let unitPart = UnitAndExponentNode(unitSymbol: unitSymbol, exponent: exponentNode)
+                
+                node = BinaryOpNode(
+                    op: Token(type: .op("*"), rawValue: "*"),
+                    left: node,
+                    right: unitPart
+                )
+            }
         }
         
         return try parsePostfix(left: node)
@@ -267,10 +285,6 @@ class Parser {
     }
 
     private func parsePrefix() throws -> ExpressionNode {
-        if let token = peek(), case .unit = token.type {
-            return NumberNode(value: 1.0)
-        }
-        
         let token = try advance()
         switch token.type {
         case .number(let value): return NumberNode(value: value)
@@ -692,3 +706,4 @@ class Parser {
         try advance()
     }
 }
+
