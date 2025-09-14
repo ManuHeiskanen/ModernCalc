@@ -202,7 +202,6 @@ class Lexer {
         }
         
         // Now find the actual unit symbol
-        let unitStartOffset = offset
         while let char = peek(offset: offset), char.isLetter || char == "μ" {
             potentialUnit.append(char)
             offset += 1
