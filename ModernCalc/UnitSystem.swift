@@ -34,7 +34,6 @@ struct UnitDefinition {
 // This acts as a central database for unit conversions and dimensional analysis.
 struct UnitStore {
     
-    /// FIX: Added the missing 'baseUnitSymbols' dictionary.
     /// Maps a BaseUnit enum to its standard SI symbol string. This is required by the LaTeXEngine
     /// to correctly format unit dimensions.
     static let baseUnitSymbols: [BaseUnit: String] = [
@@ -90,7 +89,7 @@ struct UnitStore {
         
         
         // Common Non-SI Units
-        unitMap["Wh"] = UnitDefinition(symbol: "Wh", dimensions: [.kilogram: 1, .meter: 2, .second: -2], conversionFactor: 1.0) // Watt Hour
+        unitMap["Wh"] = UnitDefinition(symbol: "Wh", dimensions: [.kilogram: 1, .meter: 2, .second: -2], conversionFactor: 3600.0) // Watt Hour
         unitMap["min"] = UnitDefinition(symbol: "min", dimensions: [.second: 1], conversionFactor: 60.0) // Minute
         unitMap["h"] = UnitDefinition(symbol: "h", dimensions: [.second: 1], conversionFactor: 3600.0) // Hour
         unitMap["day"] = UnitDefinition(symbol: "day", dimensions: [.second: 1], conversionFactor: 86400.0) // Day
@@ -106,7 +105,6 @@ struct UnitStore {
         unitMap["L"] = UnitDefinition(symbol: "L", dimensions: [.meter: 3], conversionFactor: 0.001) // Liter
         
         // Area
-        unitMap["m^2"] = UnitDefinition(symbol: "m^2", dimensions: [.meter: 2], conversionFactor: 1.0) // Square meter
         unitMap["ca"] = UnitDefinition(symbol: "ca", dimensions: [.meter: 2], conversionFactor: 1.0) // Centiare
         unitMap["da"] = UnitDefinition(symbol: "da", dimensions: [.meter: 2], conversionFactor: 10.0) // Deciare
         unitMap["a"] = UnitDefinition(symbol: "a", dimensions: [.meter: 2], conversionFactor: 100.0) // Are
@@ -182,7 +180,10 @@ struct UnitStore {
         for (prefix, factor) in prefixes {
             for symbol in baseSymbols {
                 if let baseUnit = unitMap[symbol] {
+                    // Prevent re-defining base 'm' for milli
                     let newSymbol = prefix + symbol
+                    if newSymbol == "m" { continue }
+                    
                     let newFactor = baseUnit.conversionFactor * factor
                     unitMap[newSymbol] = UnitDefinition(symbol: newSymbol, dimensions: baseUnit.dimensions, conversionFactor: newFactor)
                 }

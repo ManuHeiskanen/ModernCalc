@@ -199,7 +199,6 @@ class CalculatorViewModel: ObservableObject {
                 else if case .complexMatrix(let cm) = value, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
 
                 if isResultTooLargeForPreview {
-                    // FIX: Pass the 'expression' string to the formatter call.
                     switch value {
                     case .vector(let v): resultLaTeX = "\\text{\(v.dimension)-element Vector}"
                     case .matrix(let m): resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
@@ -212,10 +211,8 @@ class CalculatorViewModel: ObservableObject {
                         let liveSettings = self.settings.makeTemporaryCopy()
                         liveSettings.displayMode = .fixed
                         liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
-                        // FIX: Pass the 'expression' string to the formatter call.
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings, expression: expression)
                     } else {
-                        // FIX: Pass the 'expression' string to the formatter call.
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings, expression: expression)
                     }
                 }
@@ -562,14 +559,14 @@ class CalculatorViewModel: ObservableObject {
             return nil
         }
         
-        // Special case: The user prefers to see volume in m^3 rather than converting to L.
-        // This prevents the automatic conversion for results that are already in base SI volume units.
-        if dimensions == [.meter: 3] {
+        // Special cases: The user prefers to see area/volume in base SI units (m^2, m^3)
+        // by default. Returning nil prevents automatic conversion to other units like L or ha.
+        if dimensions == [.meter: 3] || dimensions == [.meter: 2] {
             return nil
         }
         
         // FIX: Add base SI units to the preferred list to ensure they are chosen correctly.
-        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "m^2", "g", "m^3"]
+        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "g"]
 
         var potentialMatches: [UnitDefinition] = []
         for (_, unitDef) in UnitStore.units {

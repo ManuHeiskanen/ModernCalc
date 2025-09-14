@@ -16,7 +16,6 @@ struct LaTeXEngine {
         
         switch calculation.type {
         case .evaluation, .variableAssignment:
-            // FIX: Pass the expression string from the calculation object to provide context for boolean formatting.
             let resultLaTeX = formatMathValue(calculation.result, angleMode: angleMode, settings: settings, expression: calculation.expression)
             return "\(expressionLaTeX) = \(resultLaTeX)"
         case .functionDefinition, .plot:
@@ -187,17 +186,21 @@ struct LaTeXEngine {
     // MARK: - MathValue Formatting
 
     /// Formats a final calculated `MathValue` into a LaTeX string.
-    /// FIX: Changed the 'calculation' parameter to an optional 'expression' string to support live previews.
     static func formatMathValue(_ value: MathValue, angleMode: AngleMode, settings: UserSettings, expression: String? = nil) -> String {
         switch value {
         case .dimensionless(let doubleValue):
-            // FIX: Check the passed-in expression string, if it exists, for boolean context.
             if let expr = expression, isBoolean(expression: expr) {
                 if doubleValue == 1.0 { return "\\text{true}" }
                 if doubleValue == 0.0 { return "\\text{false}" }
             }
             return formatScalar(doubleValue, settings: settings)
         case .unitValue(let u):
+            if let preferredUnitSymbol = u.preferredDisplayUnit,
+               let preferredUnitDef = UnitStore.units[preferredUnitSymbol] {
+                let convertedValue = u.value / preferredUnitDef.conversionFactor
+                return "\(formatScalar(convertedValue, settings: settings)) \\, \(formatUnitSymbol(preferredUnitSymbol))"
+            }
+            
             if u.dimensions.isEmpty { return formatScalar(u.value, settings: settings) }
             
             if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
@@ -275,15 +278,36 @@ struct LaTeXEngine {
     }
     
     private static func findBestUnitFor(dimensions: UnitDimension) -> UnitDefinition? {
-        let preferredSymbols = ["N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar"]
-        let potentialMatches = UnitStore.units.values.filter { $0.dimensions == dimensions }
-        if potentialMatches.isEmpty { return nil }
+        if dimensions.isEmpty {
+            return nil
+        }
+        
+        // Special cases: The user prefers to see area/volume in base SI units (m^2, m^3)
+        // by default. Returning nil prevents automatic conversion to other units like L or ha.
+        if dimensions == [.meter: 3] || dimensions == [.meter: 2] {
+            return nil
+        }
+        
+        let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "g"]
+
+        var potentialMatches: [UnitDefinition] = []
+        for (_, unitDef) in UnitStore.units {
+            if unitDef.dimensions == dimensions {
+                potentialMatches.append(unitDef)
+            }
+        }
+
+        if potentialMatches.isEmpty {
+            return nil
+        }
 
         for symbol in preferredSymbols {
             if let match = potentialMatches.first(where: { $0.symbol == symbol }) {
                 return match
             }
         }
+        
+        // Fallback to the shortest symbol if no preferred match is found
         return potentialMatches.min(by: { $0.symbol.count < $1.symbol.count })
     }
 
@@ -388,4 +412,3 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
-
