@@ -491,6 +491,15 @@ class CalculatorViewModel: ObservableObject {
         switch value {
         case .dimensionless(let d): return formatScalarForParsing(d)
         case .unitValue(let u):
+            if let preferredUnitSymbol = u.preferredDisplayUnit,
+               let preferredUnitDef = UnitStore.units[preferredUnitSymbol],
+               u.dimensions == preferredUnitDef.dimensions {
+                
+                let convertedValue = u.value / preferredUnitDef.conversionFactor
+                let valStr = formatScalarForParsing(convertedValue)
+                return "\(valStr).\(preferredUnitSymbol)"
+            }
+
             let valStr = formatScalarForParsing(u.value)
             let unitStr = formatDimensionsForParsing(u.dimensions)
             if unitStr.isEmpty { return valStr }
@@ -782,4 +791,5 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
 
