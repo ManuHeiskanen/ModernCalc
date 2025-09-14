@@ -25,8 +25,6 @@ struct NumberNode: ExpressionNode {
     let value: Double
     var description: String { "\(value)" }
 }
-// NEW: An AST node representing a unit with an optional exponent, like .m or .m^2.
-// This node does NOT contain the numeric value, only the unit information.
 struct UnitAndExponentNode: ExpressionNode {
     let unitSymbol: String
     let exponent: ExpressionNode?
@@ -238,25 +236,17 @@ class Parser {
     private func parsePrimary() throws -> ExpressionNode {
         var node = try parsePrefix()
         
-        // FIX: The logic for unit attachment has been completely reworked.
-        // Instead of binding the number and unit together here, we now treat the unit
-        // as a separate entity that is implicitly multiplied by the number. This
-        // correctly handles operator precedence for exponents.
         if let token = peek(), case .unit(let unitSymbol) = token.type {
             try advance()
 
             var exponentNode: ExpressionNode? = nil
-            // Check for an exponent immediately following the unit symbol.
             if let opToken = peek(), opToken.type == .op("^") {
-                try advance() // consume '^'
-                // The exponent has a higher precedence than multiplication, so we parse it first.
-                exponentNode = try parseExpression(currentPrecedence: 5)
+                try advance()
+                exponentNode = try parseExpression(currentPrecedence: 8) // High precedence for unit exponents
             }
 
-            // Create a node for just the unit part (e.g., .m^2).
             let unitPart = UnitAndExponentNode(unitSymbol: unitSymbol, exponent: exponentNode)
             
-            // Create a multiplication node to combine the number and the unit part.
             node = BinaryOpNode(
                 op: Token(type: .op("*"), rawValue: "*"),
                 left: node,
@@ -277,7 +267,6 @@ class Parser {
     }
 
     private func parsePrefix() throws -> ExpressionNode {
-        // FIX: If the next token is a unit, implicitly prepend a "1" to allow expressions like "/ .s^2".
         if let token = peek(), case .unit = token.type {
             return NumberNode(value: 1.0)
         }
@@ -313,7 +302,7 @@ class Parser {
             } else {
                 return ConstantNode(name: name)
             }
-        case .op(let opString) where opString == "-" || opString == "+":
+        case .op(let opString) where ["-", "+", "~"].contains(opString): // Added ~
             let child = try parseExpression(currentPrecedence: unaryOperatorPrecedence())
             return UnaryOpNode(op: token, child: child)
         case .paren("("):
@@ -644,17 +633,20 @@ class Parser {
         try advance()
     }
 
-    private func unaryOperatorPrecedence() -> Int { return 7 }
-    private func implicitMultiplicationPrecedence() -> Int { return 4 }
+    private func unaryOperatorPrecedence() -> Int { return 9 }
+    private func implicitMultiplicationPrecedence() -> Int { return 6 }
     private func infixOperatorPrecedence(for token: Token) -> Int? {
         if case .op(let opString) = token.type {
             switch opString {
-            case "in": return 1
-            case "±": return 2
-            case "+", "-": return 3
-            case "*", "/", "∠", ".*", "./": return 4
-            case ".=@", ".+@", ".-@", ".*@", "./@": return 5
-            case "^": return 6
+            case "||": return 1
+            case "&&": return 2
+            case "==", "!=", ">", "<", ">=", "<=": return 3
+            case "in": return 4
+            case "±": return 4 // Same as addition
+            case "+", "-": return 5
+            case "*", "/", "∠", ".*", "./": return 6
+            case ".=@", ".+@", ".-@", ".*@", "./@": return 7
+            case "^": return 8
             default: return nil
             }
         }
@@ -700,4 +692,3 @@ class Parser {
         try advance()
     }
 }
-

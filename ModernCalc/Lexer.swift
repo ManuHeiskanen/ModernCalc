@@ -77,9 +77,57 @@ class Lexer {
             switch char {
             case "\"":
                 currentToken = lexString()
-            case "+", "-", "%", "^", "=":
+            case "+", "-", "%", "^", "~": // Added ~
                 advance()
                 currentToken = Token(type: .op(String(char)), rawValue: String(char))
+            case "=":
+                advance()
+                if peek() == "=" {
+                    advance()
+                    currentToken = Token(type: .op("=="), rawValue: "==")
+                } else {
+                    currentToken = Token(type: .op("="), rawValue: "=")
+                }
+            case "!":
+                advance()
+                if peek() == "=" {
+                    advance()
+                    currentToken = Token(type: .op("!="), rawValue: "!=")
+                } else {
+                    currentToken = Token(type: .op("!"), rawValue: "!")
+                }
+            case ">":
+                advance()
+                if peek() == "=" {
+                    advance()
+                    currentToken = Token(type: .op(">="), rawValue: ">=")
+                } else {
+                    currentToken = Token(type: .op(">"), rawValue: ">")
+                }
+            case "<":
+                advance()
+                if peek() == "=" {
+                    advance()
+                    currentToken = Token(type: .op("<="), rawValue: "<=")
+                } else {
+                    currentToken = Token(type: .op("<"), rawValue: "<")
+                }
+            case "&":
+                advance()
+                if peek() == "&" {
+                    advance()
+                    currentToken = Token(type: .op("&&"), rawValue: "&&")
+                } else {
+                    currentToken = Token(type: .unknown("&"), rawValue: "&")
+                }
+            case "|":
+                advance()
+                if peek() == "|" {
+                    advance()
+                    currentToken = Token(type: .op("||"), rawValue: "||")
+                } else {
+                    currentToken = Token(type: .unknown("|"), rawValue: "|")
+                }
             case "*":
                 advance()
                 currentToken = Token(type: .op("*"), rawValue: "*")
@@ -101,9 +149,6 @@ class Lexer {
             case "∠":
                 advance()
                 currentToken = Token(type: .op("∠"), rawValue: "∠")
-            case "!":
-                advance()
-                currentToken = Token(type: .op("!"), rawValue: "!")
             case "'":
                 advance()
                 currentToken = Token(type: .op("'"), rawValue: "'")
@@ -115,16 +160,11 @@ class Lexer {
                     currentToken = Token(type: .unknown(advance()!), rawValue: ",")
                 }
             case ".":
-                // Try to parse as a unit first. This is more flexible and allows for
-                // expressions like "1/.s" (1 / 1 second).
                 let (unitSymbol, charsConsumed) = peekAheadForUnit()
                 if !unitSymbol.isEmpty {
-                    // It's a valid unit symbol.
                     for _ in 0..<charsConsumed { advance() }
                     currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
                 } else {
-                    // If it's not a unit, it could be a decimal separator for function arguments
-                    // or a dot operator (like .* for element-wise multiplication).
                     if argumentSeparator == "." {
                         advance()
                         currentToken = Token(type: .separator("."), rawValue: ".")
@@ -193,27 +233,21 @@ class Lexer {
         var potentialUnit = ""
         var offset = 0
         
-        // Start by consuming the dot
         offset += 1
         
-        // Skip leading whitespace after the dot
         while let char = peek(offset: offset), char.isWhitespace {
             offset += 1
         }
         
-        // Now find the actual unit symbol
         while let char = peek(offset: offset), char.isLetter || char == "μ" {
             potentialUnit.append(char)
             offset += 1
         }
         
-        // If we found a valid unit in our store, return it and the total number of characters
-        // we looked past (dot + spaces + symbol length).
         if UnitStore.units[potentialUnit] != nil {
             return (potentialUnit, offset)
         }
         
-        // Otherwise, it wasn't a valid unit.
         return ("", 0)
     }
 
@@ -225,14 +259,10 @@ class Lexer {
             if char.isNumber {
                 advance()
             } else if char == decimalSeparator.character && !hasDecimal {
-                // MODIFICATION: Only consume the dot if it's followed by another number.
-                // This prevents the lexer from consuming "1." in "1.Hz" as a single number,
-                // allowing the dot to be correctly identified as a unit separator.
                 if peek(offset: 1)?.isNumber ?? false {
                     hasDecimal = true
                     advance()
                 } else {
-                    // This dot is likely a unit separator or an operator, so stop parsing the number.
                     break
                 }
             } else {
@@ -292,4 +322,3 @@ class Lexer {
         return char
     }
 }
-

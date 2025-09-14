@@ -12,7 +12,6 @@ extension Evaluator {
         "mp": 1.67262192369e-27, "mn": 1.67492749804e-27, "e0": 1.602176634e-19, "NA": 6.02214076e23,
         "R": 8.314462618, "kB": 1.380649e-23, "F": 96485.33212, "Rinf": 10973731.568160, "σ": 5.670374419e-8,
         "b": 2.897771955e-3, "atm": 101325, "Vm": 22.41396954e-3,
-        // New Constants
         "amu": 1.66053906660e-27, "RE": 6.371e6, "ME": 5.972e24, "c0": 343,
         "μB": 9.2740100783e-24, "μN": 5.0507837461e-27
     ]
@@ -29,7 +28,6 @@ extension Evaluator {
         "ln": log, "lg": log10, "log": log10,
         "sinh": sinh, "cosh": cosh, "tanh": tanh,
         "asinh": asinh, "acosh": acosh, "atanh": atanh,
-        // Hyperbolic Reciprocal Functions
         "sech": { 1.0 / cosh($0) },
         "csch": { 1.0 / sinh($0) },
         "coth": { 1.0 / tanh($0) },
@@ -607,7 +605,6 @@ extension Evaluator {
         
         if let twoArgFunc = Evaluator.twoArgumentFunctions[node.name] {
             guard node.arguments.count == 2 else {
-                // Special case for log(number) with an implicit base of 10
                 if node.name == "log" && node.arguments.count == 1 {
                     let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
                     if case .dimensionless(let s) = arg {
@@ -688,6 +685,9 @@ extension Evaluator {
             case .uncertain(let u): return .uncertain(-u)
             default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
             }
+        case "~": // Logical NOT
+            let s = try value.asScalar()
+            return .dimensionless(s == 0 ? 1.0 : 0.0)
         case "'":
             switch value {
             case .matrix(let m): return .matrix(m.transpose())
@@ -828,13 +828,15 @@ extension Evaluator {
         case "/": guard r != 0 else { throw MathError.divisionByZero }; return l / r
         case "%": guard r != 0 else { throw MathError.divisionByZero }; return l.truncatingRemainder(dividingBy: r)
         case "^": return pow(l, r)
-        // New comparison operators
+        // Comparison and Logical Operators
         case ">": return l > r ? 1.0 : 0.0
         case "<": return l < r ? 1.0 : 0.0
         case ">=": return l >= r ? 1.0 : 0.0
         case "<=": return l <= r ? 1.0 : 0.0
         case "==": return l == r ? 1.0 : 0.0
         case "!=": return l != r ? 1.0 : 0.0
+        case "&&": return (l != 0 && r != 0) ? 1.0 : 0.0
+        case "||": return (l != 0 || r != 0) ? 1.0 : 0.0
         default: throw MathError.unknownOperator(op: op)
         }
     }
@@ -911,7 +913,6 @@ extension Evaluator {
     }
 }
 
-/// Helper function to extract all scalar values from a MathValue.
 fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
     switch data {
     case .dimensionless(let s):
@@ -927,7 +928,6 @@ fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
     }
 }
 
-/// Helper for variadic functions that can accept a list of scalars or a single collection.
 fileprivate func extractDoublesFromVariadicArgs(_ args: [MathValue]) throws -> [Double] {
     if args.count == 1 {
         return try extractDoubles(from: args[0])
@@ -940,9 +940,7 @@ fileprivate func extractDoublesFromVariadicArgs(_ args: [MathValue]) throws -> [
     }
 }
 
-/// Helper function for variadic statistical functions like sum(), avg(), etc.
 fileprivate func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
-    // This is a new, unit-aware implementation
     let (values, finalDimension) = try extractAndConvertUnitValues(from: args)
     guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Statistical function") }
     let v = Vector(values: values)
@@ -955,12 +953,10 @@ fileprivate func performStatisticalOperation(args: [MathValue], on operation: (V
     }
 }
 
-/// Extracts and validates values for statistical functions, ensuring unit consistency.
 fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (values: [Double], dimensions: UnitDimension) {
     var allValues: [Double] = []
     var commonDimension: UnitDimension? = nil
 
-    // Inner function to process a single MathValue, checking for unit consistency.
     func processValue(_ val: MathValue) throws {
         switch val {
         case .dimensionless(let d):
@@ -971,11 +967,11 @@ fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (
             if commonDimension == nil { commonDimension = u.dimensions }
             if commonDimension != u.dimensions { throw MathError.dimensionMismatch(reason: "All values must have the same units.") }
             allValues.append(u.value)
-        case .vector(let v): // Vectors are currently always dimensionless
+        case .vector(let v):
             if commonDimension == nil { commonDimension = [:] }
             if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
             allValues.append(contentsOf: v.values)
-        case .matrix(let m): // Matrices are currently always dimensionless
+        case .matrix(let m):
             if commonDimension == nil { commonDimension = [:] }
             if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
             allValues.append(contentsOf: m.values)
@@ -985,10 +981,8 @@ fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (
     }
 
     if args.count == 1 {
-        // If there's only one argument, it could be a vector or matrix itself.
         try processValue(args[0])
     } else {
-        // Otherwise, process each argument as a separate value.
         for arg in args {
             try processValue(arg)
         }
@@ -998,7 +992,6 @@ fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (
 }
 
 
-/// Helper function for gcd, using Euclidean algorithm.
 fileprivate func performGcd(_ a: Double, _ b: Double) -> Double {
     let r = a.truncatingRemainder(dividingBy: b)
     if r != 0 {
@@ -1068,18 +1061,14 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
     }
 }
 
-// MARK: - New Algorithms
-
-/// Calculates the probability density function (PDF) for the normal distribution.
 fileprivate func normalDistribution(x: Double, mean: Double, stddev: Double) -> Double {
-    guard stddev > 0 else { return Double.nan } // Or throw an error
+    guard stddev > 0 else { return Double.nan }
     let variance = pow(stddev, 2)
     let coefficient = 1.0 / sqrt(2.0 * .pi * variance)
     let exponent = -pow(x - mean, 2) / (2.0 * variance)
     return coefficient * exp(exponent)
 }
 
-/// Calculates the probability mass function (PMF) for the binomial distribution.
 fileprivate func binomialDistribution(k: Double, n: Double, p: Double) throws -> Double {
     guard k >= 0, n >= 0, p >= 0, p <= 1,
           k.truncatingRemainder(dividingBy: 1) == 0,
@@ -1091,7 +1080,6 @@ fileprivate func binomialDistribution(k: Double, n: Double, p: Double) throws ->
     return combinations_nk * pow(p, k) * pow(1 - p, n - k)
 }
 
-/// Checks if an integer is prime using optimized trial division.
 fileprivate func performIsPrime(_ n: Double) throws -> Bool {
     guard n.truncatingRemainder(dividingBy: 1) == 0 else {
         throw MathError.unsupportedOperation(op: "isprime", typeA: "argument must be an integer", typeB: nil)
@@ -1111,7 +1099,6 @@ fileprivate func performIsPrime(_ n: Double) throws -> Bool {
     return true
 }
 
-/// Returns a vector of prime factors of an integer.
 fileprivate func performFactor(_ n: Double) throws -> [Double] {
     guard n.truncatingRemainder(dividingBy: 1) == 0 else {
         throw MathError.unsupportedOperation(op: "factor", typeA: "argument must be an integer", typeB: nil)
@@ -1142,7 +1129,6 @@ fileprivate func performFactor(_ n: Double) throws -> [Double] {
     return factors
 }
 
-/// Helper for percentile and quartile functions
 fileprivate func performPercentile(values: [Double], p: Double) -> Double {
     if p == 100 { return values.last! }
     
