@@ -105,30 +105,46 @@ struct TextContents {
         .init(name: "vol_cone", signature: "vol_cone(r, h)", description: "Volume of a cone."),
         .init(name: "vol_cube", signature: "vol_cube(s)", description: "Volume of a cube."),
         .init(name: "vol_cylinder", signature: "vol_cylinder(r, h)", description: "Volume of a cylinder."),
-        .init(name: "vol_sphere", signature: "vol_sphere(r)", description: "Volume of a sphere.")
+        .init(name: "vol_sphere", signature: "vol_sphere(r)", description: "Volume of a sphere."),
+        
+        // New Functions
+        .init(name: "sec", signature: "sec(angle)", description: "Calculates the secant."),
+        .init(name: "csc", signature: "csc(angle)", description: "Calculates the cosecant."),
+        .init(name: "cot", signature: "cot(angle)", description: "Calculates the cotangent."),
+        .init(name: "asec", signature: "asec(value)", description: "Calculates the inverse secant."),
+        .init(name: "acsc", signature: "acsc(value)", description: "Calculates the inverse cosecant."),
+        .init(name: "acot", signature: "acot(value)", description: "Calculates the inverse cotangent."),
+        .init(name: "sech", signature: "sech(value)", description: "Calculates the hyperbolic secant."),
+        .init(name: "csch", signature: "csch(value)", description: "Calculates the hyperbolic cosecant."),
+        .init(name: "coth", signature: "coth(value)", description: "Calculates the hyperbolic cotangent."),
+        .init(name: "asech", signature: "asech(value)", description: "Calculates the inverse hyperbolic secant."),
+        .init(name: "acsch", signature: "acsch(value)", description: "Calculates the inverse hyperbolic cosecant."),
+        .init(name: "acoth", signature: "acoth(value)", description: "Calculates the inverse hyperbolic cotangent."),
+        .init(name: "deg2rad", signature: "deg2rad(degrees)", description: "Converts an angle from degrees to radians."),
+        .init(name: "rad2deg", signature: "rad2deg(radians)", description: "Converts an angle from radians to degrees."),
+        .init(name: "sign", signature: "sign(value)", description: "Returns -1 for negative, 1 for positive, 0 for zero.")
     ]
     
     static let physicalConstants: [PhysicalConstant] = [
+        .init(symbol: "amu", name: "Atomic Mass Unit", value: 1.66053906660e-27),
         .init(symbol: "atm", name: "Standard atmosphere", value: 101325),
         .init(symbol: "b", name: "Wien's displacement", value: 2.897771955e-3),
         .init(symbol: "c", name: "Speed of light", value: 299792458),
-        .init(symbol: "e", name: "Euler's number", value: M_E),
-        .init(symbol: "e0", name: "Elementary charge", value: 1.602176634e-19),
-        .init(symbol: "F", name: "Faraday constant", value: 96485.33212),
-        .init(symbol: "g", name: "Standard gravity", value: 9.80665),
-        .init(symbol: "G", name: "Gravitational constant", value: 6.67430e-11),
-        .init(symbol: "h", name: "Planck constant", value: 6.62607015e-34),
-        .init(symbol: "ħ", name: "Reduced Planck constant", value: 1.054571817e-34),
+        .init(symbol: "c0", name: "Speed of sound (STP)", value: 343),
         .init(symbol: "kB", name: "Boltzmann constant", value: 1.380649e-23),
         .init(symbol: "me", name: "Electron mass", value: 9.1093837015e-31),
         .init(symbol: "mn", name: "Neutron mass", value: 1.67492749804e-27),
         .init(symbol: "mp", name: "Proton mass", value: 1.67262192369e-27),
+        .init(symbol: "ME", name: "Earth mass", value: 5.972e24),
         .init(symbol: "NA", name: "Avogadros constant", value: 6.02214076e23),
         .init(symbol: "R", name: "Gas constant", value: 8.314462618),
         .init(symbol: "Rinf", name: "Rydberg constant", value: 10973731.568160),
+        .init(symbol: "RE", name: "Earth radius", value: 6.371e6),
         .init(symbol: "Vm", name: "Molar volume (STP)", value: 22.41396954e-3),
         .init(symbol: "ε0", name: "Vacuum permittivity", value: 8.8541878128e-12),
         .init(symbol: "μ0", name: "Vacuum permeability", value: 1.25663706212e-6),
+        .init(symbol: "μB", name: "Bohr magneton", value: 9.2740100783e-24),
+        .init(symbol: "μN", name: "Nuclear magneton", value: 5.0507837461e-27),
         .init(symbol: "π", name: "Pi", value: Double.pi),
         .init(symbol: "σ", name: "Stefan-Boltzmann", value: 5.670374419e-8)
     ]
@@ -182,3 +198,4 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
+

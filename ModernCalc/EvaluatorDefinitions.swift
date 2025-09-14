@@ -11,7 +11,10 @@ extension Evaluator {
         "g": 9.80665, "G": 6.67430e-11, "h": 6.62607015e-34, "ħ": 1.054571817e-34, "me": 9.1093837015e-31,
         "mp": 1.67262192369e-27, "mn": 1.67492749804e-27, "e0": 1.602176634e-19, "NA": 6.02214076e23,
         "R": 8.314462618, "kB": 1.380649e-23, "F": 96485.33212, "Rinf": 10973731.568160, "σ": 5.670374419e-8,
-        "b": 2.897771955e-3, "atm": 101325, "Vm": 22.41396954e-3
+        "b": 2.897771955e-3, "atm": 101325, "Vm": 22.41396954e-3,
+        // New Constants
+        "amu": 1.66053906660e-27, "RE": 6.371e6, "ME": 5.972e24, "c0": 343,
+        "μB": 9.2740100783e-24, "μN": 5.0507837461e-27
     ]
     
     static let siPrefixes: [String: Double] = [
@@ -25,7 +28,14 @@ extension Evaluator {
     static let dimensionlessScalarFunctions: [String: (Double) -> Double] = [
         "ln": log, "lg": log10, "log": log10,
         "sinh": sinh, "cosh": cosh, "tanh": tanh,
-        "asinh": asinh, "acosh": acosh, "atanh": atanh
+        "asinh": asinh, "acosh": acosh, "atanh": atanh,
+        // Hyperbolic Reciprocal Functions
+        "sech": { 1.0 / cosh($0) },
+        "csch": { 1.0 / sinh($0) },
+        "coth": { 1.0 / tanh($0) },
+        "asech": { acosh(1.0 / $0) },
+        "acsch": { asinh(1.0 / $0) },
+        "acoth": { atanh(1.0 / $0) },
     ]
     
     static let variadicFunctions: [String: ([MathValue]) throws -> MathValue] = [
@@ -175,6 +185,12 @@ extension Evaluator {
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, or UncertainValue", found: arg.typeName)
             }
         },
+        "sign": { arg in
+            let s = try arg.asScalar()
+            if s > 0 { return .dimensionless(1) }
+            else if s < 0 { return .dimensionless(-1) }
+            else { return .dimensionless(0) }
+        },
         "polar": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .polar(c) },
         "sqrt": { arg in
             if case .dimensionless(let s) = arg { return s < 0 ? .complex(Complex(real: s, imaginary: 0).sqrt()) : .dimensionless(sqrt(s)) }
@@ -236,7 +252,9 @@ extension Evaluator {
             let values = try extractDoubles(from: arg)
             let uniqueValues = Array(Set(values)).sorted()
             return .vector(Vector(values: uniqueValues))
-        }
+        },
+        "deg2rad": { arg in let s = try arg.asScalar(); return .dimensionless(s * .pi / 180.0) },
+        "rad2deg": { arg in let s = try arg.asScalar(); return .dimensionless(s * 180.0 / .pi) }
     ]
     
     static let angleAwareFunctions: [String: ([MathValue], AngleMode) throws -> MathValue] = [
@@ -291,9 +309,15 @@ extension Evaluator {
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(tan(valRad))
         },
+        "sec": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / cos(valRad)) },
+        "csc": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / sin(valRad)) },
+        "cot": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / tan(valRad)) },
         "asin": { args, mode in let a = asin(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "acos": { args, mode in let a = acos(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "atan": { args, mode in let a = atan(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "asec": { args, mode in let a = acos(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "acsc": { args, mode in let a = asin(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "acot": { args, mode in let a = atan(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "atan2": { args, mode in let a = Foundation.atan2(try args[0].asScalar(), try args[1].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "arg": { args, mode in
             guard args.count == 1, case .complex(let c) = args[0] else { throw MathError.typeMismatch(expected: "Complex", found: args.first?.typeName ?? "none") }
@@ -322,6 +346,12 @@ extension Evaluator {
             let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
             let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
             return .dimensionless(sqrt(meanSquaredError))
+        },
+        "log": { a, b in
+            let base = try a.asScalar()
+            let number = try b.asScalar()
+            guard base > 0, base != 1, number > 0 else { throw MathError.unsupportedOperation(op: "log", typeA: "Logarithm base must be > 0 and != 1, and the number must be > 0.", typeB: nil) }
+            return .dimensionless(Foundation.log(number) / Foundation.log(base))
         },
         "cov": { a, b in
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
@@ -516,7 +546,18 @@ extension Evaluator {
         }
         
         if let twoArgFunc = Evaluator.twoArgumentFunctions[node.name] {
-            guard node.arguments.count == 2 else { throw MathError.incorrectArgumentCount(function: node.name, expected: "2", found: node.arguments.count) }
+            guard node.arguments.count == 2 else {
+                // Special case for log(number) with an implicit base of 10
+                if node.name == "log" && node.arguments.count == 1 {
+                    let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
+                    if case .dimensionless(let s) = arg {
+                        return (.dimensionless(log10(s)), argUsedAngle)
+                    } else {
+                        throw MathError.typeMismatch(expected: "Dimensionless", found: arg.typeName)
+                    }
+                }
+                throw MathError.incorrectArgumentCount(function: node.name, expected: "2", found: node.arguments.count)
+            }
             let (arg1, arg1UsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             let (arg2, arg2UsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
             return (try twoArgFunc(arg1, arg2), arg1UsedAngle || arg2UsedAngle)
@@ -604,6 +645,28 @@ extension Evaluator {
     func evaluateBinaryOperation(op: Token, left: MathValue, right: MathValue) throws -> MathValue {
         if case .tuple = left { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         if case .tuple = right { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
+        
+        if op.rawValue == "in" {
+            guard case .unitValue(let sourceValue) = left else {
+                throw MathError.typeMismatch(expected: "Value with units", found: left.typeName)
+            }
+            guard case .unitValue(let targetUnit) = right else {
+                throw MathError.typeMismatch(expected: "A target unit (e.g., .cm)", found: right.typeName)
+            }
+
+            guard let targetSymbol = targetUnit.preferredDisplayUnit, let targetDef = UnitStore.units[targetSymbol] else {
+                throw MathError.unknownConstant(name: "target unit for conversion")
+            }
+            
+            guard sourceValue.dimensions == targetDef.dimensions else {
+                throw MathError.dimensionMismatch(reason: "Cannot convert between incompatible units.")
+            }
+            
+            let convertedValue = sourceValue.value / targetDef.conversionFactor
+            var result = UnitValue(value: convertedValue, dimensions: sourceValue.dimensions)
+            result.preferredDisplayUnit = targetSymbol
+            return .unitValue(result)
+        }
         
         switch (left, right) {
         // --- Unit & Dimensionless Operations ---
@@ -1011,4 +1074,3 @@ fileprivate func performFactor(_ n: Double) throws -> [Double] {
     
     return factors
 }
-

@@ -94,9 +94,9 @@ struct VariableEditorView: View {
             "Number Theory": ["fact", "factor", "find", "gcd", "isprime", "lcm", "mod", "nCr", "nPr"],
             "Plotting": ["autoplot", "plot", "scatterplot"],
             "Statistics": ["avg", "binomdist", "corr", "count", "countabove", "countbelow", "cov", "geomean", "harmean", "linreg", "max", "mean", "median", "min", "mode", "normdist", "percentile", "polyfit", "rmse", "rmsd", "sort", "stddev", "stddevp", "sum", "unique", "variance"],
-            "Trigonometry": ["acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cos", "cosh", "sin", "sinh", "tan", "tanh"],
+            "Trigonometry": ["acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cos", "cosh", "sin", "sinh", "tan", "tanh", "sec", "csc", "cot", "asec", "acsc", "acot"],
             "Uncertainty": ["uncert"],
-            "Utility & Conversion": ["ceil", "floor", "lg", "ln", "log", "root", "round", "sqrt"],
+            "Utility & Conversion": ["ceil", "floor", "lg", "ln", "log", "root", "round", "sqrt", "sign", "deg2rad", "rad2deg"],
             "Vector & Matrix": ["cmatrix", "cross", "cvector", "det", "dot", "getcolumn", "getrow", "inv", "linsolve", "matrix", "trace", "transpose", "vector"]
         ]
 
