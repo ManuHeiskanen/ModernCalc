@@ -169,6 +169,41 @@ struct TextContents {
         .init(title: "Data Querying", content: "Ask questions about your data with functions like `count`, `countabove`, `countbelow`, and `find`. For example, `count(my_data, 5)` finds the number of 5s, and `find(my_data, 5)` returns their indices."),
         .init(title: "CSV Import & Data Handling", content: "Use the `importcsv()` command or the \".csv\" button to open a file dialog. The interactive window allows you to select which rows and columns to import, and then assign the selected data to a matrix variable. \nOnce your data is in a matrix, you can extract a specific column or row into a vector using the `getcolumn(matrix, index)` and `getrow(matrix, index)` functions. **Note:** All indices are 1-based."),
         .init(title: "Calculus", content: "Calculate derivatives with `derivative(expression, variable, point, [order])`. You can also use the shorthand `derivative(f, point)` for a pre-defined single-variable function `f`. \nCalculate definite integrals with `integral(expression, variable, from, to)`. \nCalculate the gradient of a multi-variable function `g` with `grad(g, vector(x_point, y_point, ...))`. The function must be pre-defined."),
+        .init(title: "Equation Solving", content: """
+        The `solve` command numerically finds real roots for an equation. A "root" is a value of a variable that makes the equation true.
+
+        **Syntax:** `solve(equation, variable, [optional guess])`
+
+        - **equation:** The equation to solve. It must contain a comparison, usually `==`.
+        - **variable:** The variable you want to solve for.
+        - **guess (optional):** A number to start the search near. This is useful for equations with multiple solutions or to speed up the search.
+
+        **How It Works**
+        The solver works by finding where the expression `left_side - right_side` equals zero. It automatically searches a wide range of numbers (-1000 to 1000) to find all possible solutions. If you provide a guess, it will focus its search in a smaller range around that number.
+
+        **Basic Example:**
+        To solve $x^2 = 9$:
+        `solve(x^2 == 9, x)`
+        *Result: -3, 3*
+
+        **Advanced Example:**
+        Find where a sine wave intersects a line:
+        `solve(sin(x) == x/2, x)`
+        *Result: -1.895, 0, 1.895*
+
+        If you only wanted the positive root, you could provide a guess:
+        `solve(sin(x) == x/2, x, 2)`
+        *Result: 1.895*
+
+        **Solving with Units:**
+        The solver can handle equations with units. Simply include them in the equation. You can provide a guess with units to guide the search.
+        `solve(F/2.kg == 9.8.m/s^2, F)`
+        *Result: 19.6 N*
+
+        **Troubleshooting:**
+        - **No solutions found:** The equation may not have any real roots, or the roots may be outside the default search range. Try providing a guess or plotting the function to visualize where the roots might be.
+        - **Slow performance:** For very complex equations, the search can be slow. Providing a guess will significantly speed up the process.
+        """),
         .init(title: "Statistics & Number Theory", content: "Perform statistical analysis with functions like `sum`, `avg`, `stddev`, `variance`, `median`, `percentile`, `quartile`, `iqr`, `corr`, and `sort`. Generate datasets using `range` or `linspace`. Number theory functions like `isprime`, `factor`, `gcd`, and `lcm` are also available.")
     ]
     
