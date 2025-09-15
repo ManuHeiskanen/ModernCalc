@@ -430,7 +430,13 @@ extension Evaluator {
             let guessScalar = try guessValue.asScalar()
             searchRanges = [(guessScalar - 100.0)...(guessScalar + 100.0)]
         } else {
-            searchRanges = [-1000...(-100), -100...100, 100...1000]
+            if angleMode == .radians {
+                // Use a much narrower search range in radians mode to avoid performance issues with periodic functions.
+                searchRanges = [-20...20]
+            } else {
+                // Keep the wide search range for degrees mode and non-trig functions.
+                searchRanges = [-1000...(-100), -100...100, 100...1000]
+            }
         }
         
         try findRoots(in: searchRanges, for: f, storingIn: &roots, precision: precision)
@@ -572,4 +578,3 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
     let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
     return coefficients
 }
-
