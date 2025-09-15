@@ -372,70 +372,36 @@ struct CalculationResultView: View {
                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(intercept))) }
             }
         } else if case .roots(let roots) = calculation.result {
-            // --- MODIFIED: Use expanding UI only for more than one root ---
-            if roots.count > 1 {
-                let isKeyboardSelectedForExpansion = selectedHistoryId == calculation.id && {
-                    if case .result = selectedHistoryPart { return true }
-                    return false
-                }()
+            let isKeyboardSelectedForExpansion = selectedHistoryId == calculation.id && {
+                if case .result = selectedHistoryPart { return true }
+                return false
+            }()
 
-                let isExpanded = isKeyboardSelectedForExpansion || isHoverForExpansion
-                
-                Group {
-                    if isExpanded {
-                        VStack(alignment: .trailing, spacing: 8) {
-                            HStack {
-                                Text("\(getVariableName(from: calculation.expression)) ≈ { ... }")
-                                    .font(.system(size: 20, weight: .light, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
-                                
-                                Image(systemName: "arrow.down.right.and.arrow.up.left.circle")
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            LazyVGrid(columns: columns, alignment: .trailing, spacing: 8) {
-                                ForEach(Array(roots.enumerated()), id: \.offset) { index, rootValue in
-                                    Text(viewModel.formatForHistory(rootValue))
-                                        .font(.system(size: 22, weight: .light, design: .monospaced))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                        .cornerRadius(6)
-                                        .onHover { isHovering in
-                                            guard selectedHistoryId != calculation.id else {
-                                                hoveredItem = nil
-                                                return
-                                            }
-                                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
-                                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                                        }
-                                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
-                                }
-                            }
-                        }
-                        .padding(8)
-                        .background(Color.primary.opacity(0.05))
-                        .cornerRadius(8)
-
-                    } else {
-                        HStack(spacing: 4) {
-                            let variableName = getVariableName(from: calculation.expression)
-                            Text("\(variableName) ≈")
-                                .font(.system(size: 24, weight: .light, design: .monospaced))
-                                .foregroundColor(.primary)
-                            
-                            Text("{")
-                                .font(.system(size: 24, weight: .light, design: .monospaced))
+            let showExpansion = roots.count > 1
+            let isExpanded = (isKeyboardSelectedForExpansion || isHoverForExpansion) && showExpansion
+            
+            Group {
+                if isExpanded {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        HStack {
+                            Text("\(getVariableName(from: calculation.expression)) ≈ { ... }")
+                                .font(.system(size: 20, weight: .light, design: .monospaced))
                                 .foregroundColor(.secondary)
+                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
                             
-                            let maxDisplayRoots = 4
-                            let displayRoots = roots.count > maxDisplayRoots ? Array(roots.prefix(maxDisplayRoots)) : roots
-                            
-                            ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, rootValue in
+                            Image(systemName: "arrow.down.right.and.arrow.up.left.circle")
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        LazyVGrid(columns: columns, alignment: .trailing, spacing: 8) {
+                            ForEach(Array(roots.enumerated()), id: \.offset) { index, rootValue in
                                 Text(viewModel.formatForHistory(rootValue))
-                                    .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                    .font(.system(size: 22, weight: .light, design: .monospaced))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
                                     .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                    .cornerRadius(6)
+                                    .fixedSize(horizontal: true, vertical: false)
                                     .onHover { isHovering in
                                         guard selectedHistoryId != calculation.id else {
                                             hoveredItem = nil
@@ -445,54 +411,66 @@ struct CalculationResultView: View {
                                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                     }
                                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
-                                
-                                if index < displayRoots.count - 1 {
-                                    Text(",")
-                                        .font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.primary.opacity(0.05))
+                    .cornerRadius(8)
+
+                } else {
+                    HStack(spacing: 4) {
+                        let variableName = getVariableName(from: calculation.expression)
+                        Text("\(variableName) ≈")
+                            .font(.system(size: 24, weight: .light, design: .monospaced))
+                            .foregroundColor(.primary)
+                        
+                        if showExpansion {
+                            Text("{")
+                                .font(.system(size: 24, weight: .light, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        let maxDisplayRoots = showExpansion ? 4 : 1
+                        let displayRoots = roots.count > maxDisplayRoots ? Array(roots.prefix(maxDisplayRoots)) : roots
+                        
+                        ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, rootValue in
+                            Text(viewModel.formatForHistory(rootValue))
+                                .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                .onHover { isHovering in
+                                    guard selectedHistoryId != calculation.id else {
+                                        hoveredItem = nil
+                                        return
+                                    }
+                                    withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
+                                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                 }
-                            }
+                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
                             
-                            if roots.count > maxDisplayRoots {
-                                Text("... (\(roots.count - maxDisplayRoots) more)")
-                                    .font(.system(size: 18, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                            if index < displayRoots.count - 1 {
+                                Text(",")
+                                    .font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
                             }
-                            
+                        }
+                        
+                        if roots.count > maxDisplayRoots {
+                            Text("... (\(roots.count - maxDisplayRoots) more)")
+                                .font(.system(size: 18, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                        }
+                        
+                        if showExpansion {
                             Text("}")
                                 .font(.system(size: 24, weight: .light, design: .monospaced))
                                 .foregroundColor(.secondary)
                         }
-                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
-                    }
-                }
-                .onHover { hovering in
-                    withAnimation {
-                        isHoverForExpansion = hovering
-                    }
-                }
-            } else {
-                // --- New simple view for single or zero roots ---
-                if roots.isEmpty {
-                    Text("No real roots found")
-                         .font(.system(size: 24, weight: .light, design: .monospaced))
-                         .foregroundColor(.secondary)
-                } else { // Exactly one root
-                    HStack(spacing: 4) {
-                         let variableName = getVariableName(from: calculation.expression)
-                         Text("\(variableName) ≈")
-                             .font(.system(size: 24, weight: .light, design: .monospaced))
-                             .foregroundColor(.primary)
-                        
-                         let rootValue = roots[0]
-                         Text(viewModel.formatForHistory(rootValue))
-                            .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                            .background(isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear)
-                            .onHover { isHovering in
-                                withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
-                                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                            }
-                            .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
                     }
                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
+                }
+            }
+            .onHover { hovering in
+                withAnimation {
+                    isHoverForExpansion = hovering
                 }
             }
         } else {
@@ -658,3 +636,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
