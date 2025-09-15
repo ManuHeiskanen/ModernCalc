@@ -485,8 +485,24 @@ class CalculatorViewModel: ObservableObject {
             return "\(val) ± \(unc)"
         case .roots(let roots):
             if roots.isEmpty { return "No real roots found" }
-            let rootsString = roots.map { formatScalarForDisplay($0) }.joined(separator: ", ")
-            return "x = { \(rootsString) }"
+            let maxDisplayRoots = 4
+            
+            let formattedRoots = roots.map { root -> String in
+                let tolerance = 1e-9
+                let roundedRoot = root.rounded()
+                if abs(root - roundedRoot) < tolerance {
+                    return formatScalarForDisplay(roundedRoot)
+                }
+                return formatScalarForDisplay(root)
+            }
+
+            if roots.count > maxDisplayRoots {
+                let displayed = formattedRoots.prefix(maxDisplayRoots).joined(separator: ", ")
+                return "{ \(displayed), ... (\(roots.count - maxDisplayRoots) more) }"
+            } else {
+                let rootsString = formattedRoots.joined(separator: ", ")
+                return "{ \(rootsString) }"
+            }
         }
     }
     
@@ -531,7 +547,8 @@ class CalculatorViewModel: ObservableObject {
             }
             return "uncert(\(parts.joined(separator: ", ")))"
         case .roots(let roots):
-            return roots.first.map { formatScalarForParsing($0) } ?? ""
+            if roots.isEmpty { return "" }
+            return "vector(\(roots.map { formatScalarForParsing($0) }.joined(separator: ";")))"
         }
     }
 
@@ -797,3 +814,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+

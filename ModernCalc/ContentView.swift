@@ -259,6 +259,7 @@ struct HistoryView: View {
                                     
                                     Divider().opacity(0.4)
                                 }
+                                .animation(.default, value: selectedHistoryId)
                             }
                             .id(calculation.id).transition(.opacity)
                             .background(calculation.id == lastAddedId ? Color.accentColor.opacity(0.1) : Color.clear)
@@ -325,6 +326,9 @@ struct CalculationResultView: View {
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
     
+    @State private var isHoverForExpansion = false
+    private let columns = [GridItem(.adaptive(minimum: 60))]
+    
     var body: some View {
         if case .tuple(let values) = calculation.result {
             HStack(spacing: 0) {
@@ -366,6 +370,102 @@ struct CalculationResultView: View {
                     }
                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(intercept))) }
             }
+        } else if case .roots(let roots) = calculation.result {
+            let isKeyboardSelectedForExpansion = selectedHistoryId == calculation.id && {
+                if case .result = selectedHistoryPart { return true }
+                return false
+            }()
+
+            let isExpanded = isKeyboardSelectedForExpansion || isHoverForExpansion
+            
+            Group {
+                if isExpanded {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        HStack {
+                            Text("\(getVariableName(from: calculation.expression)) ≈ { ... }")
+                                .font(.system(size: 20, weight: .light, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
+                            
+                            Image(systemName: "arrow.down.right.and.arrow.up.left.circle")
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        LazyVGrid(columns: columns, alignment: .trailing, spacing: 8) {
+                            ForEach(Array(roots.enumerated()), id: \.offset) { index, root in
+                                 Text(formatRoot(root))
+                                    .font(.system(size: 22, weight: .light, design: .monospaced))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                    .cornerRadius(6)
+                                    .onHover { isHovering in
+                                        guard selectedHistoryId != calculation.id else {
+                                            hoveredItem = nil
+                                            return
+                                        }
+                                        withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
+                                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                    }
+                                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(root))) }
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(Color.primary.opacity(0.05))
+                    .cornerRadius(8)
+
+                } else {
+                    HStack(spacing: 4) {
+                        let variableName = getVariableName(from: calculation.expression)
+                        Text("\(variableName) ≈")
+                            .font(.system(size: 24, weight: .light, design: .monospaced))
+                            .foregroundColor(.primary)
+                        
+                        Text("{")
+                            .font(.system(size: 24, weight: .light, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        
+                        let maxDisplayRoots = 4
+                        let displayRoots = roots.count > maxDisplayRoots ? Array(roots.prefix(maxDisplayRoots)) : roots
+                        
+                        ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, root in
+                            Text(formatRoot(root))
+                                .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
+                                .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                .onHover { isHovering in
+                                    guard selectedHistoryId != calculation.id else {
+                                        hoveredItem = nil
+                                        return
+                                    }
+                                    withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
+                                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                                }
+                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(root))) }
+                            
+                            if index < displayRoots.count - 1 {
+                                Text(",")
+                                    .font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        if roots.count > maxDisplayRoots {
+                            Text("... (\(roots.count - maxDisplayRoots) more)")
+                                .font(.system(size: 18, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                        }
+                        
+                        Text("}")
+                            .font(.system(size: 24, weight: .light, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
+                }
+            }
+            .onHover { hovering in
+                withAnimation {
+                    isHoverForExpansion = hovering
+                }
+            }
         } else {
             Text(viewModel.formatForHistory(calculation.result))
                 .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
@@ -378,10 +478,29 @@ struct CalculationResultView: View {
         }
     }
     
+    private func formatRoot(_ root: Double) -> String {
+        let tolerance = 1e-9
+        let roundedRoot = root.rounded()
+        let valueToDisplay = abs(root - roundedRoot) < tolerance ? roundedRoot : root
+        return viewModel.formatScalarForDisplay(valueToDisplay)
+    }
+    
     private func isResultSelected(calculation: Calculation, index: Int) -> Bool {
         if let hoveredPart = hoveredItem?.part, case .result(let hoveredIndex) = hoveredPart, hoveredItem?.id == calculation.id { return hoveredIndex == index }
         if case .result(let selectedIndex) = selectedHistoryPart, selectedHistoryId == calculation.id { return selectedIndex == index }
         return false
+    }
+    
+    private func getVariableName(from expression: String) -> String {
+        let pattern = #"(?:solve|nsolve)\s*\([^,]+,\s*([a-zA-Z_][a-zA-Z0-9_]*)"#
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            if let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
+               let range = Range(match.range(at: 1), in: expression) {
+                return String(expression[range])
+            }
+        } catch {}
+        return "x" // Default
     }
 }
 

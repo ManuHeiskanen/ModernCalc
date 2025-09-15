@@ -51,6 +51,8 @@ class NavigationManager: ObservableObject {
                 resultCount = values.count
             } else if case .regressionResult = selectedItem.result {
                 resultCount = 2 // m and b
+            } else if case .roots(let values) = selectedItem.result {
+                resultCount = values.count
             } else {
                 resultCount = 1
             }
@@ -94,6 +96,10 @@ class NavigationManager: ObservableObject {
                     // FIX: Changed .scalar to .dimensionless to match the updated MathValue enum.
                     let valueToParse = (index == 0) ? MathValue.dimensionless(slope) : MathValue.dimensionless(intercept)
                     return viewModel.formatForParsing(valueToParse)
+                } else if case .roots(let values) = selectedItem.result {
+                    if index < values.count {
+                        return viewModel.formatForParsing(.dimensionless(values[index]))
+                    }
                 } else if index == 0 { // For single results
                     return viewModel.formatForParsing(selectedItem.result)
                 }
@@ -110,3 +116,4 @@ class NavigationManager: ObservableObject {
         selectedPart = .result(index: 0)
     }
 }
+
