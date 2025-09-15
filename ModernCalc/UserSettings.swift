@@ -73,7 +73,6 @@ class UserSettings: ObservableObject {
         }
     }
     
-    // --- NEW PROPERTIES FOR CSV ROUNDING ---
     @Published var enableCSVRounding: Bool {
         didSet {
             if isPersistenceEnabled {
@@ -86,6 +85,22 @@ class UserSettings: ObservableObject {
         didSet {
             if isPersistenceEnabled {
                 UserDefaults.standard.set(csvDecimalPlaces, forKey: "csvDecimalPlaces")
+            }
+        }
+    }
+    
+    @Published var enableSolverRounding: Bool {
+        didSet {
+            if isPersistenceEnabled {
+                UserDefaults.standard.set(enableSolverRounding, forKey: "enableSolverRounding")
+            }
+        }
+    }
+    
+    @Published var solverDecimalPlaces: Int {
+        didSet {
+            if isPersistenceEnabled {
+                UserDefaults.standard.set(solverDecimalPlaces, forKey: "solverDecimalPlaces")
             }
         }
     }
@@ -108,6 +123,9 @@ class UserSettings: ObservableObject {
         
         self.enableCSVRounding = defaults.bool(forKey: "enableCSVRounding")
         self.csvDecimalPlaces = defaults.integer(forKey: "csvDecimalPlaces")
+        
+        self.enableSolverRounding = defaults.bool(forKey: "enableSolverRounding")
+        self.solverDecimalPlaces = defaults.integer(forKey: "solverDecimalPlaces")
 
         
         // --- Phase 2: After 'self' is initialized, check and apply default values ---
@@ -122,6 +140,10 @@ class UserSettings: ObservableObject {
         if self.csvDecimalPlaces == 0 {
             self.csvDecimalPlaces = 4 // Default to 4 if not set
         }
+        
+        if self.solverDecimalPlaces == 0 {
+            self.solverDecimalPlaces = 4 // Default to 4 if not set
+        }
     }
 
     /// Creates a non-persistent, in-memory copy of the settings object.
@@ -129,6 +151,19 @@ class UserSettings: ObservableObject {
     func makeTemporaryCopy() -> UserSettings {
         let temporarySettings = UserSettings()
         temporarySettings.isPersistenceEnabled = false
+        
+        // --- FIX: Manually copy all current properties to the new instance ---
+        temporarySettings.displayMode = self.displayMode
+        temporarySettings.decimalSeparator = self.decimalSeparator
+        temporarySettings.fixedDecimalPlaces = self.fixedDecimalPlaces
+        temporarySettings.enableLiveRounding = self.enableLiveRounding
+        temporarySettings.livePreviewDecimalPlaces = self.livePreviewDecimalPlaces
+        temporarySettings.enableCSVRounding = self.enableCSVRounding
+        temporarySettings.csvDecimalPlaces = self.csvDecimalPlaces
+        temporarySettings.enableSolverRounding = self.enableSolverRounding
+        temporarySettings.solverDecimalPlaces = self.solverDecimalPlaces
+        
         return temporarySettings
     }
 }
+

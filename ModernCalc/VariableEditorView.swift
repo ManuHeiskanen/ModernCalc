@@ -414,6 +414,16 @@ struct VariableEditorView: View {
                     Stepper("Decimal Places: \(settings.csvDecimalPlaces)", value: $settings.csvDecimalPlaces, in: 0...10)
                 }
             }
+            
+            Divider()
+
+            Section(header: Text("Solver Formatting")) {
+                Toggle("Round displayed solver results", isOn: $settings.enableSolverRounding.animation())
+                
+                if settings.enableSolverRounding {
+                    Stepper("Decimal Places: \(settings.solverDecimalPlaces)", value: $settings.solverDecimalPlaces, in: 0...10)
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding()

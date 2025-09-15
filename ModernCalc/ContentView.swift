@@ -328,7 +328,8 @@ struct CalculationResultView: View {
     var selectedHistoryPart: SelectionPart
     
     @State private var isHoverForExpansion = false
-    private let columns = [GridItem(.adaptive(minimum: 60))]
+    // --- FIX: Give columns more minimum space and make them flexible ---
+    private let columns = [GridItem(.adaptive(minimum: 100))]
     
     var body: some View {
         if case .tuple(let values) = calculation.result {
@@ -382,6 +383,7 @@ struct CalculationResultView: View {
             
             Group {
                 if isExpanded {
+                    let formattedRoots = viewModel.formatRootsForDisplay(roots)
                     VStack(alignment: .trailing, spacing: 8) {
                         HStack {
                             Text("\(getVariableName(from: calculation.expression)) ≈ { ... }")
@@ -394,14 +396,13 @@ struct CalculationResultView: View {
                         }
                         
                         LazyVGrid(columns: columns, alignment: .trailing, spacing: 8) {
-                            ForEach(Array(roots.enumerated()), id: \.offset) { index, rootValue in
-                                Text(viewModel.formatForHistory(rootValue))
+                            ForEach(Array(formattedRoots.enumerated()), id: \.offset) { index, rootString in
+                                Text(rootString)
                                     .font(.system(size: 22, weight: .light, design: .monospaced))
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
                                     .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
                                     .cornerRadius(6)
-                                    .fixedSize(horizontal: true, vertical: false)
                                     .onHover { isHovering in
                                         guard selectedHistoryId != calculation.id else {
                                             hoveredItem = nil
@@ -410,7 +411,7 @@ struct CalculationResultView: View {
                                         withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
                                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                     }
-                                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
+                                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(roots[index])) }
                             }
                         }
                     }
@@ -431,11 +432,12 @@ struct CalculationResultView: View {
                                 .foregroundColor(.secondary)
                         }
                         
+                        let formattedRoots = viewModel.formatRootsForDisplay(roots)
                         let maxDisplayRoots = showExpansion ? 4 : 1
-                        let displayRoots = roots.count > maxDisplayRoots ? Array(roots.prefix(maxDisplayRoots)) : roots
+                        let displayRoots = formattedRoots.count > maxDisplayRoots ? Array(formattedRoots.prefix(maxDisplayRoots)) : formattedRoots
                         
-                        ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, rootValue in
-                            Text(viewModel.formatForHistory(rootValue))
+                        ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, rootString in
+                            Text(rootString)
                                 .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
                                 .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
                                 .onHover { isHovering in
@@ -446,7 +448,7 @@ struct CalculationResultView: View {
                                     withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
                                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                 }
-                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
+                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(roots[index])) }
                             
                             if index < displayRoots.count - 1 {
                                 Text(",")

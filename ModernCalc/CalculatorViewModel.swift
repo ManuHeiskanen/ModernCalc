@@ -175,41 +175,16 @@ class CalculatorViewModel: ObservableObject {
 
             let (value, usedAngle) = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             
-            // --- NEW: Round solver results before storing or displaying them ---
-            var valueToStore = value
-            if case .roots(let roots) = valueToStore {
-                let tolerance = 1e-7
-                let roundedRoots = roots.map { rootValue -> MathValue in
-                    if let scalar = try? rootValue.asScalar() {
-                        let roundedScalar = scalar.rounded()
-                        if abs(scalar - roundedScalar) < tolerance {
-                            switch rootValue {
-                            case .dimensionless:
-                                return .dimensionless(roundedScalar)
-                            case .unitValue(let u):
-                                var newUnitValue = u
-                                newUnitValue.value = roundedScalar
-                                return .unitValue(newUnitValue)
-                            default:
-                                return rootValue
-                            }
-                        }
-                    }
-                    return rootValue
-                }
-                valueToStore = .roots(roundedRoots)
-            }
-            
-            self.lastSuccessfulValue = valueToStore
+            self.lastSuccessfulValue = value
             self.lastUsedAngleFlag = usedAngle
             self.variables = tempVars
             self.functions = tempFuncs
             
             let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
             
-            if case .plot = valueToStore {
+            if case .plot = value {
                 finalLiveLaTeXPreview = expressionLaTeX
-            } else if case .functionDefinition = valueToStore {
+            } else if case .functionDefinition = value {
                 finalLiveLaTeXPreview = expressionLaTeX
             } else if isSimpleVariableDefinition {
                 finalLiveLaTeXPreview = expressionLaTeX
@@ -218,27 +193,27 @@ class CalculatorViewModel: ObservableObject {
                 let maxLivePreviewRows = 50
 
                 var isResultTooLargeForPreview = false
-                if case .vector(let v) = valueToStore, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                else if case .matrix(let m) = valueToStore, m.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                else if case .complexVector(let cv) = valueToStore, cv.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                else if case .complexMatrix(let cm) = valueToStore, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                if case .vector(let v) = value, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .matrix(let m) = value, m.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .complexVector(let cv) = value, cv.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .complexMatrix(let cm) = value, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
 
                 if isResultTooLargeForPreview {
-                    switch valueToStore {
+                    switch value {
                     case .vector(let v): resultLaTeX = "\\text{\(v.dimension)-element Vector}"
                     case .matrix(let m): resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
                     case .complexVector(let cv): resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
                     case .complexMatrix(let cm): resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
-                    default: resultLaTeX = LaTeXEngine.formatMathValue(valueToStore, angleMode: self.angleMode, settings: self.settings, expression: expression)
+                    default: resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings, expression: expression)
                     }
                 } else {
                     if self.settings.enableLiveRounding {
                         let liveSettings = self.settings.makeTemporaryCopy()
                         liveSettings.displayMode = .fixed
                         liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
-                        resultLaTeX = LaTeXEngine.formatMathValue(valueToStore, angleMode: self.angleMode, settings: liveSettings, expression: expression)
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings, expression: expression)
                     } else {
-                        resultLaTeX = LaTeXEngine.formatMathValue(valueToStore, angleMode: self.angleMode, settings: self.settings, expression: expression)
+                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings, expression: expression)
                     }
                 }
                 finalLiveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
@@ -461,59 +436,83 @@ class CalculatorViewModel: ObservableObject {
     }
 
     func formatForHistory(_ value: MathValue) -> String {
+        return formatForHistory(value, with: self.settings)
+    }
+    
+    /// --- FIX: New public helper to format roots with correct settings ---
+    func formatRootsForDisplay(_ roots: [MathValue]) -> [String] {
+        let formattingSettings: UserSettings
+        if self.settings.enableSolverRounding {
+            let tempSettings = self.settings.makeTemporaryCopy()
+            tempSettings.displayMode = .fixed
+            tempSettings.fixedDecimalPlaces = self.settings.solverDecimalPlaces
+            formattingSettings = tempSettings
+        } else {
+            formattingSettings = self.settings
+        }
+        return roots.map { formatForHistory($0, with: formattingSettings) }
+    }
+    
+    // --- FIX: Made this internal so views can call it with temporary settings ---
+    func formatForHistory(_ value: MathValue, with settings: UserSettings) -> String {
+        func formatScalar(_ scalar: Double) -> String {
+            return self.formatScalarForDisplay(scalar, with: settings)
+        }
+        
         switch value {
-        case .dimensionless(let d): return formatScalarForDisplay(d)
+        case .dimensionless(let d): return formatScalar(d)
         case .unitValue(let u):
             if let preferredUnitSymbol = u.preferredDisplayUnit,
                let preferredUnitDef = UnitStore.units[preferredUnitSymbol] {
                 let convertedValue = u.value / preferredUnitDef.conversionFactor
-                return "\(formatScalarForDisplay(convertedValue)) \(preferredUnitSymbol)"
+                return "\(formatScalar(convertedValue)) \(preferredUnitSymbol)"
             }
 
             if u.dimensions.isEmpty {
-                return formatScalarForDisplay(u.value)
+                return formatScalar(u.value)
             }
             
             if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
                 let convertedValue = u.value / bestUnit.conversionFactor
                 if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
-                     return formatScalarForDisplay(convertedValue)
+                     return formatScalar(convertedValue)
                 }
-                return "\(formatScalarForDisplay(convertedValue)) \(bestUnit.symbol)"
+                return "\(formatScalar(convertedValue)) \(bestUnit.symbol)"
             }
             
-            let valStr = formatScalarForDisplay(u.value)
+            let valStr = formatScalar(u.value)
             let unitStr = formatDimensionsForHistory(u.dimensions)
             if unitStr.isEmpty { return valStr }
             return "\(valStr) \(unitStr)"
-        case .complex(let c): return formatComplexForDisplay(c)
-        case .vector(let v): return formatVectorForDisplay(v)
-        case .matrix(let m): return formatMatrixForDisplay(m)
-        case .tuple(let t): return t.map { formatForHistory($0) }.joined(separator: " OR ")
-        case .complexVector(let cv): return formatComplexVectorForDisplay(cv)
-        case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm)
+        case .complex(let c): return formatComplexForDisplay(c, with: settings)
+        case .vector(let v): return formatVectorForDisplay(v, with: settings)
+        case .matrix(let m): return formatMatrixForDisplay(m, with: settings)
+        case .tuple(let t): return t.map { formatForHistory($0, with: settings) }.joined(separator: " OR ")
+        case .complexVector(let cv): return formatComplexVectorForDisplay(cv, with: settings)
+        case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm, with: settings)
         case .functionDefinition: return ""
-        case .polar(let p): return formatPolarForDisplay(p)
-        case .regressionResult(let s, let i): return "m = \(formatScalarForDisplay(s)), b = \(formatScalarForDisplay(i))"
+        case .polar(let p): return formatPolarForDisplay(p, with: settings)
+        case .regressionResult(let s, let i): return "m = \(formatScalar(s)), b = \(formatScalar(i))"
         case .polynomialFit(let coeffs): return DisplayFormatter.formatPolynomialEquation(coeffs: coeffs)
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         case .triggerCSVImport: return "Importing CSV..."
         case .constant(let s): return s
         case .uncertain(let u):
-            let val = formatScalarForDisplay(u.value)
-            let unc = formatScalarForDisplay(u.totalUncertainty)
-            let rand = formatScalarForDisplay(u.randomUncertainty)
-            let sys = formatScalarForDisplay(u.systematicUncertainty)
+            let val = formatScalar(u.value)
+            let unc = formatScalar(u.totalUncertainty)
+            let rand = formatScalar(u.randomUncertainty)
+            let sys = formatScalar(u.systematicUncertainty)
             if u.randomUncertainty > 0 && u.systematicUncertainty > 0 {
                 return "\(val) ± \(unc) (R: \(rand), S: \(sys))"
             }
             return "\(val) ± \(unc)"
         case .roots(let roots):
-            if roots.isEmpty { return "No real roots found" }
-            let maxDisplayRoots = 4
+             if roots.isEmpty { return "No real roots found" }
             
-            let formattedRoots = roots.map { formatForHistory($0) }
+            // --- FIX: Use the new centralized helper for consistent formatting ---
+            let formattedRoots = self.formatRootsForDisplay(roots)
 
+            let maxDisplayRoots = 4
             if roots.count > maxDisplayRoots {
                 let displayed = formattedRoots.prefix(maxDisplayRoots).joined(separator: ", ")
                 return "{ \(displayed), ... (\(roots.count - maxDisplayRoots) more) }"
@@ -529,7 +528,6 @@ class CalculatorViewModel: ObservableObject {
         switch value {
         case .dimensionless(let d): return formatScalarForParsing(d)
         case .unitValue(let u):
-            // 1. Handle preferred unit first
             if let preferredUnitSymbol = u.preferredDisplayUnit,
                let preferredUnitDef = UnitStore.units[preferredUnitSymbol],
                u.dimensions == preferredUnitDef.dimensions {
@@ -539,7 +537,6 @@ class CalculatorViewModel: ObservableObject {
                 return "\(valStr).\(preferredUnitSymbol)"
             }
 
-            // 2. Check for a "best unit" and convert the value accordingly
             if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
                 let convertedValue = u.value / bestUnit.conversionFactor
                 let valStr = formatScalarForParsing(convertedValue)
@@ -549,7 +546,6 @@ class CalculatorViewModel: ObservableObject {
                 return "\(valStr).\(bestUnit.symbol)"
             }
             
-            // 3. Fallback: compose unit from base parts.
             let valStr = formatScalarForParsing(u.value)
             let unitStr = formatDimensionsForParsing(u.dimensions)
             if unitStr.isEmpty { return valStr }
@@ -576,13 +572,17 @@ class CalculatorViewModel: ObservableObject {
                 parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))")
             }
             return "uncert(\(parts.joined(separator: ", ")))"
-        case .roots(let roots): // MODIFIED: Handles creating a vector from a list of MathValues
+        case .roots(let roots):
             if roots.isEmpty { return "" }
             return "vector(\(roots.map { formatForParsing($0) }.joined(separator: ";")))"
         }
     }
 
     func formatScalarForDisplay(_ value: Double) -> String {
+        return formatScalarForDisplay(value, with: self.settings)
+    }
+    
+    private func formatScalarForDisplay(_ value: Double, with settings: UserSettings) -> String {
         let formattedString: String
         switch settings.displayMode {
         case .auto:
@@ -612,13 +612,10 @@ class CalculatorViewModel: ObservableObject {
             return nil
         }
         
-        // Special cases: The user prefers to see area/volume in base SI units (m^2, m^3)
-        // by default. Returning nil prevents automatic conversion to other units like L or ha.
         if dimensions == [.meter: 3] || dimensions == [.meter: 2] {
             return nil
         }
         
-        // FIX: Add base SI units to the preferred list to ensure they are chosen correctly.
         let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "g"]
 
         var potentialMatches: [UnitDefinition] = []
@@ -638,9 +635,6 @@ class CalculatorViewModel: ObservableObject {
             }
         }
         
-        // FIX: Removed the fallback to the shortest symbol. If a unit is not in the preferred
-        // list, we will now default to composing the base SI units (e.g., "m/s") instead of
-        // guessing a non-standard unit like "mph".
         return nil
     }
     
@@ -678,72 +672,71 @@ class CalculatorViewModel: ObservableObject {
         let positiveDims = dimensions.filter { $0.value > 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
         let negativeDims = dimensions.filter { $0.value < 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
 
-        // Helper to format a list of dimension components into a string like ".m.s^2"
         let formatPart = { (dims: [(key: BaseUnit, value: Int)]) -> String in
             return dims.map { (unit, exponent) -> String in
-                // Get the standard SI symbol (e.g., "m" for .meter)
                 let symbol = UnitStore.baseUnitSymbols[unit] ?? unit.rawValue
                 let absExponent = abs(exponent)
-                // Format as ".symbol" or ".symbol^exp"
                 return ".\(symbol)\(absExponent == 1 ? "" : "^\(absExponent)")"
-            }.joined() // Join without any separator
+            }.joined()
         }
 
         let numerator = formatPart(positiveDims)
         let denominator = formatPart(negativeDims)
 
         if denominator.isEmpty {
-            return numerator // e.g., ".m.kg"
+            return numerator
         } else {
             if numerator.isEmpty {
-                // For cases like Hz (1/s), which is 1/.s
                 return "1/\(denominator)"
             } else {
-                // For m/s, this will produce ".m/.s"
                 return "\(numerator)/\(denominator)"
             }
         }
     }
-
-    private func formatComplexForDisplay(_ value: Complex) -> String {
-        if value.real != 0 && value.imaginary != 0 { return "\(formatScalarForDisplay(value.real)) \(value.imaginary < 0 ? "-" : "+") \(formatScalarForDisplay(abs(value.imaginary)))i" }
-        else if value.real != 0 { return formatScalarForDisplay(value.real) }
-        else if value.imaginary != 0 { return "\(formatScalarForDisplay(value.imaginary))i" }
+    
+    private func formatComplexForDisplay(_ value: Complex, with settings: UserSettings) -> String {
+        let formatScalar = { (d: Double) in self.formatScalarForDisplay(d, with: settings) }
+        if value.real != 0 && value.imaginary != 0 { return "\(formatScalar(value.real)) \(value.imaginary < 0 ? "-" : "+") \(formatScalar(abs(value.imaginary)))i" }
+        else if value.real != 0 { return formatScalar(value.real) }
+        else if value.imaginary != 0 { return "\(formatScalar(value.imaginary))i" }
         else { return "0" }
     }
     
-    private func formatPolarForDisplay(_ value: Complex) -> String {
+    private func formatPolarForDisplay(_ value: Complex, with settings: UserSettings) -> String {
+        let formatScalar = { (d: Double) in self.formatScalarForDisplay(d, with: settings) }
         let magnitude = value.abs(); let angle = value.argument()
-        if self.angleMode == .degrees { let angleDegrees = angle * (180.0 / .pi); return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angleDegrees))°" }
-        else { return "\(formatScalarForDisplay(magnitude)) ∠ \(formatScalarForDisplay(angle)) rad" }
+        if self.angleMode == .degrees { let angleDegrees = angle * (180.0 / .pi); return "\(formatScalar(magnitude)) ∠ \(formatScalar(angleDegrees))°" }
+        else { return "\(formatScalar(magnitude)) ∠ \(formatScalar(angle)) rad" }
     }
-
-    private func formatVectorForDisplay(_ vector: Vector) -> String {
+    
+    private func formatVectorForDisplay(_ vector: Vector, with settings: UserSettings) -> String {
+        let formatScalar = { (d: Double) in self.formatScalarForDisplay(d, with: settings) }
         let maxDisplayRows = 10
         if vector.dimension <= maxDisplayRows {
-            return (0..<vector.dimension).map { "[ \(formatScalarForDisplay(vector[$0])) ]" }.joined(separator: "\n")
+            return (0..<vector.dimension).map { "[ \(formatScalar(vector[$0])) ]" }.joined(separator: "\n")
         } else {
             var lines: [String] = []
             let headCount = 5
             let tailCount = 4
             for i in 0..<headCount {
-                lines.append("[ \(formatScalarForDisplay(vector[i])) ]")
+                lines.append("[ \(formatScalar(vector[i])) ]")
             }
             lines.append("... (\(vector.dimension - (headCount + tailCount)) more items) ...")
             for i in (vector.dimension - tailCount)..<vector.dimension {
-                lines.append("[ \(formatScalarForDisplay(vector[i])) ]")
+                lines.append("[ \(formatScalar(vector[i])) ]")
             }
             return lines.joined(separator: "\n")
         }
     }
     
-    private func formatMatrixForDisplay(_ matrix: Matrix) -> String {
+    private func formatMatrixForDisplay(_ matrix: Matrix, with settings: UserSettings) -> String {
+        let formatScalar = { (d: Double) in self.formatScalarForDisplay(d, with: settings) }
         let maxDisplayRows = 10
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
 
         func formatRow(_ r: Int, columnWidths: [Int]) -> String {
             let rowContent = (0..<matrix.columns).map { c in
-                let formattedNumber = formatScalarForDisplay(matrix[r, c])
+                let formattedNumber = formatScalar(matrix[r, c])
                 let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
                 return padding + formattedNumber
             }.joined(separator: "  ")
@@ -754,7 +747,7 @@ class CalculatorViewModel: ObservableObject {
         for c in 0..<matrix.columns {
             var maxWidth = 0
             for r in 0..<matrix.rows {
-                let formattedNumber = formatScalarForDisplay(matrix[r, c])
+                let formattedNumber = formatScalar(matrix[r, c])
                 if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count }
             }
             columnWidths[c] = maxWidth
@@ -777,32 +770,34 @@ class CalculatorViewModel: ObservableObject {
         }
     }
     
-    private func formatComplexVectorForDisplay(_ vector: ComplexVector) -> String {
+    private func formatComplexVectorForDisplay(_ vector: ComplexVector, with settings: UserSettings) -> String {
+        let formatComplex = { (c: Complex) in self.formatComplexForDisplay(c, with: settings) }
         let maxDisplayRows = 10
         if vector.dimension <= maxDisplayRows {
-            return (0..<vector.dimension).map { "[ \(formatComplexForDisplay(vector[$0])) ]" }.joined(separator: "\n")
+            return (0..<vector.dimension).map { "[ \(formatComplex(vector[$0])) ]" }.joined(separator: "\n")
         } else {
             var lines: [String] = []
             let headCount = 5
             let tailCount = 4
             for i in 0..<headCount {
-                lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
+                lines.append("[ \(formatComplex(vector[i])) ]")
             }
             lines.append("... (\(vector.dimension - tailCount)) more items) ...")
             for i in (vector.dimension - tailCount)..<vector.dimension {
-                lines.append("[ \(formatComplexForDisplay(vector[i])) ]")
+                lines.append("[ \(formatComplex(vector[i])) ]")
             }
             return lines.joined(separator: "\n")
         }
     }
     
-    private func formatComplexMatrixForDisplay(_ matrix: ComplexMatrix) -> String {
+    private func formatComplexMatrixForDisplay(_ matrix: ComplexMatrix, with settings: UserSettings) -> String {
+        let formatComplex = { (c: Complex) in self.formatComplexForDisplay(c, with: settings) }
         let maxDisplayRows = 10
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
         
         func formatRow(_ r: Int, columnWidths: [Int]) -> String {
             let rowContent = (0..<matrix.columns).map { c in
-                let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"
+                let formattedNumber = "(\(formatComplex(matrix[r, c])))"
                 let padding = String(repeating: " ", count: columnWidths[c] - formattedNumber.count)
                 return padding + formattedNumber
             }.joined(separator: "  ")
@@ -813,7 +808,7 @@ class CalculatorViewModel: ObservableObject {
         for c in 0..<matrix.columns {
             var maxWidth = 0
             for r in 0..<matrix.rows {
-                let formattedNumber = "(\(formatComplexForDisplay(matrix[r, c])))"
+                let formattedNumber = "(\(formatComplex(matrix[r, c])))"
                 if formattedNumber.count > maxWidth { maxWidth = formattedNumber.count }
             }
             columnWidths[c] = maxWidth
@@ -841,15 +836,12 @@ class CalculatorViewModel: ObservableObject {
             return String(format: "%.0f", value)
         }
         
-        // Use the general format specifier 'g' with high precision to avoid floating point noise
-        // and to automatically handle scientific notation for very large/small numbers.
         let formattedString = String(format: "%.14g", value)
         
         if formattedString.lowercased().contains("e") {
             let parts = formattedString.lowercased().components(separatedBy: "e")
             if parts.count == 2 {
                  let mantissa = parts[0].replacingOccurrences(of: ".", with: settings.decimalSeparator.rawValue)
-                 // The parser expects this explicit format for scientific notation
                  return "(\(mantissa)*10^\(parts[1]))"
             }
         }
