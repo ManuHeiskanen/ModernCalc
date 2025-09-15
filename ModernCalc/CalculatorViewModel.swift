@@ -175,16 +175,41 @@ class CalculatorViewModel: ObservableObject {
 
             let (value, usedAngle) = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             
-            self.lastSuccessfulValue = value
+            // --- NEW: Round solver results before storing or displaying them ---
+            var valueToStore = value
+            if case .roots(let roots) = valueToStore {
+                let tolerance = 1e-7
+                let roundedRoots = roots.map { rootValue -> MathValue in
+                    if let scalar = try? rootValue.asScalar() {
+                        let roundedScalar = scalar.rounded()
+                        if abs(scalar - roundedScalar) < tolerance {
+                            switch rootValue {
+                            case .dimensionless:
+                                return .dimensionless(roundedScalar)
+                            case .unitValue(let u):
+                                var newUnitValue = u
+                                newUnitValue.value = roundedScalar
+                                return .unitValue(newUnitValue)
+                            default:
+                                return rootValue
+                            }
+                        }
+                    }
+                    return rootValue
+                }
+                valueToStore = .roots(roundedRoots)
+            }
+            
+            self.lastSuccessfulValue = valueToStore
             self.lastUsedAngleFlag = usedAngle
             self.variables = tempVars
             self.functions = tempFuncs
             
             let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
             
-            if case .plot = value {
+            if case .plot = valueToStore {
                 finalLiveLaTeXPreview = expressionLaTeX
-            } else if case .functionDefinition = value {
+            } else if case .functionDefinition = valueToStore {
                 finalLiveLaTeXPreview = expressionLaTeX
             } else if isSimpleVariableDefinition {
                 finalLiveLaTeXPreview = expressionLaTeX
@@ -193,27 +218,27 @@ class CalculatorViewModel: ObservableObject {
                 let maxLivePreviewRows = 50
 
                 var isResultTooLargeForPreview = false
-                if case .vector(let v) = value, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                else if case .matrix(let m) = value, m.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                else if case .complexVector(let cv) = value, cv.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
-                else if case .complexMatrix(let cm) = value, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                if case .vector(let v) = valueToStore, v.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .matrix(let m) = valueToStore, m.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .complexVector(let cv) = valueToStore, cv.dimension > maxLivePreviewRows { isResultTooLargeForPreview = true }
+                else if case .complexMatrix(let cm) = valueToStore, cm.rows > maxLivePreviewRows { isResultTooLargeForPreview = true }
 
                 if isResultTooLargeForPreview {
-                    switch value {
+                    switch valueToStore {
                     case .vector(let v): resultLaTeX = "\\text{\(v.dimension)-element Vector}"
                     case .matrix(let m): resultLaTeX = "\\text{\(m.rows)x\(m.columns) Matrix}"
                     case .complexVector(let cv): resultLaTeX = "\\text{\(cv.dimension)-element Complex Vector}"
                     case .complexMatrix(let cm): resultLaTeX = "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
-                    default: resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings, expression: expression)
+                    default: resultLaTeX = LaTeXEngine.formatMathValue(valueToStore, angleMode: self.angleMode, settings: self.settings, expression: expression)
                     }
                 } else {
                     if self.settings.enableLiveRounding {
                         let liveSettings = self.settings.makeTemporaryCopy()
                         liveSettings.displayMode = .fixed
                         liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
-                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings, expression: expression)
+                        resultLaTeX = LaTeXEngine.formatMathValue(valueToStore, angleMode: self.angleMode, settings: liveSettings, expression: expression)
                     } else {
-                        resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: self.settings, expression: expression)
+                        resultLaTeX = LaTeXEngine.formatMathValue(valueToStore, angleMode: self.angleMode, settings: self.settings, expression: expression)
                     }
                 }
                 finalLiveLaTeXPreview = "\(expressionLaTeX) = \(resultLaTeX)"
@@ -483,7 +508,7 @@ class CalculatorViewModel: ObservableObject {
                 return "\(val) ± \(unc) (R: \(rand), S: \(sys))"
             }
             return "\(val) ± \(unc)"
-        case .roots(let roots): // MODIFIED: Handles formatting a list of MathValues
+        case .roots(let roots):
             if roots.isEmpty { return "No real roots found" }
             let maxDisplayRoots = 4
             
