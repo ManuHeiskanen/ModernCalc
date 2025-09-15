@@ -21,10 +21,45 @@ struct VariableEditorView: View {
     
     @State private var searchText = ""
     @State private var selectedTab = 0
-    // --- ADDED: State to manage the collapsibility of the user-defined sections. ---
-    @State private var isVariablesExpanded = true
-    @State private var isFunctionsExpanded = true
+    // --- State to manage the collapsibility of the user-defined sections. ---
+    @State private var isVariablesExpanded = false
+    @State private var isFunctionsExpanded = false
+    // --- FIX: State to manage expansion for each function category and help topic individually. ---
+    @State private var isCategoryExpanded: [String: Bool] = [:]
+    @State private var isHelpTopicExpanded: [UUID: Bool] = [:]
 
+    // --- Computed property to automatically expand the Variables group during a search. ---
+    private var shouldExpandVariables: Binding<Bool> {
+        Binding(
+            get: {
+                // Always expand if a search is active. Otherwise, use the user's preference.
+                return self.isVariablesExpanded || !self.searchText.isEmpty
+            },
+            set: { newValue in
+                // Only let the user change the state manually if they are not searching.
+                if self.searchText.isEmpty {
+                    self.isVariablesExpanded = newValue
+                }
+            }
+        )
+    }
+
+    // --- Computed property to automatically expand the Functions group during a search. ---
+    private var shouldExpandFunctions: Binding<Bool> {
+        Binding(
+            get: {
+                // Always expand if a search is active. Otherwise, use the user's preference.
+                return self.isFunctionsExpanded || !self.searchText.isEmpty
+            },
+            set: { newValue in
+                // Only let the user change the state manually if they are not searching.
+                if self.searchText.isEmpty {
+                    self.isFunctionsExpanded = newValue
+                }
+            }
+        )
+    }
+    
     // Filters functions within each category and preserves the group structure.
     var filteredFunctionCategories: [FunctionCategory] {
         let categories = groupFunctions(viewModel.builtinFunctions)
@@ -199,7 +234,7 @@ struct VariableEditorView: View {
     // --- Views for each tab ---
     private var userDefinedView: some View {
         List {
-            DisclosureGroup(isExpanded: $isVariablesExpanded) {
+            DisclosureGroup(isExpanded: shouldExpandVariables) {
                 if viewModel.sortedVariables.isEmpty {
                     Text("No variables defined. Use `x := 5` to create one.")
                         .foregroundColor(.secondary)
@@ -233,7 +268,7 @@ struct VariableEditorView: View {
                     .padding(.vertical, 4)
             }
 
-            DisclosureGroup(isExpanded: $isFunctionsExpanded) {
+            DisclosureGroup(isExpanded: shouldExpandFunctions) {
                 if viewModel.sortedFunctions.isEmpty {
                     Text("No functions defined. Use `f(x) := x^2` to create one.")
                         .foregroundColor(.secondary)
@@ -274,7 +309,21 @@ struct VariableEditorView: View {
     private var builtinFunctionsView: some View {
         List {
             ForEach(filteredFunctionCategories) { category in
-                DisclosureGroup {
+                // --- FIX: This binding is now created dynamically for each category ---
+                let isExpandedBinding = Binding<Bool>(
+                    get: {
+                        // Default to expanded, and always be expanded when searching.
+                        return isCategoryExpanded[category.name, default: false] || !searchText.isEmpty
+                    },
+                    set: { newValue in
+                        // Only allow manual collapse if not searching.
+                        if searchText.isEmpty {
+                            isCategoryExpanded[category.name] = newValue
+                        }
+                    }
+                )
+
+                DisclosureGroup(isExpanded: isExpandedBinding) {
                     ForEach(category.functions) { function in
                         Button(action: {
                             viewModel.insertTextAtCursor(function.name + "(")
@@ -373,7 +422,21 @@ struct VariableEditorView: View {
     private var helpView: some View {
         List {
             ForEach(filteredHelpTopics) { topic in
-                DisclosureGroup {
+                // --- FIX: This binding is now created dynamically for each help topic ---
+                let isExpandedBinding = Binding<Bool>(
+                    get: {
+                        // Default to collapsed, but always be expanded when searching.
+                        return isHelpTopicExpanded[topic.id, default: false] || !searchText.isEmpty
+                    },
+                    set: { newValue in
+                        // Only allow manual collapse if not searching.
+                        if searchText.isEmpty {
+                            isHelpTopicExpanded[topic.id] = newValue
+                        }
+                    }
+                )
+
+                DisclosureGroup(isExpanded: isExpandedBinding) {
                     Text(.init(topic.content)) // Using .init() to render markdown
                         .padding(.leading)
                         .padding(.vertical, 4)
@@ -390,4 +453,3 @@ struct VariableEditorView: View {
         .scrollContentBackground(.hidden)
     }
 }
-
