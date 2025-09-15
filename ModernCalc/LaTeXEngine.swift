@@ -469,14 +469,3 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
-//
-//  LaTeXEngine.swift
-//  ModernCalc
-//
-//  Created by Manu Heiskanen on 1.9.2025.
-//
-
-import Foundation
-
-// A dedicated engine for converting calculations into LaTeX strings.
-…}
