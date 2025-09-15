@@ -268,7 +268,6 @@ struct LaTeXEngine {
             
             var variableName = "x" // Default variable name
             if let expr = expression {
-                // Try to extract variable name from the expression string, e.g., from "solve(x^2==4, x)"
                 let pattern = #"(?:solve|nsolve)\s*\([^,]+,\s*([a-zA-Z_][a-zA-Z0-9_]*)"#
                 do {
                     let regex = try NSRegularExpression(pattern: pattern)
@@ -276,22 +275,32 @@ struct LaTeXEngine {
                        let range = Range(match.range(at: 1), in: expr) {
                         variableName = String(expr[range])
                     }
-                } catch {
-                    // In case of regex error, we just use the default 'x'.
-                }
+                } catch {}
             }
 
-            // For roots, we apply special formatting to round near-integers for a cleaner display.
-            let rootsString = roots.map { root -> String in
+            // FIX: Handle rounding for MathValue roots
+            let rootsString = roots.map { rootValue -> String in
                 let tolerance = 1e-7
-                let roundedRoot = root.rounded()
-                if abs(root - roundedRoot) < tolerance {
-                    return formatScalar(roundedRoot, settings: settings)
+                var valueToFormat = rootValue
+                
+                if let scalar = try? rootValue.asScalar() {
+                    let roundedScalar = scalar.rounded()
+                    if abs(scalar - roundedScalar) < tolerance {
+                        switch rootValue {
+                        case .dimensionless:
+                            valueToFormat = .dimensionless(roundedScalar)
+                        case .unitValue(let u):
+                            var newUnitValue = u
+                            newUnitValue.value = roundedScalar
+                            valueToFormat = .unitValue(newUnitValue)
+                        default:
+                            break
+                        }
+                    }
                 }
-                return formatScalar(root, settings: settings)
+                return formatMathValue(valueToFormat, angleMode: angleMode, settings: settings, expression: nil)
             }.joined(separator: ", ")
 
-            // Use "var ≈ {val1, val2}" for multiple roots, and "var ≈ val" for a single root.
             if roots.count > 1 {
                 return "\(variableName) \\approx \\{ \(rootsString) \\}"
             } else {
@@ -332,8 +341,6 @@ struct LaTeXEngine {
             return nil
         }
         
-        // Special cases: The user prefers to see area/volume in base SI units (m^2, m^3)
-        // by default. Returning nil prevents automatic conversion to other units like L or ha.
         if dimensions == [.meter: 3] || dimensions == [.meter: 2] {
             return nil
         }
@@ -357,8 +364,8 @@ struct LaTeXEngine {
             }
         }
         
-        // Fallback to the shortest symbol if no preferred match is found
-        return potentialMatches.min(by: { $0.symbol.count < $1.symbol.count })
+        // FIX: Removed the buggy fallback that was causing the issue.
+        return nil
     }
 
     private static func formatDimensions(_ dimensions: UnitDimension) -> String {
@@ -462,4 +469,14 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
+//
+//  LaTeXEngine.swift
+//  ModernCalc
+//
+//  Created by Manu Heiskanen on 1.9.2025.
+//
 
+import Foundation
+
+// A dedicated engine for converting calculations into LaTeX strings.
+…}

@@ -777,7 +777,7 @@ enum MathValue: Codable, Equatable {
     case plot(PlotData)
     case triggerCSVImport // This is a non-codable, transient value used as a signal.
     case uncertain(UncertainValue)
-    case roots([Double])
+    case roots([MathValue]) // MODIFIED: Changed from [Double] to [MathValue]
 
     var typeName: String {
         switch self {
@@ -813,7 +813,7 @@ enum MathValue: Codable, Equatable {
         case .uncertain(let u):
             try container.encode("uncertain", forKey: .type)
             try container.encode(u, forKey: .value)
-        case .roots(let r):
+        case .roots(let r): // MODIFIED: Encodes [MathValue]
             try container.encode("roots", forKey: .type)
             try container.encode(r, forKey: .value)
         case .plot:
@@ -849,8 +849,12 @@ enum MathValue: Codable, Equatable {
              self = .constant(try container.decode(String.self, forKey: .value))
         case "uncertain":
             self = .uncertain(try container.decode(UncertainValue.self, forKey: .value))
-        case "roots":
-            self = .roots(try container.decode([Double].self, forKey: .value))
+        case "roots": // MODIFIED: Handles decoding both old [Double] and new [MathValue] for backward compatibility
+            if let doubleRoots = try? container.decode([Double].self, forKey: .value) {
+                self = .roots(doubleRoots.map { .dimensionless($0) })
+            } else {
+                self = .roots(try container.decode([MathValue].self, forKey: .value))
+            }
         case "plot":
             self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
@@ -875,7 +879,7 @@ enum MathValue: Codable, Equatable {
         case (.triggerCSVImport, .triggerCSVImport): return true
         case (.constant(let a), .constant(let b)): return a == b
         case (.uncertain(let a), .uncertain(let b)): return a == b
-        case (.roots(let a), .roots(let b)): return a == b
+        case (.roots(let a), .roots(let b)): return a == b // MODIFIED: Equatable conformance works automatically
         default: return false
         }
     }
@@ -909,4 +913,3 @@ extension Array {
         }
     }
 }
-

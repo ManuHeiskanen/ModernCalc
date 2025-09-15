@@ -50,9 +50,9 @@ struct Evaluator {
     let h = 1e-5 // A small step size for numerical differentiation
 
     /// A helper function to evaluate an expression with a temporary variable, used for calculus operations.
-    func evaluateWithTempVar(node: ExpressionNode, varName: String, varValue: Double, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
+    func evaluateWithTempVar(node: ExpressionNode, varName: String, varValue: MathValue, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         var tempVars = variables
-        tempVars[varName] = .dimensionless(varValue)
+        tempVars[varName] = varValue
         let (result, usedAngle) = try _evaluateSingle(node: node, variables: &tempVars, functions: &functions, angleMode: angleMode)
         return (result, usedAngle)
     }
@@ -312,7 +312,7 @@ struct Evaluator {
 
             var tempVarsForDryRun = variables
             tempVarsForDryRun[varName] = .dimensionless(0)
-            let (bodyResult, bodyUsedAngle) = try _evaluateSingle(node: bodyNode, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode)
+            let (_, bodyUsedAngle) = try _evaluateSingle(node: bodyNode, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode)
             
             let result = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: point, order: order, variables: &variables, functions: &functions, angleMode: angleMode)
             return (.dimensionless(result), pointUsedAngle || bodyUsedAngle)
@@ -326,14 +326,12 @@ struct Evaluator {
 
             var bodyUsedAngle = false
             let f: (Double) throws -> Double = { x in
-                var localVars = variables
-                var localFuncs = functions
                 let (value, f_usedAngle) = try self.evaluateWithTempVar(
                     node: integralNode.body,
                     varName: integralNode.variable.name,
-                    varValue: x,
-                    variables: &localVars,
-                    functions: &localFuncs,
+                    varValue: .dimensionless(x),
+                    variables: &variables,
+                    functions: &functions,
                     angleMode: angleMode
                 )
                 bodyUsedAngle = bodyUsedAngle || f_usedAngle
@@ -361,8 +359,8 @@ struct Evaluator {
             tempVars[varName] = .dimensionless(point)
             let (_, bodyUsedAngle) = try _evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &functions, angleMode: angleMode)
 
-            let (valPlus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point + h, variables: &variables, functions: &functions, angleMode: angleMode)
-            let (valMinus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: point - h, variables: &variables, functions: &functions, angleMode: angleMode)
+            let (valPlus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: .dimensionless(point + h), variables: &variables, functions: &functions, angleMode: angleMode)
+            let (valMinus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: .dimensionless(point - h), variables: &variables, functions: &functions, angleMode: angleMode)
             
             let scalarPlus = try valPlus.asScalar()
             let scalarMinus = try valMinus.asScalar()

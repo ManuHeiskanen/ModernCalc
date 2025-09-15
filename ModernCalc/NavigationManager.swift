@@ -98,7 +98,8 @@ class NavigationManager: ObservableObject {
                     return viewModel.formatForParsing(valueToParse)
                 } else if case .roots(let values) = selectedItem.result {
                     if index < values.count {
-                        return viewModel.formatForParsing(.dimensionless(values[index]))
+                        // FIX: The `values` array now contains MathValue, not Double.
+                        return viewModel.formatForParsing(values[index])
                     }
                 } else if index == 0 { // For single results
                     return viewModel.formatForParsing(selectedItem.result)
@@ -116,4 +117,3 @@ class NavigationManager: ObservableObject {
         selectedPart = .result(index: 0)
     }
 }
-

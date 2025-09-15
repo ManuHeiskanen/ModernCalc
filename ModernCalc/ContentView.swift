@@ -3,7 +3,8 @@
 //  ModernCalc
 //
 //  Created by Manu Heiskanen on 28.8.2025.
-//a
+//
+
 import SwiftUI
 
 struct ContentView: View {
@@ -392,8 +393,8 @@ struct CalculationResultView: View {
                         }
                         
                         LazyVGrid(columns: columns, alignment: .trailing, spacing: 8) {
-                            ForEach(Array(roots.enumerated()), id: \.offset) { index, root in
-                                 Text(formatRoot(root))
+                            ForEach(Array(roots.enumerated()), id: \.offset) { index, rootValue in
+                                Text(viewModel.formatForHistory(rootValue))
                                     .font(.system(size: 22, weight: .light, design: .monospaced))
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
@@ -407,7 +408,7 @@ struct CalculationResultView: View {
                                         withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
                                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                     }
-                                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(root))) }
+                                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
                             }
                         }
                     }
@@ -429,8 +430,8 @@ struct CalculationResultView: View {
                         let maxDisplayRoots = 4
                         let displayRoots = roots.count > maxDisplayRoots ? Array(roots.prefix(maxDisplayRoots)) : roots
                         
-                        ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, root in
-                            Text(formatRoot(root))
+                        ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, rootValue in
+                            Text(viewModel.formatForHistory(rootValue))
                                 .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
                                 .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
                                 .onHover { isHovering in
@@ -441,7 +442,7 @@ struct CalculationResultView: View {
                                     withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
                                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                 }
-                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(root))) }
+                                .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(rootValue)) }
                             
                             if index < displayRoots.count - 1 {
                                 Text(",")
@@ -476,13 +477,6 @@ struct CalculationResultView: View {
                 }
                 .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
         }
-    }
-    
-    private func formatRoot(_ root: Double) -> String {
-        let tolerance = 1e-9
-        let roundedRoot = root.rounded()
-        let valueToDisplay = abs(root - roundedRoot) < tolerance ? roundedRoot : root
-        return viewModel.formatScalarForDisplay(valueToDisplay)
     }
     
     private func isResultSelected(calculation: Calculation, index: Int) -> Bool {
@@ -636,4 +630,3 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
-

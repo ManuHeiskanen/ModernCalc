@@ -483,18 +483,11 @@ class CalculatorViewModel: ObservableObject {
                 return "\(val) ± \(unc) (R: \(rand), S: \(sys))"
             }
             return "\(val) ± \(unc)"
-        case .roots(let roots):
+        case .roots(let roots): // MODIFIED: Handles formatting a list of MathValues
             if roots.isEmpty { return "No real roots found" }
             let maxDisplayRoots = 4
             
-            let formattedRoots = roots.map { root -> String in
-                let tolerance = 1e-9
-                let roundedRoot = root.rounded()
-                if abs(root - roundedRoot) < tolerance {
-                    return formatScalarForDisplay(roundedRoot)
-                }
-                return formatScalarForDisplay(root)
-            }
+            let formattedRoots = roots.map { formatForHistory($0) }
 
             if roots.count > maxDisplayRoots {
                 let displayed = formattedRoots.prefix(maxDisplayRoots).joined(separator: ", ")
@@ -511,6 +504,7 @@ class CalculatorViewModel: ObservableObject {
         switch value {
         case .dimensionless(let d): return formatScalarForParsing(d)
         case .unitValue(let u):
+            // 1. Handle preferred unit first
             if let preferredUnitSymbol = u.preferredDisplayUnit,
                let preferredUnitDef = UnitStore.units[preferredUnitSymbol],
                u.dimensions == preferredUnitDef.dimensions {
@@ -520,6 +514,17 @@ class CalculatorViewModel: ObservableObject {
                 return "\(valStr).\(preferredUnitSymbol)"
             }
 
+            // 2. Check for a "best unit" and convert the value accordingly
+            if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
+                let convertedValue = u.value / bestUnit.conversionFactor
+                let valStr = formatScalarForParsing(convertedValue)
+                if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
+                     return valStr
+                }
+                return "\(valStr).\(bestUnit.symbol)"
+            }
+            
+            // 3. Fallback: compose unit from base parts.
             let valStr = formatScalarForParsing(u.value)
             let unitStr = formatDimensionsForParsing(u.dimensions)
             if unitStr.isEmpty { return valStr }
@@ -546,9 +551,9 @@ class CalculatorViewModel: ObservableObject {
                 parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))")
             }
             return "uncert(\(parts.joined(separator: ", ")))"
-        case .roots(let roots):
+        case .roots(let roots): // MODIFIED: Handles creating a vector from a list of MathValues
             if roots.isEmpty { return "" }
-            return "vector(\(roots.map { formatScalarForParsing($0) }.joined(separator: ";")))"
+            return "vector(\(roots.map { formatForParsing($0) }.joined(separator: ";")))"
         }
     }
 
@@ -608,8 +613,10 @@ class CalculatorViewModel: ObservableObject {
             }
         }
         
-        // Fallback to the shortest symbol if no preferred match is found
-        return potentialMatches.min(by: { $0.symbol.count < $1.symbol.count })
+        // FIX: Removed the fallback to the shortest symbol. If a unit is not in the preferred
+        // list, we will now default to composing the base SI units (e.g., "m/s") instead of
+        // guessing a non-standard unit like "mph".
+        return nil
     }
     
     private func formatDimensionsForHistory(_ dimensions: UnitDimension) -> String {
@@ -643,12 +650,9 @@ class CalculatorViewModel: ObservableObject {
     }
     
     private func formatDimensionsForParsing(_ dimensions: UnitDimension) -> String {
-        if let bestUnit = findBestUnitFor(dimensions: dimensions) {
-            if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
-                 return ""
-            }
-            return ".\(bestUnit.symbol)"
-        }
+        // FIX: This function no longer calls `findBestUnitFor`. That logic now lives
+        // directly in `formatForParsing` to ensure value conversion happens correctly.
+        // This function is now only responsible for composing a unit string from base parts.
         
         let allDims = dimensions.sorted { $0.key.rawValue < $1.key.rawValue }
         
@@ -814,4 +818,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
