@@ -261,6 +261,42 @@ struct LaTeXEngine {
             return "\\text{Plot: \(data.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
         case .uncertain(let u):
             return "\(formatScalar(u.value, settings: settings)) \\pm \(formatScalar(u.totalUncertainty, settings: settings))"
+        case .roots(let roots):
+            if roots.isEmpty {
+                return "\\text{No real roots found}"
+            }
+            
+            var variableName = "x" // Default variable name
+            if let expr = expression {
+                // Try to extract variable name from the expression string, e.g., from "solve(x^2==4, x)"
+                let pattern = #"(?:solve|nsolve)\s*\([^,]+,\s*([a-zA-Z_][a-zA-Z0-9_]*)"#
+                do {
+                    let regex = try NSRegularExpression(pattern: pattern)
+                    if let match = regex.firstMatch(in: expr, range: NSRange(expr.startIndex..., in: expr)),
+                       let range = Range(match.range(at: 1), in: expr) {
+                        variableName = String(expr[range])
+                    }
+                } catch {
+                    // In case of regex error, we just use the default 'x'.
+                }
+            }
+
+            // For roots, we apply special formatting to round near-integers for a cleaner display.
+            let rootsString = roots.map { root -> String in
+                let tolerance = 1e-7
+                let roundedRoot = root.rounded()
+                if abs(root - roundedRoot) < tolerance {
+                    return formatScalar(roundedRoot, settings: settings)
+                }
+                return formatScalar(root, settings: settings)
+            }.joined(separator: ", ")
+
+            // Use "var ≈ {val1, val2}" for multiple roots, and "var ≈ val" for a single root.
+            if roots.count > 1 {
+                return "\(variableName) \\approx \\{ \(rootsString) \\}"
+            } else {
+                return "\(variableName) \\approx \(rootsString)"
+            }
         default:
             return ""
         }
@@ -426,3 +462,4 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
+
