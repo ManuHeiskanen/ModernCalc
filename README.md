@@ -41,7 +41,12 @@ ModernCalc is not just another calculator; it's a powerful and intuitive mathema
 
 - **CSV Data Import**:  
 - Use the `.csv` button or type `importcsv()` to launch the importer.  
-- Visually select columns and rows to import as a matrix.  
+- Visually select columns and rows to import as a matrix.
+
+- **Numeric Roots Finder**:
+- Use the `solve()` or `nsolve()` to find real roots:
+- Without units: `solve(x^3 - 6*x^2 + 11*x - 6 == 0, x)`
+- With units: `solve(v==0.m/.s+g.m/.s^2*5.s,v,1.m/.s)`
 
 ---
 
