@@ -14,8 +14,16 @@ class PlotViewModel: ObservableObject {
     @Published var viewDomainX: ClosedRange<Double>
     @Published var viewDomainY: ClosedRange<Double>
     
+    // --- NEW PROPERTIES ---
+    @Published var xAxisLabel: String
+    @Published var yAxisLabel: String
+    
     init(plotData: PlotData) {
         self.plotData = plotData
+        
+        // --- NEW ---
+        self.xAxisLabel = plotData.xAxisLabel
+        self.yAxisLabel = plotData.yAxisLabel
         
         if plotData.plotType == .vector {
             // --- Vector Scaling Logic ---

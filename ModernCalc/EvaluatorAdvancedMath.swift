@@ -141,7 +141,7 @@ extension Evaluator {
                 for vector in vectorsToPlot { allSeries.append(PlotSeries(name: "v = [\(vector[0]); \(vector[1])]", dataPoints: [DataPoint(x: vector[0], y: vector[1])])) }
                 let duration = CFAbsoluteTimeGetCurrent() - startTime
                 print("[BENCHMARK] Autoplot (vector) generation time: \(duration * 1000) ms")
-                return .plot(PlotData(expression: node.description, series: allSeries, plotType: .vector, explicitYRange: nil, generationTime: duration))
+                return .plot(PlotData(expression: node.description, series: allSeries, plotType: .vector, explicitYRange: nil, generationTime: duration, xAxisLabel: "X", yAxisLabel: "Y"))
             }
         }
 
@@ -152,6 +152,16 @@ extension Evaluator {
         let plotData: PlotData
         if isParametric {
             let xBody = node.expressions[0]; let yBody = node.expressions[1]; let varName = "t"
+            
+            // --- Dry run to determine units ---
+            var tempVarsDryRun = variables
+            tempVarsDryRun[varName] = .dimensionless(0)
+            let (dryRunX, _) = try _evaluateSingle(node: xBody, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+            let (dryRunY, _) = try _evaluateSingle(node: yBody, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+            
+            let xAxisDimension: UnitDimension = dryRunX.dimensionsIfUnitOrDimensionless
+            let yAxisDimension: UnitDimension = dryRunY.dimensionsIfUnitOrDimensionless
+
             var results = Array<DataPoint?>(repeating: nil, count: numPoints)
             let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
             let capturedVariables = variables; let capturedFunctions = functions
@@ -162,19 +172,41 @@ extension Evaluator {
                 do {
                     let (xValue, _) = try evaluateWithTempVar(node: xBody, varName: varName, varValue: .dimensionless(t), variables: &localVars, functions: &localFuncs, angleMode: .radians)
                     let (yValue, _) = try evaluateWithTempVar(node: yBody, varName: varName, varValue: .dimensionless(t), variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                    let x = try xValue.asScalar()
-                    let y = try yValue.asScalar()
-                    if x.isFinite, y.isFinite {
-                        results[i] = DataPoint(x: x, y: y)
+                    
+                    guard xValue.dimensionsIfUnitOrDimensionless == xAxisDimension,
+                          yValue.dimensionsIfUnitOrDimensionless == yAxisDimension else { return }
+                    
+                    let x_si: Double
+                    switch xValue {
+                        case .dimensionless(let d): x_si = d
+                        case .unitValue(let u): x_si = u.value
+                        case .uncertain(let u): x_si = u.value
+                        default: return
+                    }
+                    let y_si: Double
+                    switch yValue {
+                        case .dimensionless(let d): y_si = d
+                        case .unitValue(let u): y_si = u.value
+                        case .uncertain(let u): y_si = u.value
+                        default: return
+                    }
+
+                    if x_si.isFinite, y_si.isFinite {
+                        results[i] = DataPoint(x: x_si, y: y_si)
                     }
                 } catch { }
             }
             let dataPoints = results.compactMap { $0 }
             if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+            
             let seriesName = "(\(xBody.description), \(yBody.description))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Autoplot (parametric) generation time: \(duration * 1000) ms")
-            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil, generationTime: duration)
+
+            let xAxisLabel = formatDimensionsForAxis(xAxisDimension, defaultLabel: "x(t)")
+            let yAxisLabel = formatDimensionsForAxis(yAxisDimension, defaultLabel: "y(t)")
+            
+            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: xAxisDimension, yAxisDimension: yAxisDimension)
         } else {
             let declaredVariables = Set(variables.keys); let declaredFunctions = Set(functions.keys); var undeclaredVars = Set<String>()
             for expr in node.expressions { undeclaredVars.formUnion(findUndeclaredVariables(in: expr, declaredVariables: declaredVariables, declaredFunctions: declaredFunctions)) }
@@ -186,7 +218,16 @@ extension Evaluator {
             else { throw MathError.plotError(reason: "Multiple unknown variables found: [\(undeclaredVars.joined(separator: ", "))].") }
 
             var allSeries: [PlotSeries] = []
+            var yAxisDimension: UnitDimension? = nil
+
             for body in node.expressions {
+                if yAxisDimension == nil {
+                     var tempVarsDryRun = variables
+                     tempVarsDryRun[varName] = .dimensionless(0)
+                     let (dryRunY, _) = try _evaluateSingle(node: body, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+                     yAxisDimension = dryRunY.dimensionsIfUnitOrDimensionless
+                }
+
                 var results = Array<DataPoint?>(repeating: nil, count: numPoints)
                 let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
                 let capturedVariables = variables; let capturedFunctions = functions
@@ -196,9 +237,23 @@ extension Evaluator {
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
                         let (yValue, _) = try evaluateWithTempVar(node: body, varName: varName, varValue: .dimensionless(x), variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                        let y = try yValue.asScalar()
-                        if y.isFinite {
-                            results[i] = DataPoint(x: x, y: y)
+                        
+                        guard yValue.dimensionsIfUnitOrDimensionless == yAxisDimension else { return }
+
+                        let y_si: Double
+                        switch yValue {
+                        case .dimensionless(let d):
+                            y_si = d
+                        case .unitValue(let u):
+                            y_si = u.value
+                        case .uncertain(let u):
+                            y_si = u.value
+                        default:
+                            return
+                        }
+
+                        if y_si.isFinite {
+                            results[i] = DataPoint(x: x, y: y_si)
                         }
                     } catch { }
                 }
@@ -208,12 +263,18 @@ extension Evaluator {
             if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Autoplot (function) generation time: \(duration * 1000) ms")
-            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil, generationTime: duration)
+
+            let xAxisLabel = varName
+            let yAxisLabel = formatDimensionsForAxis(yAxisDimension ?? [:], defaultLabel: "f(\(varName))")
+            
+            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: [:], yAxisDimension: yAxisDimension)
         }
         return .plot(plotData)
     }
     
     func evaluateScatterplot(_ node: ScatterplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        // NOTE: This function remains unit-agnostic for now as vector data types do not intrinsically carry unit information.
+        // It will produce a plot with dimensionless axes.
         let startTime = CFAbsoluteTimeGetCurrent()
         let evaluatedArgs = try node.arguments.map { try _evaluateSingle(node: $0, variables: &variables, functions: &functions, angleMode: .radians).result }
         
@@ -279,14 +340,33 @@ extension Evaluator {
     
     func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
         let startTime = CFAbsoluteTimeGetCurrent()
+        
+        // 1. Evaluate ranges, which can now have units.
         let (xMinVal, _) = try _evaluateSingle(node: node.xRange.0, variables: &variables, functions: &functions, angleMode: .radians)
         let (xMaxVal, _) = try _evaluateSingle(node: node.xRange.1, variables: &variables, functions: &functions, angleMode: .radians)
         
-        let xMin = try xMinVal.asScalar()
-        let xMax = try xMaxVal.asScalar()
+        // 2. Extract base values and determine X-axis unit dimension.
+        let xMin: UnitValue
+        let xMax: UnitValue
+        switch (xMinVal, xMaxVal) {
+            case (.unitValue(let u1), .unitValue(let u2)):
+                guard u1.dimensions == u2.dimensions else { throw MathError.plotError(reason: "Plot range units must be compatible.") }
+                xMin = u1; xMax = u2
+            case (.dimensionless(let d1), .dimensionless(let d2)):
+                xMin = .dimensionless(d1); xMax = .dimensionless(d2)
+            case (.unitValue(let u1), .dimensionless(let d2)):
+                guard u1.dimensions.isEmpty else { throw MathError.plotError(reason: "Plot range units must be compatible.") }
+                xMin = u1; xMax = .dimensionless(d2)
+            case (.dimensionless(let d1), .unitValue(let u2)):
+                guard u2.dimensions.isEmpty else { throw MathError.plotError(reason: "Plot range units must be compatible.") }
+                xMin = .dimensionless(d1); xMax = u2
+            default:
+                throw MathError.plotError(reason: "Incompatible plot range types.")
+        }
         
-        guard xMin < xMax else { throw MathError.plotError(reason: "Plot range min must be less than max.") }
-        let plotRange = xMin...xMax
+        let xAxisDimension = xMin.dimensions
+        guard xMin.value < xMax.value else { throw MathError.plotError(reason: "Plot range min must be less than max.") }
+        
         var explicitYRange: (min: Double, max: Double)? = nil
         if let yRangeNodes = node.yRange {
              let (yMinVal, _) = try _evaluateSingle(node: yRangeNodes.0, variables: &variables, functions: &functions, angleMode: .radians)
@@ -302,20 +382,48 @@ extension Evaluator {
         let plotData: PlotData
         if isParametric {
             let xBody = node.expressions[0]; let yBody = node.expressions[1]
+            
+            // --- Dry run to determine units ---
+            var tempVarsDryRun = variables
+            tempVarsDryRun[varName] = .unitValue(xMin)
+            let (dryRunX, _) = try _evaluateSingle(node: xBody, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+            let (dryRunY, _) = try _evaluateSingle(node: yBody, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+            
+            let parametricXAxisDimension = dryRunX.dimensionsIfUnitOrDimensionless
+            let parametricYAxisDimension = dryRunY.dimensionsIfUnitOrDimensionless
+
             var results = Array<DataPoint?>(repeating: nil, count: numPoints)
-            let step = (plotRange.upperBound - plotRange.lowerBound) / Double(numPoints - 1)
+            let step = (xMax.value - xMin.value) / Double(numPoints - 1)
             let capturedVariables = variables; let capturedFunctions = functions
             
             DispatchQueue.concurrentPerform(iterations: numPoints) { i in
-                let t = plotRange.lowerBound + Double(i) * step
+                let t_si = xMin.value + Double(i) * step
+                let tVar = MathValue.unitValue(UnitValue(value: t_si, dimensions: xAxisDimension))
                 var localVars = capturedVariables; var localFuncs = capturedFunctions
                 do {
-                    let (xValue, _) = try evaluateWithTempVar(node: xBody, varName: varName, varValue: .dimensionless(t), variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                    let (yValue, _) = try evaluateWithTempVar(node: yBody, varName: varName, varValue: .dimensionless(t), variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                    let x = try xValue.asScalar()
-                    let y = try yValue.asScalar()
-                    if x.isFinite, y.isFinite {
-                        results[i] = DataPoint(x: x, y: y)
+                    let (xValue, _) = try evaluateWithTempVar(node: xBody, varName: varName, varValue: tVar, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    let (yValue, _) = try evaluateWithTempVar(node: yBody, varName: varName, varValue: tVar, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    
+                    guard xValue.dimensionsIfUnitOrDimensionless == parametricXAxisDimension,
+                          yValue.dimensionsIfUnitOrDimensionless == parametricYAxisDimension else { return }
+                    
+                    let x_si: Double
+                    switch xValue {
+                        case .dimensionless(let d): x_si = d
+                        case .unitValue(let u): x_si = u.value
+                        case .uncertain(let u): x_si = u.value
+                        default: return
+                    }
+                    let y_si: Double
+                    switch yValue {
+                        case .dimensionless(let d): y_si = d
+                        case .unitValue(let u): y_si = u.value
+                        case .uncertain(let u): y_si = u.value
+                        default: return
+                    }
+
+                    if x_si.isFinite, y_si.isFinite {
+                        results[i] = DataPoint(x: x_si, y: y_si)
                     }
                 } catch {}
             }
@@ -325,22 +433,48 @@ extension Evaluator {
             let seriesName = "(\(xBody.description), \(yBody.description))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Plot (parametric) generation time: \(duration * 1000) ms")
-            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: explicitYRange, generationTime: duration)
+            
+            let xAxisLabel = formatDimensionsForAxis(parametricXAxisDimension, defaultLabel: "x(\(varName))")
+            let yAxisLabel = formatDimensionsForAxis(parametricYAxisDimension, defaultLabel: "y(\(varName))")
+            
+            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: explicitYRange, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: parametricXAxisDimension, yAxisDimension: parametricYAxisDimension)
         } else {
+            // --- Dry run to determine Y-axis unit ---
+            let dryRunX = MathValue.unitValue(xMin)
+            var tempVarsDryRun = variables
+            tempVarsDryRun[varName] = dryRunX
+            let (dryRunY, _) = try _evaluateSingle(node: node.expressions.first!, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+            let yAxisDimension = dryRunY.dimensionsIfUnitOrDimensionless
+
             var allSeries: [PlotSeries] = []
             for body in node.expressions {
                 var results = Array<DataPoint?>(repeating: nil, count: numPoints)
-                let step = (plotRange.upperBound - plotRange.lowerBound) / Double(numPoints - 1)
+                let step = (xMax.value - xMin.value) / Double(numPoints - 1)
                 let capturedVariables = variables; let capturedFunctions = functions
 
                 DispatchQueue.concurrentPerform(iterations: numPoints) { i in
-                    let x = plotRange.lowerBound + Double(i) * step
+                    let x_si = xMin.value + Double(i) * step
+                    let xVar = MathValue.unitValue(UnitValue(value: x_si, dimensions: xAxisDimension))
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
-                        let (yValue, _) = try evaluateWithTempVar(node: body, varName: varName, varValue: .dimensionless(x), variables: &localVars, functions: &localFuncs, angleMode: .radians)
-                        let y = try yValue.asScalar()
-                        if y.isFinite {
-                            results[i] = DataPoint(x: x, y: y)
+                        let (yValue, _) = try evaluateWithTempVar(node: body, varName: varName, varValue: xVar, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                        
+                        guard yValue.dimensionsIfUnitOrDimensionless == yAxisDimension else { return }
+                        
+                        let y_si: Double
+                        switch yValue {
+                        case .dimensionless(let d):
+                            y_si = d
+                        case .unitValue(let u):
+                            y_si = u.value
+                        case .uncertain(let u):
+                            y_si = u.value
+                        default:
+                            return
+                        }
+
+                        if y_si.isFinite {
+                            results[i] = DataPoint(x: x_si, y: y_si)
                         }
                     } catch {}
                 }
@@ -351,7 +485,11 @@ extension Evaluator {
             if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Plot (function) generation time: \(duration * 1000) ms")
-            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: explicitYRange, generationTime: duration)
+
+            let xAxisLabel = formatDimensionsForAxis(xAxisDimension, defaultLabel: varName)
+            let yAxisLabel = formatDimensionsForAxis(yAxisDimension, defaultLabel: "f(\(varName))")
+
+            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: explicitYRange, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: xAxisDimension, yAxisDimension: yAxisDimension)
         }
         return .plot(plotData)
     }
@@ -495,6 +633,39 @@ extension Evaluator {
             }
         }
     }
+    
+    private func formatDimensionsForAxis(_ dimensions: UnitDimension, defaultLabel: String) -> String {
+        if dimensions.isEmpty {
+            return defaultLabel
+        }
+        
+        let positiveDims = dimensions.filter { $0.value > 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
+        let negativeDims = dimensions.filter { $0.value < 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
+
+        let formatPart = { (dims: [(key: BaseUnit, value: Int)]) -> String in
+            dims.map { (unit, exponent) -> String in
+                let symbol = UnitStore.baseUnitSymbols[unit] ?? unit.rawValue
+                return abs(exponent) == 1 ? "\(symbol)" : "\(symbol)ˆ\(abs(exponent))"
+            }.joined(separator: "·")
+        }
+
+        let numerator = formatPart(positiveDims)
+        let denominator = formatPart(negativeDims)
+
+        if numerator.isEmpty && denominator.isEmpty {
+            return defaultLabel
+        } else if !denominator.isEmpty {
+            let denStr = denominator.contains("·") ? "(\(denominator))" : denominator
+            if numerator.isEmpty {
+                return "\(defaultLabel) [1/\(denStr)]"
+            } else {
+                let numStr = numerator.contains("·") ? "(\(numerator))" : numerator
+                return "\(defaultLabel) [\(numStr)/\(denStr)]"
+            }
+        } else {
+            return "\(defaultLabel) [\(numerator)]"
+        }
+    }
 }
 
 
@@ -578,3 +749,19 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
     let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
     return coefficients
 }
+
+private extension MathValue {
+    var dimensionsIfUnitOrDimensionless: UnitDimension {
+        switch self {
+        case .unitValue(let u):
+            return u.dimensions
+        case .dimensionless:
+            return [:]
+        default:
+            // This case should ideally not be hit in a plotting context,
+            // as we expect plottable values.
+            return [:]
+        }
+    }
+}
+

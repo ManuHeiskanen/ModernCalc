@@ -160,6 +160,8 @@ struct PlotView: View {
             .chartYScale(domain: viewModel.viewDomainY)
             .chartXAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
             .chartYAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
+            .chartXAxisLabel(viewModel.xAxisLabel)
+            .chartYAxisLabel(viewModel.yAxisLabel)
             .chartPlotStyle { plotArea in
                 plotArea
                     .background(Color.gray.opacity(0.1))
@@ -245,4 +247,3 @@ struct Arrowhead: Shape {
         return path
     }
 }
-

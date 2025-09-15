@@ -62,12 +62,23 @@ struct PlotData: Identifiable, Hashable {
     let explicitYRange: (min: Double, max: Double)?
     let generationTime: TimeInterval?
 
-    init(expression: String, series: [PlotSeries], plotType: PlotType, explicitYRange: (min: Double, max: Double)?, generationTime: TimeInterval? = nil) {
+    // --- NEW PROPERTIES ---
+    let xAxisLabel: String
+    let yAxisLabel: String
+    // We store the dimensions to allow for potential future unit conversions in the UI.
+    let xAxisDimension: UnitDimension?
+    let yAxisDimension: UnitDimension?
+
+    init(expression: String, series: [PlotSeries], plotType: PlotType, explicitYRange: (min: Double, max: Double)?, generationTime: TimeInterval? = nil, xAxisLabel: String = "X", yAxisLabel: String = "Y", xAxisDimension: UnitDimension? = nil, yAxisDimension: UnitDimension? = nil) {
         self.expression = expression
         self.series = series
         self.plotType = plotType
         self.explicitYRange = explicitYRange
         self.generationTime = generationTime
+        self.xAxisLabel = xAxisLabel
+        self.yAxisLabel = yAxisLabel
+        self.xAxisDimension = xAxisDimension
+        self.yAxisDimension = yAxisDimension
     }
     
     static func == (lhs: PlotData, rhs: PlotData) -> Bool {
@@ -138,4 +149,3 @@ struct HelpTopic: Identifiable, Hashable {
     let title: String
     let content: String
 }
-
