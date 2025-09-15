@@ -160,7 +160,7 @@ struct TextContents {
     static let helpTopics: [HelpTopic] = [
         .init(title: "Quick Start", content: "Enter a mathematical expression to see a live result. Press **Enter** to add it to your history. Use the `ans` variable to reference the last result. Use the arrow keys or your mouse to navigate your history and reuse previous equations, results or plots."),
         .init(title: "Variables & Functions", content: "Assign a variable using `:=`, like `x := 5*2`. Variables are saved automatically. \nDefine custom functions with parameters, like `f(x, y) := x^2 + y^2`. You can then call them like any built-in function: `f(3, 4)`."),
-        .init(title: "Units & Conversions", content: "Attach units to numbers using a dot, like `20.m` or `9.8.m/s^2`. You can convert between compatible units using the `in` operator, for example: `1.year in .day`."),
+        .init(title: "Units & Conversions", content: "Attach units to numbers using a dot, like `20.m` or `9.8.m/.s^2`. You can convert between compatible units using the `in` operator, for example: `1.year in .day`."),
         .init(title: "Uncertainty", content: "Create a value with uncertainty using `uncert(value, random: 0.1, resolution: 0.05)`. Calculations will propagate errors according to standard rules: random (statistical) errors are combined in quadrature, and systematic errors (from resolution and accuracy) are also combined in quadrature.\n- **value**: The nominal value of the measurement.\n- **random** (or **r**): (Type A) The statistical uncertainty, like a standard deviation.\n- **resolution** (or **res**): (Type B) Systematic uncertainty from instrument resolution.\n- **accuracy** (or **a**): (Type B) Systematic uncertainty from instrument accuracy."),
         .init(title: "Operators", content: "Supports standard operators `+ - * / ^ %` as well as logical and comparison operators like `&&`, `||`, `~`, `>`, `==`, etc., which return 1.0 for true and 0.0 for false. For element-wise vector/matrix operations, use `.*` and `./`. You can modify a single vector element using operators like `.=@` (set), `.+@` (add to), etc., with the syntax `vector_expression .op@ (index, value)`. The `!` operator calculates factorial, and `'` transposes a matrix. For complex matrices, `'` performs the conjugate transpose."),
         .init(title: "Data Types", content: "**Complex Numbers:** Use `i` for the imaginary unit (e.g., `3 + 4i`). \n**Vectors:** Create with `vector(1; 2; 3)`. \n**Matrices:** Create with `matrix(1, 2; 3, 4)`, using commas for columns and semicolons for rows. \n**Polar Form:** Enter complex numbers with `R∠θ` (e.g., `5∠53.13` in degree mode)."),
@@ -196,8 +196,8 @@ struct TextContents {
         *Result: 1.895*
 
         **Solving with Units:**
-        The solver can handle equations with units. Simply include them in the equation. You can provide a guess with units to guide the search.
-        `solve(F/2.kg == 9.8.m/s^2, F)`
+        To solve an equation with units, you **must provide a guess** with the correct units.
+        `solve(F/2.kg == 9.8.m/.s^2, F, 1.N)`
         *Result: 19.6 N*
 
         **Troubleshooting:**
