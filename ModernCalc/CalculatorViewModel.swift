@@ -650,16 +650,34 @@ class CalculatorViewModel: ObservableObject {
     }
     
     private func formatDimensionsForParsing(_ dimensions: UnitDimension) -> String {
-        // FIX: This function no longer calls `findBestUnitFor`. That logic now lives
-        // directly in `formatForParsing` to ensure value conversion happens correctly.
-        // This function is now only responsible for composing a unit string from base parts.
-        
-        let allDims = dimensions.sorted { $0.key.rawValue < $1.key.rawValue }
-        
-        return allDims.map { (unit, exponent) -> String in
-            let symbol = UnitStore.units.first(where: { $0.value.dimensions == [unit: 1] && $0.value.conversionFactor == 1.0 })?.key ?? unit.rawValue
-            return ".\(symbol)\(exponent == 1 ? "" : "^\(exponent)")"
-        }.joined(separator: " ")
+        let positiveDims = dimensions.filter { $0.value > 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
+        let negativeDims = dimensions.filter { $0.value < 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
+
+        // Helper to format a list of dimension components into a string like ".m.s^2"
+        let formatPart = { (dims: [(key: BaseUnit, value: Int)]) -> String in
+            return dims.map { (unit, exponent) -> String in
+                // Get the standard SI symbol (e.g., "m" for .meter)
+                let symbol = UnitStore.baseUnitSymbols[unit] ?? unit.rawValue
+                let absExponent = abs(exponent)
+                // Format as ".symbol" or ".symbol^exp"
+                return ".\(symbol)\(absExponent == 1 ? "" : "^\(absExponent)")"
+            }.joined() // Join without any separator
+        }
+
+        let numerator = formatPart(positiveDims)
+        let denominator = formatPart(negativeDims)
+
+        if denominator.isEmpty {
+            return numerator // e.g., ".m.kg"
+        } else {
+            if numerator.isEmpty {
+                // For cases like Hz (1/s), which is 1/.s
+                return "1/\(denominator)"
+            } else {
+                // For m/s, this will produce ".m/.s"
+                return "\(numerator)/\(denominator)"
+            }
+        }
     }
 
     private func formatComplexForDisplay(_ value: Complex) -> String {
@@ -798,15 +816,20 @@ class CalculatorViewModel: ObservableObject {
             return String(format: "%.0f", value)
         }
         
-        let stringValue = String(value)
-        if stringValue.lowercased().contains("e") {
-            let parts = stringValue.lowercased().components(separatedBy: "e")
+        // Use the general format specifier 'g' with high precision to avoid floating point noise
+        // and to automatically handle scientific notation for very large/small numbers.
+        let formattedString = String(format: "%.14g", value)
+        
+        if formattedString.lowercased().contains("e") {
+            let parts = formattedString.lowercased().components(separatedBy: "e")
             if parts.count == 2 {
                  let mantissa = parts[0].replacingOccurrences(of: ".", with: settings.decimalSeparator.rawValue)
+                 // The parser expects this explicit format for scientific notation
                  return "(\(mantissa)*10^\(parts[1]))"
             }
         }
-        return stringValue.replacingOccurrences(of: ".", with: settings.decimalSeparator.rawValue)
+        
+        return formattedString.replacingOccurrences(of: ".", with: settings.decimalSeparator.rawValue)
     }
     
     private func formatComplexForParsing(_ value: Complex) -> String {
@@ -818,3 +841,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
