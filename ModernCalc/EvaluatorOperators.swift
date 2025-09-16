@@ -88,7 +88,11 @@ extension Evaluator {
         // --- Vector Operations ---
         case (.vector(let v), .dimensionless(let s)): return .vector(try performVectorScalarOp(op.rawValue, v, s))
         case (.dimensionless(let s), .vector(let v)): return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
-        case (.vector(let l), .vector(let r)): return .vector(try performVectorVectorOp(op.rawValue, l, r))
+        case (.vector(let l), .vector(let r)):
+            if op.rawValue == "*" {
+                return .matrix(l * r)
+            }
+            return .vector(try performVectorVectorOp(op.rawValue, l, r))
             
         // --- Matrix Operations ---
         case (.matrix(let m), .dimensionless(let s)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
@@ -97,18 +101,37 @@ extension Evaluator {
         case (.matrix(let m), .vector(let v)):
              if op.rawValue == "*" { return .vector(try m * v) }
              else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
-        
+        case (.vector(let v), .matrix(let m)):
+            if op.rawValue == "*" {
+                // NEW: Handle the case where a 1-row matrix should be treated as a vector for an outer product.
+                if m.rows == 1 {
+                    let rowVector = Vector(values: m.values)
+                    // This calls the Vector * Vector outer product operator.
+                    return .matrix(v * rowVector)
+                }
+                // This is the original row-vector * matrix multiplication
+                return .vector(try v * m)
+            }
+            else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
+
         // --- Complex Vector/Matrix Operations ---
         case (.complexVector(let cv), .complex(let c)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c))
         case (.complex(let c), .complexVector(let cv)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c, reversed: true))
-        case (.complexVector(let l), .complexVector(let r)): return .complexVector(try performCVectorCVectorOp(op.rawValue, l, r))
+        case (.complexVector(let l), .complexVector(let r)):
+            if op.rawValue == "*" {
+                return .complexMatrix(l * r)
+            }
+            return .complexVector(try performCVectorCVectorOp(op.rawValue, l, r))
         case (.complexMatrix(let cm), .complex(let c)): return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, cm, c))
         case (.complex(let c), .complexMatrix(let cm)): return .complexMatrix(try performComplexMatrixComplexOp(op.rawValue, cm, c, reversed: true))
         case (.complexMatrix(let l), .complexMatrix(let r)): return .complexMatrix(try performCMatrixCMatrixOp(op.rawValue, l, r))
         case (.complexMatrix(let m), .complexVector(let v)):
             if op.rawValue == "*" { return .complexVector(try m * v) }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
-        
+        case (.complexVector(let v), .complexMatrix(let m)):
+            if op.rawValue == "*" { return .complexVector(try v * m) }
+            else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
+
         // --- Promotion cases for mixed types ---
         case (.matrix, .complex), (.complex, .matrix),
              (.vector, .complex), (.complex, .vector),

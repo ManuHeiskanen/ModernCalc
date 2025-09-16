@@ -321,6 +321,17 @@ struct Vector: Equatable, Codable {
         return Vector(values: zip(lhs.values, rhs.values).map(-))
     }
 
+    // Outer product
+    static func * (lhs: Vector, rhs: Vector) -> Matrix {
+        var newValues = [Double](repeating: 0, count: lhs.dimension * rhs.dimension)
+        for i in 0..<lhs.dimension {
+            for j in 0..<rhs.dimension {
+                newValues[i * rhs.dimension + j] = lhs[i] * rhs[j]
+            }
+        }
+        return Matrix(values: newValues, rows: lhs.dimension, columns: rhs.dimension)
+    }
+
     // --- Scalar-Vector Operators ---
     static func + (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 + rhs }) }
     static func + (lhs: Double, rhs: Vector) -> Vector { rhs + lhs }
@@ -330,6 +341,22 @@ struct Vector: Equatable, Codable {
     static func * (lhs: Double, rhs: Vector) -> Vector { rhs * lhs }
     static func / (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 / rhs }) }
     static func / (lhs: Double, rhs: Vector) -> Vector { Vector(values: rhs.values.map { lhs / $0 }) }
+    
+    // --- Vector-Matrix Multiplication (Row Vector * Matrix) ---
+    static func * (lhs: Vector, rhs: Matrix) throws -> Vector {
+        guard lhs.dimension == rhs.rows else {
+            throw MathError.dimensionMismatch(reason: "For v*M, dimension of v must equal rows of M.")
+        }
+        var newValues = [Double](repeating: 0, count: rhs.columns)
+        for j in 0..<rhs.columns { // For each column in the matrix
+            var sum = 0.0
+            for i in 0..<lhs.dimension { // For each element in the vector (row)
+                sum += lhs[i] * rhs[i, j]
+            }
+            newValues[j] = sum
+        }
+        return Vector(values: newValues)
+    }
     
     // --- Statistical Helpers ---
     func sum() -> Double { return values.reduce(0, +) }
@@ -636,10 +663,37 @@ struct ComplexVector: Equatable, Codable {
         return ComplexVector(values: zip(lhs.values, rhs.values).map(-))
     }
     
+    // Outer Product
+    static func * (lhs: ComplexVector, rhs: ComplexVector) -> ComplexMatrix {
+        var newValues = [Complex](repeating: .zero, count: lhs.dimension * rhs.dimension)
+        for i in 0..<lhs.dimension {
+            for j in 0..<rhs.dimension {
+                newValues[i * rhs.dimension + j] = lhs[i] * rhs[j]
+            }
+        }
+        return ComplexMatrix(values: newValues, rows: lhs.dimension, columns: rhs.dimension)
+    }
+
     static func + (lhs: ComplexVector, rhs: Complex) -> ComplexVector { return ComplexVector(values: lhs.values.map { $0 + rhs }) }
     static func - (lhs: ComplexVector, rhs: Complex) -> ComplexVector { return ComplexVector(values: lhs.values.map { $0 - rhs }) }
     static func * (lhs: ComplexVector, rhs: Complex) -> ComplexVector { return ComplexVector(values: lhs.values.map { $0 * rhs }) }
     static func / (lhs: ComplexVector, rhs: Complex) throws -> ComplexVector { return try ComplexVector(values: lhs.values.map { try $0 / rhs }) }
+
+    // --- ComplexVector-ComplexMatrix Multiplication (Row Vector * Matrix) ---
+    static func * (lhs: ComplexVector, rhs: ComplexMatrix) throws -> ComplexVector {
+        guard lhs.dimension == rhs.rows else {
+            throw MathError.dimensionMismatch(reason: "For v*M, dimension of v must equal rows of M.")
+        }
+        var newValues = [Complex](repeating: .zero, count: rhs.columns)
+        for j in 0..<rhs.columns {
+            var sum = Complex.zero
+            for i in 0..<lhs.dimension {
+                sum = sum + (lhs[i] * rhs[i, j])
+            }
+            newValues[j] = sum
+        }
+        return ComplexVector(values: newValues)
+    }
 }
 
 struct ComplexMatrix: Equatable, Codable {
@@ -915,3 +969,4 @@ extension Array {
         }
     }
 }
+

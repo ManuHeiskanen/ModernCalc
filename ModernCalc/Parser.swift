@@ -577,21 +577,44 @@ class Parser {
     
     private func parseVector() throws -> ExpressionNode {
         try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for vector"))
-        var elements: [ExpressionNode] = []
+        
         if let nextToken = peek(), case .paren(")") = nextToken.type {
             try advance()
-            return VectorNode(elements: [])
+            return MatrixNode(rows: [])
         }
         
+        var elements: [ExpressionNode] = []
+        var separatorUsed: Character? = nil
+
         repeat {
             elements.append(try parseExpression())
-            if let nextToken = peek(), case .separator(";") = nextToken.type {
-                try advance()
-            } else { break }
+            if let nextToken = peek(), case .separator(let char) = nextToken.type {
+                if char == "," || char == ";" {
+                    if separatorUsed == nil {
+                        separatorUsed = char
+                    } else if separatorUsed != char {
+                        throw ParserError.unexpectedToken(token: nextToken, expected: "consistent separator ('\(separatorUsed!)')")
+                    }
+                    try advance()
+                } else {
+                    break
+                }
+            } else {
+                break
+            }
         } while true
-        
-        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "';' or ')' for vector"))
-        return VectorNode(elements: elements)
+
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "separator or ')' for vector"))
+
+        // Based on the separator, create the appropriate matrix structure.
+        if let sep = separatorUsed, sep == ";" {
+            // Semicolon means column vector -> create a Matrix with N rows and 1 column.
+            let rows = elements.map { [$0] } // Each element is its own row.
+            return MatrixNode(rows: rows)
+        } else {
+            // Comma (or no separator for a single element) means row vector -> create a Matrix with 1 row and N columns.
+            return MatrixNode(rows: [elements])
+        }
     }
     
     private func parseMatrix() throws -> ExpressionNode {
@@ -741,3 +764,4 @@ class Parser {
         try advance()
     }
 }
+
