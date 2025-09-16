@@ -199,7 +199,7 @@ extension Evaluator {
             let dataPoints = results.compactMap { $0 }
             if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
             
-            let seriesName = "(\(xBody.description), \(yBody.description))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
+            let seriesName = "(\(DisplayFormatter.formatNodeForLegend(node: xBody)), \(DisplayFormatter.formatNodeForLegend(node: yBody)))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Autoplot (parametric) generation time: \(duration * 1000) ms")
 
@@ -258,7 +258,7 @@ extension Evaluator {
                     } catch { }
                 }
                 let dataPoints = results.compactMap { $0 }
-                if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints)) }
+                if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: DisplayFormatter.formatNodeForLegend(node: body), dataPoints: dataPoints)) }
             }
             if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
             let duration = CFAbsoluteTimeGetCurrent() - startTime
@@ -430,7 +430,7 @@ extension Evaluator {
             
             let dataPoints = results.compactMap { $0 }
             if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
-            let seriesName = "(\(xBody.description), \(yBody.description))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
+            let seriesName = "(\(DisplayFormatter.formatNodeForLegend(node: xBody)), \(DisplayFormatter.formatNodeForLegend(node: yBody)))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Plot (parametric) generation time: \(duration * 1000) ms")
             
@@ -480,7 +480,7 @@ extension Evaluator {
                 }
                 
                 let dataPoints = results.compactMap { $0 }
-                if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: body.description, dataPoints: dataPoints)) }
+                if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: DisplayFormatter.formatNodeForLegend(node: body), dataPoints: dataPoints)) }
             }
             if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
             let duration = CFAbsoluteTimeGetCurrent() - startTime

@@ -1,16 +1,25 @@
-//
-//  DisplayFormatter.swift
-//  ModernCalc
-//
-//  Created by Manu Heiskanen on 11.9.2025.
-//
-
 import Foundation
 
-/// A helper struct with static methods for formatting mathematical results for display.
+/// A utility struct for formatting mathematical expressions and values for display.
 struct DisplayFormatter {
+
+    // MARK: - Operator Precedence
+
+    private static let infixPrecedence: [String: Int] = [
+        "||": 1, "&&": 2,
+        "==": 3, "!=": 3, ">": 3, "<": 3, ">=": 3, "<=": 3,
+        "in": 4, "±": 4,
+        "+": 5, "-": 5,
+        "*": 6, "/": 6, "∠": 6, ".*": 6, "./": 6, ":": 6, // Treat ':' like division
+        ".=@": 7, ".+@": 7, ".-@": 7, ".*@": 7, "./@": 7,
+        "^": 8
+    ]
+
+    private static let unaryPrecedence = 9
+
+    // MARK: - Public Formatting Functions
     
-    /// Formats a double into a string with a limited number of significant figures, suitable for equations.
+    /// Formats a double into a string with a limited number of significant figures.
     static func formatScalar(_ value: Double) -> String {
         // Use up to 4 significant digits for a cleaner look in the equation.
         let tempFormatted = String(format: "%.4g", value)
@@ -28,44 +37,122 @@ struct DisplayFormatter {
         return tempFormatted
     }
 
-    /// Converts a vector of polynomial coefficients into a readable equation string.
-    /// The coefficients are expected in ascending order of power (constant, x, x^2, ...).
-    static func formatPolynomialEquation(coeffs: Vector) -> String {
-        var result = "y = "
-        // Reverse the coefficients to process from the highest power down to the constant term.
-        let reversedCoeffs = coeffs.values.enumerated().reversed()
-        
-        for (i, coeff) in reversedCoeffs {
-            // Skip terms with coefficients that are essentially zero, unless it's the only term.
-            if abs(coeff) < 1e-9 && coeffs.dimension > 1 { continue }
+    /// Formats an abstract syntax tree node into a human-readable string, suitable for legends.
+    /// This method aims to reduce unnecessary parentheses and simplify unit notation.
+    static func formatNodeForLegend(node: ExpressionNode) -> String {
+        return _formatNode(node, parentPrecedence: 0)
+    }
 
-            let isFirstTerm = (result == "y = ")
+    /// Formats the coefficients of a polynomial into a readable equation string.
+    static func formatPolynomialEquation(coeffs: Vector) -> String {
+        var parts: [String] = []
+        for i in (0..<coeffs.dimension).reversed() {
+            let coeff = coeffs[i]
+            if abs(coeff) < 1e-9 { continue }
+
+            let sign = (coeff < 0 && !parts.isEmpty) ? " - " : (parts.isEmpty ? "" : " + ")
             let absCoeff = abs(coeff)
             
-            // Determine the correct sign to display (+ or -).
-            let sign: String
-            if isFirstTerm {
-                sign = (coeff < 0) ? "- " : ""
-            } else {
-                sign = (coeff < 0) ? " - " : " + "
-            }
-            result += sign
-            
-            // Display the coefficient value, but omit '1' for terms like '1x^2'.
+            var coeffStr = ""
             if abs(absCoeff - 1.0) > 1e-9 || i == 0 {
-                 result += formatScalar(absCoeff)
+                coeffStr = formatScalar(absCoeff)
+            }
+
+            var term = ""
+            if i > 0 {
+                term = (i == 1) ? "x" : "x^\(i)"
             }
             
-            // Append the variable 'x' and its power, if applicable.
-            if i > 0 {
-                result += "x"
-                if i > 1 {
-                    // Use a superscript character for a cleaner look than '^'.
-                    result += "ˆ\(i)"
-                }
+            if !coeffStr.isEmpty && !term.isEmpty {
+                parts.append("\(sign)\(coeffStr)·\(term)")
+            } else if !term.isEmpty {
+                 parts.append("\(sign)\(term)")
+            } else {
+                 parts.append("\(sign)\(coeffStr)")
             }
         }
-        // Handle the case where all coefficients are zero.
-        return result == "y = " ? "y = 0" : result
+        if parts.isEmpty { return "y = 0" }
+        // Handle the leading sign correctly
+        let firstPart = parts.first!
+        if firstPart.hasPrefix(" + ") {
+            parts[0] = String(firstPart.dropFirst(3))
+        } else if firstPart.hasPrefix(" - ") {
+            parts[0] = "-" + String(firstPart.dropFirst(3))
+        }
+        
+        return "y = \(parts.joined())"
+    }
+
+    // MARK: - Private Recursive Formatter
+
+    private static func _formatNode(_ node: ExpressionNode, parentPrecedence: Int) -> String {
+        switch node {
+        case let numberNode as NumberNode:
+            return formatScalar(numberNode.value)
+
+        case let unitNode as UnitAndExponentNode:
+            if let exp = unitNode.exponent {
+                // Ensure exponent doesn't get unnecessary parentheses if it's just a number
+                let expStr = (exp is NumberNode) ? _formatNode(exp, parentPrecedence: 100) : "(\(_formatNode(exp, parentPrecedence: 0)))"
+                return "\(unitNode.unitSymbol)^\(expStr)"
+            }
+            return unitNode.unitSymbol
+            
+        case let constantNode as ConstantNode:
+            return constantNode.name
+            
+        case let funcCall as FunctionCallNode where funcCall.name == "if" && funcCall.arguments.count == 3:
+             let cond = _formatNode(funcCall.arguments[0], parentPrecedence: 0)
+             let trueVal = _formatNode(funcCall.arguments[1], parentPrecedence: 0)
+             let falseVal = _formatNode(funcCall.arguments[2], parentPrecedence: 0)
+             
+             let maxLegendPartLength = 25
+             let abbreviatedTrueVal = trueVal.count > maxLegendPartLength ? String(trueVal.prefix(maxLegendPartLength - 3)) + "..." : trueVal
+             let abbreviatedFalseVal = falseVal.count > maxLegendPartLength ? String(falseVal.prefix(maxLegendPartLength - 3)) + "..." : falseVal
+
+             return "if(\(cond), \(abbreviatedTrueVal), \(abbreviatedFalseVal))"
+
+        case let funcCall as FunctionCallNode:
+            let args = funcCall.arguments.map { _formatNode($0, parentPrecedence: 0) }.joined(separator: ", ")
+            return "\(funcCall.name)(\(args))"
+
+        case let unaryNode as UnaryOpNode:
+            let childStr = _formatNode(unaryNode.child, parentPrecedence: unaryPrecedence)
+            let result = "\(unaryNode.op.rawValue)\(childStr)"
+            return result
+            
+        case let binaryNode as BinaryOpNode:
+            // Special case for implicit multiplication with a unit, format as "value unit"
+            if binaryNode.op.rawValue == "*" && (binaryNode.right is UnitAndExponentNode) {
+                 let leftStr = _formatNode(binaryNode.left, parentPrecedence: infixPrecedence["*"]!)
+                 let rightStr = _formatNode(binaryNode.right, parentPrecedence: 100)
+                 return "\(leftStr) \(rightStr)"
+            }
+            
+            let op = binaryNode.op.rawValue
+            // Replace ':' with '/' for display
+            let displayOp = op == ":" ? "/" : op
+            
+            let myPrecedence = infixPrecedence[op] ?? 0
+            
+            // Adjust precedence for left-associativity. For right-associative ops like '^', the right child can have same precedence.
+            let rightPrecedence = myPrecedence + (op == "^" ? 0 : 1)
+            let leftStr = _formatNode(binaryNode.left, parentPrecedence: myPrecedence)
+            let rightStr = _formatNode(binaryNode.right, parentPrecedence: rightPrecedence)
+            
+            var result = "\(leftStr) \(displayOp) \(rightStr)"
+            
+            if myPrecedence < parentPrecedence {
+                result = "(\(result))"
+            }
+            return result
+            
+        default:
+            // Fallback for any other node type not explicitly handled, with basic cleanup
+            return node.description
+                .replacingOccurrences(of: ".", with: "")
+                .replacingOccurrences(of: " : ", with: " / ")
+        }
     }
 }
+
