@@ -101,9 +101,44 @@ extension Evaluator {
     
     static let multiArgumentFunctions: [String: ([MathValue]) throws -> MathValue] = [
         "if": { args in
-            guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "if", expected: "3", found: args.count) }
+            guard args.count == 3 else {
+                throw MathError.incorrectArgumentCount(function: "if", expected: "3", found: args.count)
+            }
+            
+            let trueValue = args[1]
+            let falseValue = args[2]
+
+            // Helper to create a "signature" for a value to check for compatibility.
+            // This signature includes both its general type and its specific unit dimension.
+            let getCompatibilitySignature = { (value: MathValue) -> (String, UnitDimension) in
+                switch value {
+                case .dimensionless:
+                    return ("numeric", [:])
+                case .unitValue(let u):
+                    return ("numeric", u.dimensions)
+                case .uncertain: // Uncertain values are treated as numeric and dimensionless
+                     return ("numeric", [:])
+                // For all other types, we use their type name. Their dimensions are considered empty.
+                default:
+                    return (value.typeName, [:])
+                }
+            }
+
+            let trueSignature = getCompatibilitySignature(trueValue)
+            let falseSignature = getCompatibilitySignature(falseValue)
+
+            // Compare the signatures. If they don't match, throw a detailed error.
+            if trueSignature != falseSignature {
+                if trueSignature.0 != falseSignature.0 { // E.g., comparing a number to a vector
+                    throw MathError.dimensionMismatch(reason: "The 'true' and 'false' results of an if statement must be the same type (e.g., both numbers, or both vectors). Found \(trueSignature.0) and \(falseSignature.0).")
+                } else { // E.g., comparing meters to seconds
+                     throw MathError.dimensionMismatch(reason: "The 'true' and 'false' results of an if statement must have compatible units.")
+                }
+            }
+            
+            // If the checks pass, proceed with the original logic.
             let condition = try args[0].asScalar()
-            return condition != 0 ? args[1] : args[2]
+            return condition != 0 ? trueValue : falseValue
         },
         "range": { args in
             guard args.count == 2 || args.count == 3 else { throw MathError.incorrectArgumentCount(function: "range", expected: "2 or 3", found: args.count) }

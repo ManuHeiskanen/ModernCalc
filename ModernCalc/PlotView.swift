@@ -22,18 +22,46 @@ struct PlotView: View {
         })
     }
     
-    // Generates a user-friendly title based on the plot's content.
+    // --- NEW: Helper function to clean axis labels for use in titles ---
+    // This will remove the unit part, e.g., "f(v) [m/s]" becomes "f(v)".
+    private func cleanAxisLabel(for label: String) -> String {
+        if let range = label.range(of: " [") {
+            return String(label[..<range.lowerBound])
+        }
+        return label
+    }
+    
+    // --- MODIFIED: A smarter, user-friendly title generator ---
     private var plotTitle: String {
+        let complexityThreshold = 25
+
         switch viewModel.plotData.plotType {
         case .vector:
             return "Vector Plot"
         case .scatter:
-            return "Scatter Plot"
+            let yLabel = cleanAxisLabel(for: viewModel.yAxisLabel.isEmpty ? "Y-Axis" : viewModel.yAxisLabel)
+            let xLabel = cleanAxisLabel(for: viewModel.xAxisLabel.isEmpty ? "X-Axis" : viewModel.xAxisLabel)
+            var title = "\(yLabel) vs. \(xLabel)"
+            if viewModel.plotData.series.contains(where: { $0.name.contains("Fit") }) {
+                title += " with Trendline"
+            }
+            return title
         case .line, .parametric:
-            let functionNames = viewModel.plotData.series.map { $0.name }.joined(separator: ", ")
-            return "Graph of \(functionNames)"
+            let functionNames = viewModel.plotData.series.map { $0.name }
+            let areAllNamesSimple = functionNames.allSatisfy { $0.count < complexityThreshold && !$0.contains("if") }
+
+            if functionNames.count == 1, areAllNamesSimple {
+                return "Graph of \(functionNames.first!)"
+            } else if areAllNamesSimple {
+                return "Graph of \(functionNames.joined(separator: ", "))"
+            } else {
+                let yLabel = cleanAxisLabel(for: viewModel.yAxisLabel.isEmpty ? "Y-Axis" : viewModel.yAxisLabel)
+                let xLabel = cleanAxisLabel(for: viewModel.xAxisLabel.isEmpty ? "X-Axis" : viewModel.xAxisLabel)
+                return "\(yLabel) vs. \(xLabel)"
+            }
         }
     }
+
 
     // Helper function for creating vector plots
     @ChartContentBuilder
