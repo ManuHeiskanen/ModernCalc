@@ -741,9 +741,9 @@ extension Evaluator {
         
         switch (left, right) {
         // --- Unit & Dimensionless Operations ---
-        case (.unitValue(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, r))
-        case (.unitValue(let l), .dimensionless(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, .dimensionless(r)))
-        case (.dimensionless(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, .dimensionless(l), r))
+        case (.unitValue(let l), .unitValue(let r)): return try performUnitUnitOp(op.rawValue, l, r)
+        case (.unitValue(let l), .dimensionless(let r)): return try performUnitUnitOp(op.rawValue, l, .dimensionless(r))
+        case (.dimensionless(let l), .unitValue(let r)): return try performUnitUnitOp(op.rawValue, .dimensionless(l), r)
         case (.dimensionless(let l), .dimensionless(let r)): return .dimensionless(try performDimensionlessOp(op.rawValue, l, r))
 
         // --- Uncertainty propagation rules ---
@@ -851,15 +851,31 @@ extension Evaluator {
         default: throw MathError.unknownOperator(op: op)
         }
     }
-    private func performUnitUnitOp(_ op: String, _ l: UnitValue, _ r: UnitValue) throws -> UnitValue {
+    private func performUnitUnitOp(_ op: String, _ l: UnitValue, _ r: UnitValue) throws -> MathValue {
         switch op {
-        case "+": return try l + r
-        case "-": return try l - r
-        case "*": return l * r
-        case "/": return try l / r
+        case "+": return .unitValue(try l + r)
+        case "-": return .unitValue(try l - r)
+        case "*": return .unitValue(l * r)
+        case "/": return .unitValue(try l / r)
         case "^":
             guard r.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless exponent", found: "Value with units") }
-            return l.pow(r.value)
+            return .unitValue(l.pow(r.value))
+        // Comparison Operators
+        case ">", "<", ">=", "<=", "==", "!=":
+            guard l.dimensions == r.dimensions else {
+                throw MathError.dimensionMismatch(reason: "Cannot compare quantities with different units.")
+            }
+            let result: Bool
+            switch op {
+            case ">": result = l.value > r.value
+            case "<": result = l.value < r.value
+            case ">=": result = l.value >= r.value
+            case "<=": result = l.value <= r.value
+            case "==": result = l.value == r.value
+            case "!=": result = l.value != r.value
+            default: throw MathError.unknownOperator(op: op) // Should not be reached
+            }
+            return .dimensionless(result ? 1.0 : 0.0)
         default: throw MathError.unknownOperator(op: op)
         }
     }
