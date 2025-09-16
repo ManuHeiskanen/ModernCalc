@@ -97,7 +97,7 @@ struct UncertainValue: Equatable, Codable {
             let newRandom = Foundation.sqrt(Foundation.pow(unc_A_due_to_lhs, 2) + Foundation.pow(unc_A_due_to_rhs, 2))
             
             let unc_B_due_to_lhs = abs(rhs.value * lhs.systematicUncertainty)
-            let unc_B_due_to_rhs = abs(lhs.value * lhs.systematicUncertainty)
+            let unc_B_due_to_rhs = abs(lhs.value * rhs.systematicUncertainty)
             let newSystematic = unc_B_due_to_lhs + unc_B_due_to_rhs
 
             return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
@@ -886,6 +886,8 @@ enum MathValue: Codable, Equatable {
 }
 
 extension MathValue {
+    /// Attempts to convert the MathValue to a simple Double.
+    /// Fails if the value has units, unless those units are dimensionless.
     func asScalar() throws -> Double {
         switch self {
         case .dimensionless(let d):

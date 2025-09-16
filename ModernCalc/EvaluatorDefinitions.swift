@@ -206,7 +206,7 @@ extension Evaluator {
             }
         },
     ]
-
+    
     static let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
         "abs": { arg in
             switch arg {
@@ -638,7 +638,8 @@ extension Evaluator {
                 return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty)), argUsedAngle)
             }
             
-            guard case .dimensionless(let s) = arg else { throw MathError.typeMismatch(expected: "Dimensionless or UncertainValue", found: arg.typeName) }
+            // FIX: Use asScalar() to correctly handle dimensionless UnitValues
+            let s = try arg.asScalar()
             return (.dimensionless(scalarFunc(s)), argUsedAngle)
         }
         
