@@ -129,7 +129,17 @@ extension Evaluator {
             if op.rawValue == "*" { return .complexVector(try m * v) }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         case (.complexVector(let v), .complexMatrix(let m)):
-            if op.rawValue == "*" { return .complexVector(try v * m) }
+            if op.rawValue == "*" {
+                // If the matrix has only one row, treat it as a row vector
+                // and perform an outer product (column vector * row vector).
+                if m.rows == 1 {
+                    let rowVector = ComplexVector(values: m.values)
+                    // This calls the ComplexVector * ComplexVector outer product operator
+                    return .complexMatrix(v * rowVector)
+                }
+                // Otherwise, perform standard row-vector * matrix multiplication.
+                return .complexVector(try v * m)
+            }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
 
         // --- Promotion cases for mixed types ---
@@ -139,7 +149,8 @@ extension Evaluator {
              (.complexVector, .dimensionless), (.dimensionless, .complexVector),
              (.complexMatrix, .vector), (.vector, .complexMatrix),
              (.complexMatrix, .matrix), (.matrix, .complexMatrix),
-             (.complexVector, .vector), (.vector, .complexVector):
+             (.complexVector, .vector), (.vector, .complexVector),
+             (.complexVector, .matrix), (.matrix, .complexVector):
             let (promotedL, promotedR) = try promote(left, right)
             return try evaluateBinaryOperation(op: op, left: promotedL, right: promotedR)
             
@@ -311,6 +322,8 @@ extension Evaluator {
         case (.matrix(let m), .complexMatrix(let cm)): return (.complexMatrix(ComplexMatrix(from: m)), .complexMatrix(cm))
         case (.complexVector(let cv), .vector(let v)): return (.complexVector(cv), .complexVector(ComplexVector(from: v)))
         case (.vector(let v), .complexVector(let cv)): return (.complexVector(ComplexVector(from: v)), .complexVector(cv))
+        case (.complexVector(let cv), .matrix(let m)): return (.complexVector(cv), .complexMatrix(ComplexMatrix(from: m)))
+        case (.matrix(let m), .complexVector(let cv)): return (.complexMatrix(ComplexMatrix(from: m)), .complexVector(cv))
             
         default: return (left, right)
         }
