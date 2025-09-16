@@ -499,9 +499,18 @@ extension Evaluator {
             return .vector(try solveLinearSystem(A: matrixA, b: vectorB))
         },
         "dot": { a, b in
-            if case .vector(let v1) = a, case .vector(let v2) = b { return .dimensionless(try v1.dot(with: v2)) }
-            else if case .complexVector(let v1) = a, case .complexVector(let v2) = b { return .complex(try v1.dot(with: v2)) }
-            throw MathError.typeMismatch(expected: "Two Vectors or Two ComplexVectors", found: "\(a.typeName), \(b.typeName)")
+            switch (a, b) {
+            case (.vector(let v1), .vector(let v2)):
+                return .dimensionless(try v1.dot(with: v2))
+            case (.complexVector(let v1), .complexVector(let v2)):
+                return .complex(try v1.dot(with: v2))
+            case (.complexVector(let v1), .vector(let v2)):
+                return .complex(try v1.dot(with: ComplexVector(from: v2)))
+            case (.vector(let v1), .complexVector(let v2)):
+                return .complex(try ComplexVector(from: v1).dot(with: v2))
+            default:
+                throw MathError.typeMismatch(expected: "Two compatible Vectors", found: "\(a.typeName), \(b.typeName)")
+            }
         },
         "cross": { a, b in guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)") }; return .vector(try v1.cross(with: v2)) },
         "getcolumn": { a, b in

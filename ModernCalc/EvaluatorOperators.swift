@@ -110,9 +110,16 @@ extension Evaluator {
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         
         // --- Promotion cases for mixed types ---
-        case (.matrix, .complex), (.complex, .matrix), (.vector, .complex), (.complex, .vector), (.complexMatrix, .dimensionless), (.dimensionless, .complexMatrix), (.complexVector, .dimensionless), (.dimensionless, .complexVector):
+        case (.matrix, .complex), (.complex, .matrix),
+             (.vector, .complex), (.complex, .vector),
+             (.complexMatrix, .dimensionless), (.dimensionless, .complexMatrix),
+             (.complexVector, .dimensionless), (.dimensionless, .complexVector),
+             (.complexMatrix, .vector), (.vector, .complexMatrix),
+             (.complexMatrix, .matrix), (.matrix, .complexMatrix),
+             (.complexVector, .vector), (.vector, .complexVector):
             let (promotedL, promotedR) = try promote(left, right)
             return try evaluateBinaryOperation(op: op, left: promotedL, right: promotedR)
+            
         default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName)
         }
     }
@@ -264,7 +271,25 @@ extension Evaluator {
     }
     private func promote(_ left: MathValue, _ right: MathValue) throws -> (MathValue, MathValue) {
         switch (left, right) {
-        case (.matrix(let m), .complex(let c)): return (.complexMatrix(ComplexMatrix(from: m)), .complex(c)); case (.complex(let c), .matrix(let m)): return (.complex(c), .complexMatrix(ComplexMatrix(from: m))); case (.vector(let v), .complex(let c)): return (.complexVector(ComplexVector(from: v)), .complex(c)); case (.complex(let c), .vector(let v)): return (.complex(c), .complexVector(ComplexVector(from: v))); case (.complexMatrix(let cm), .dimensionless(let s)): return (.complexMatrix(cm), .complex(Complex(real: s, imaginary: 0))); case (.dimensionless(let s), .complexMatrix(let cm)): return (.complex(Complex(real: s, imaginary: 0)), .complexMatrix(cm)); case (.complexVector(let cv), .dimensionless(let s)): return (.complexVector(cv), .complex(Complex(real: s, imaginary: 0))); case (.dimensionless(let s), .complexVector(let cv)): return (.complex(Complex(real: s, imaginary: 0)), .complexVector(cv)); default: return (left, right)
+        // Scalar promotions
+        case (.matrix(let m), .complex(let c)): return (.complexMatrix(ComplexMatrix(from: m)), .complex(c))
+        case (.complex(let c), .matrix(let m)): return (.complex(c), .complexMatrix(ComplexMatrix(from: m)))
+        case (.vector(let v), .complex(let c)): return (.complexVector(ComplexVector(from: v)), .complex(c))
+        case (.complex(let c), .vector(let v)): return (.complex(c), .complexVector(ComplexVector(from: v)))
+        case (.complexMatrix(let cm), .dimensionless(let s)): return (.complexMatrix(cm), .complex(Complex(real: s, imaginary: 0)))
+        case (.dimensionless(let s), .complexMatrix(let cm)): return (.complex(Complex(real: s, imaginary: 0)), .complexMatrix(cm))
+        case (.complexVector(let cv), .dimensionless(let s)): return (.complexVector(cv), .complex(Complex(real: s, imaginary: 0)))
+        case (.dimensionless(let s), .complexVector(let cv)): return (.complex(Complex(real: s, imaginary: 0)), .complexVector(cv))
+        
+        // Matrix/Vector promotions to Complex
+        case (.complexMatrix(let cm), .vector(let v)): return (.complexMatrix(cm), .complexVector(ComplexVector(from: v)))
+        case (.vector(let v), .complexMatrix(let cm)): return (.complexVector(ComplexVector(from: v)), .complexMatrix(cm))
+        case (.complexMatrix(let cm), .matrix(let m)): return (.complexMatrix(cm), .complexMatrix(ComplexMatrix(from: m)))
+        case (.matrix(let m), .complexMatrix(let cm)): return (.complexMatrix(ComplexMatrix(from: m)), .complexMatrix(cm))
+        case (.complexVector(let cv), .vector(let v)): return (.complexVector(cv), .complexVector(ComplexVector(from: v)))
+        case (.vector(let v), .complexVector(let cv)): return (.complexVector(ComplexVector(from: v)), .complexVector(cv))
+            
+        default: return (left, right)
         }
     }
 }
