@@ -45,7 +45,17 @@ extension Evaluator {
         "max": { args in try performStatisticalOperation(args: args, on: { $0.max() }) },
         "median": { args in try performStatisticalOperation(args: args, on: { $0.median() }) },
         "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) },
-        "variance": { args in try performStatisticalOperation(args: args, on: { $0.variance() }) },
+        "variance": { args in
+            try performStatisticalOperation(
+                args: args,
+                on: { $0.variance() },
+                dimensionModifier: { dim in
+                    // For variance, the resulting unit dimension is the square of the input dimension.
+                    // e.g., if input is in meters (m), variance is in meters squared (m^2).
+                    return dim.mapValues { $0 * 2 }
+                }
+            )
+        },
         "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp() }) },
         "mode": { args in
             let values = try extractDoublesFromVariadicArgs(args)
@@ -941,16 +951,26 @@ fileprivate func extractDoublesFromVariadicArgs(_ args: [MathValue]) throws -> [
     }
 }
 
-fileprivate func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> Double?) throws -> MathValue {
-    let (values, finalDimension) = try extractAndConvertUnitValues(from: args)
+fileprivate func performStatisticalOperation(
+    args: [MathValue],
+    on operation: (Vector) -> Double?,
+    dimensionModifier: ((UnitDimension) -> UnitDimension)? = nil
+) throws -> MathValue {
+    let (values, initialDimension) = try extractAndConvertUnitValues(from: args)
     guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Statistical function") }
     let v = Vector(values: values)
-    guard let resultValue = operation(v) else { throw MathError.unsupportedOperation(op: "Statistical", typeA: "Operation failed (e.g., stddev on single element)", typeB: nil) }
+    guard let resultValue = operation(v) else {
+        throw MathError.unsupportedOperation(op: "Statistical", typeA: "Operation failed (e.g., stddev on single element)", typeB: nil)
+    }
+
+    let finalDimension = dimensionModifier?(initialDimension) ?? initialDimension
 
     if finalDimension.isEmpty {
         return .dimensionless(resultValue)
     } else {
-        return .unitValue(UnitValue(value: resultValue, dimensions: finalDimension))
+        // We need to filter out zero-exponent dimensions that might result from the modifier.
+        let cleanedFinalDimension = finalDimension.filter { $0.value != 0 }
+        return .unitValue(UnitValue(value: resultValue, dimensions: cleanedFinalDimension))
     }
 }
 
