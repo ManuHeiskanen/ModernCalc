@@ -227,13 +227,13 @@ struct PlotView: View {
             }
             .padding([.horizontal, .bottom])
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 350, idealWidth: 400, maxWidth: .infinity, minHeight: 350, idealHeight: 600, maxHeight: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
     }
     
     private func exportChart() {
         let viewToRender = chartContainer
-            .frame(width: 800, height: 600)
+            .frame(width: 400, height: 600)
             .background(Color(NSColor.windowBackgroundColor))
 
         let renderer = ImageRenderer(content: viewToRender)

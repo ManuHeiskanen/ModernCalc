@@ -36,9 +36,32 @@ struct ModernCalcApp: App {
                         // When a plot window is closed, remove its view model.
                         calculatorViewModel.closePlotWindow(id: plotID)
                     }
+                    // Add a background view that uses the accessor to get the window
+                    .background(WindowAccessor { window in
+                        // This tells macOS not to save and restore this specific window
+                        window?.isRestorable = false
+                    })
             } else {
                 Text("Plot data not available.")
             }
         }
+        .defaultSize(width: 480, height: 650)
     }
+}
+
+// A helper view to access the underlying NSWindow of a SwiftUI view.
+struct WindowAccessor: NSViewRepresentable {
+    var callback: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        // The window is available after the view is added to the hierarchy.
+        // We use DispatchQueue.main.async to safely access it.
+        DispatchQueue.main.async {
+            self.callback(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
