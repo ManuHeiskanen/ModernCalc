@@ -104,7 +104,7 @@ struct TextContents {
         .init(name: "tan", signature: "tan(angle)", description: "Calculates the tangent of an angle."),
         .init(name: "tanh", signature: "tanh(value)", description: "Calculates the hyperbolic tangent."),
         .init(name: "trace", signature: "trace(matrix)", description: "Calculates the trace of a square matrix (sum of diagonal elements)."),
-        .init(name: "transpose", signature: "transpose(matrix)", description: "Transposes a matrix (rows become columns). For complex matrices, this is not the conjugate transpose."),
+        .init(name: "transpose", signature: "transpose(matrix)", description: "Transposes a matrix (rows become columns). For complex matrices, this is not the conjugate transpose, which you can get using operator \"'\" after a matrix."),
         .init(name: "uncert", signature: "uncert(value, name: value, ...)", description: "Creates a value with uncertainty. Use named arguments like 'random', 'resolution', 'accuracy', and their aliases 'r', 'res', 'a'."),
         .init(name: "unique", signature: "unique(data)", description: "Returns a vector of the unique elements from a vector or matrix."),
         .init(name: "unit", signature: "unit(vector)", description: "Returns the unit vector (vector with magnitude 1)."),
