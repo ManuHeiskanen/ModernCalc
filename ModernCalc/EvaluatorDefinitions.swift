@@ -37,26 +37,18 @@ extension Evaluator {
     ]
     
     static let variadicFunctions: [String: ([MathValue]) throws -> MathValue] = [
-        "sum": { args in try performStatisticalOperation(args: args, on: { $0.sum() }) },
-        "avg": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
-        "average": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
-        "mean": { args in try performStatisticalOperation(args: args, on: { $0.average() }) },
-        "min": { args in try performStatisticalOperation(args: args, on: { $0.min() }) },
-        "max": { args in try performStatisticalOperation(args: args, on: { $0.max() }) },
-        "median": { args in try performStatisticalOperation(args: args, on: { $0.median() }) },
-        "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev() }) },
+        "sum": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.sum()) }) },
+        "avg": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.average()) }) },
+        "average": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.average()) }) },
+        "mean": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.average()) }) },
+        "min": { args in try performStatisticalOperation(args: args, on: { $0.min().map { .unitValue($0) } }) },
+        "max": { args in try performStatisticalOperation(args: args, on: { $0.max().map { .unitValue($0) } }) },
+        "median": { args in try performStatisticalOperation(args: args, on: { $0.median().map { .unitValue($0) } }) },
+        "stddev": { args in try performStatisticalOperation(args: args, on: { $0.stddev().map { .unitValue($0) } }) },
         "variance": { args in
-            try performStatisticalOperation(
-                args: args,
-                on: { $0.variance() },
-                dimensionModifier: { dim in
-                    // For variance, the resulting unit dimension is the square of the input dimension.
-                    // e.g., if input is in meters (m), variance is in meters squared (m^2).
-                    return dim.mapValues { $0 * 2 }
-                }
-            )
+            try performStatisticalOperation(args: args, on: { $0.variance().map { .unitValue($0) } })
         },
-        "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp() }) },
+        "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp().map { .unitValue($0) } }) },
         "mode": { args in
             let values = try extractDoublesFromVariadicArgs(args)
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "mode") }
@@ -112,15 +104,14 @@ extension Evaluator {
             // This signature includes both its general type and its specific unit dimension.
             let getCompatibilitySignature = { (value: MathValue) -> (String, UnitDimension) in
                 switch value {
-                case .dimensionless:
-                    return ("numeric", [:])
-                case .unitValue(let u):
-                    return ("numeric", u.dimensions)
-                case .uncertain: // Uncertain values are treated as numeric and dimensionless
-                     return ("numeric", [:])
-                // For all other types, we use their type name. Their dimensions are considered empty.
-                default:
-                    return (value.typeName, [:])
+                case .dimensionless: return ("numeric", [:])
+                case .unitValue(let u): return ("numeric", u.dimensions)
+                case .uncertain: return ("numeric", [:])
+                case .vector(let v): return ("Vector", v.dimensions)
+                case .matrix(let m): return ("Matrix", m.dimensions)
+                case .complexVector(let cv): return ("ComplexVector", cv.dimensions)
+                case .complexMatrix(let cm): return ("ComplexMatrix", cm.dimensions)
+                default: return (value.typeName, [:])
                 }
             }
 
@@ -258,15 +249,15 @@ extension Evaluator {
             case .dimensionless(let s): return .dimensionless(abs(s))
             case .unitValue(let u): return .unitValue(UnitValue(value: abs(u.value), dimensions: u.dimensions))
             case .complex(let c): return .dimensionless(c.abs())
-            case .vector(let v): return .dimensionless(v.magnitude())
+            case .vector(let v): return .unitValue(v.magnitude())
             case .uncertain(let u): return .dimensionless(abs(u.value))
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, or UncertainValue", found: arg.typeName)
             }
         },
         "norm": { arg in
              switch arg {
-             case .vector(let v): return .dimensionless(v.magnitude())
-             case .matrix(let m): return .dimensionless(m.frobeniusNorm())
+             case .vector(let v): return .unitValue(v.magnitude())
+             case .matrix(let m): return .unitValue(m.frobeniusNorm())
              default: throw MathError.typeMismatch(expected: "Vector or Matrix", found: arg.typeName)
              }
         },
@@ -311,8 +302,8 @@ extension Evaluator {
         "fact": { arg in let s = try arg.asScalar(); return .dimensionless(try factorial(s)) },
         "det": { arg in
             switch arg {
-            case .matrix(let m): return .dimensionless(try m.determinant())
-            case .complexMatrix(let cm): return .complex(try cm.determinant())
+            case .matrix(let m): let det = try m.determinant(); return .unitValue(det)
+            case .complexMatrix(let cm): let (det, dims) = try cm.determinant(); if dims.isEmpty { return .complex(det) } else { throw MathError.unsupportedOperation(op: "det", typeA: "ComplexMatrix with units", typeB: nil) }
             default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
             }
         },
@@ -340,8 +331,8 @@ extension Evaluator {
         },
         "trace": { arg in
             switch arg {
-            case .matrix(let m): return .dimensionless(try m.trace())
-            case .complexMatrix(let cm): return .complex(try cm.trace())
+            case .matrix(let m): return .unitValue(try m.trace())
+            case .complexMatrix(let cm): let (trace, dims) = try cm.trace(); if dims.isEmpty { return .complex(trace) } else { throw MathError.unsupportedOperation(op: "trace", typeA: "ComplexMatrix with units", typeB: nil) }
             default: throw MathError.typeMismatch(expected: "Matrix or ComplexMatrix", found: arg.typeName)
             }
         },
@@ -450,18 +441,22 @@ extension Evaluator {
         "rmse": { a, b in
             guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSE.") }
+            guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSE.") }
             guard v1.dimension > 0 else { return .dimensionless(0) }
             let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
             let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
-            return .dimensionless(sqrt(meanSquaredError))
+            let finalDimensions = v1.dimensions
+            return .unitValue(UnitValue(value: sqrt(meanSquaredError), dimensions: finalDimensions))
         },
         "rmsd": { a, b in // alias for rmse
             guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSD.") }
+            guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSD.") }
             guard v1.dimension > 0 else { return .dimensionless(0) }
             let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
             let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
-            return .dimensionless(sqrt(meanSquaredError))
+            let finalDimensions = v1.dimensions
+            return .unitValue(UnitValue(value: sqrt(meanSquaredError), dimensions: finalDimensions))
         },
         "log": { a, b in
             let base = try a.asScalar()
@@ -474,19 +469,21 @@ extension Evaluator {
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for covariance.") }
             
             let n = Double(xVec.dimension)
-            let meanX = xVec.average()
-            let meanY = yVec.average()
+            let meanX = xVec.average().value
+            let meanY = yVec.average().value
             
             let sumOfProducts = zip(xVec.values, yVec.values).map { ($0 - meanX) * ($1 - meanY) }.reduce(0, +)
             
-            return .dimensionless(sumOfProducts / (n - 1)) // Sample covariance
+            let covValue = sumOfProducts / (n - 1)
+            let newDimensions = xVec.dimensions.merging(yVec.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+            return .unitValue(UnitValue(value: covValue, dimensions: newDimensions))
         },
         "corr": { a, b in
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for correlation.") }
             let n = Double(xVec.dimension)
-            let sumX = xVec.sum(); let sumY = yVec.sum()
-            let sumXY = try xVec.hadamard(with: yVec).sum()
+            let sumX = xVec.sum().value; let sumY = yVec.sum().value
+            let sumXY = try xVec.hadamard(with: yVec).sum().value
             let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
             let sumY2 = yVec.values.map { $0 * $0 }.reduce(0, +)
             
@@ -520,7 +517,7 @@ extension Evaluator {
         "linreg": { a, b in
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for linear regression.") }
-            let n = Double(xVec.dimension); let sumX = xVec.sum(); let sumY = yVec.sum(); let sumXY = try xVec.hadamard(with: yVec).sum(); let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
+            let n = Double(xVec.dimension); let sumX = xVec.sum().value; let sumY = yVec.sum().value; let sumXY = try xVec.hadamard(with: yVec).sum().value; let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
             let denominator = (n * sumX2 - sumX * sumX)
             guard denominator != 0 else { throw MathError.unsupportedOperation(op: "linreg", typeA: "Cannot perform regression on vertical line (undefined slope)", typeB: nil) }
             let slope = (n * sumXY - sumX * sumY) / denominator
@@ -536,13 +533,19 @@ extension Evaluator {
         "dot": { a, b in
             switch (a, b) {
             case (.vector(let v1), .vector(let v2)):
-                return .dimensionless(try v1.dot(with: v2))
+                return .unitValue(try v1.dot(with: v2))
             case (.complexVector(let v1), .complexVector(let v2)):
-                return .complex(try v1.dot(with: v2))
+                let (val, dim) = try v1.dot(with: v2)
+                if dim.isEmpty { return .complex(val) }
+                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
             case (.complexVector(let v1), .vector(let v2)):
-                return .complex(try v1.dot(with: ComplexVector(from: v2)))
+                let (val, dim) = try v1.dot(with: ComplexVector(from: v2))
+                if dim.isEmpty { return .complex(val) }
+                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
             case (.vector(let v1), .complexVector(let v2)):
-                return .complex(try ComplexVector(from: v1).dot(with: v2))
+                let (val, dim) = try ComplexVector(from: v1).dot(with: v2)
+                if dim.isEmpty { return .complex(val) }
+                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
             default:
                 throw MathError.typeMismatch(expected: "Two compatible Vectors", found: "\(a.typeName), \(b.typeName)")
             }
@@ -731,8 +734,10 @@ fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
     case .dimensionless(let s):
         return [s]
     case .vector(let v):
+        // For now, statistical functions on unit vectors operate on their scalar values.
         return v.values
     case .matrix(let m):
+        // For now, statistical functions on unit matrices operate on their scalar values.
         return m.values
     case .uncertain(let u):
         return [u.value]
@@ -753,27 +758,16 @@ fileprivate func extractDoublesFromVariadicArgs(_ args: [MathValue]) throws -> [
     }
 }
 
-fileprivate func performStatisticalOperation(
-    args: [MathValue],
-    on operation: (Vector) -> Double?,
-    dimensionModifier: ((UnitDimension) -> UnitDimension)? = nil
-) throws -> MathValue {
+fileprivate func performStatisticalOperation(args: [MathValue], on operation: (Vector) -> MathValue?) throws -> MathValue {
     let (values, initialDimension) = try extractAndConvertUnitValues(from: args)
     guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "Statistical function") }
-    let v = Vector(values: values)
+    let v = Vector(values: values, dimensions: initialDimension)
+    
     guard let resultValue = operation(v) else {
         throw MathError.unsupportedOperation(op: "Statistical", typeA: "Operation failed (e.g., stddev on single element)", typeB: nil)
     }
-
-    let finalDimension = dimensionModifier?(initialDimension) ?? initialDimension
-
-    if finalDimension.isEmpty {
-        return .dimensionless(resultValue)
-    } else {
-        // We need to filter out zero-exponent dimensions that might result from the modifier.
-        let cleanedFinalDimension = finalDimension.filter { $0.value != 0 }
-        return .unitValue(UnitValue(value: resultValue, dimensions: cleanedFinalDimension))
-    }
+    
+    return resultValue
 }
 
 fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (values: [Double], dimensions: UnitDimension) {
@@ -791,12 +785,12 @@ fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (
             if commonDimension != u.dimensions { throw MathError.dimensionMismatch(reason: "All values must have the same units.") }
             allValues.append(u.value)
         case .vector(let v):
-            if commonDimension == nil { commonDimension = [:] }
-            if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
+            if commonDimension == nil { commonDimension = v.dimensions }
+            if commonDimension != v.dimensions { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless vectors.") }
             allValues.append(contentsOf: v.values)
         case .matrix(let m):
-            if commonDimension == nil { commonDimension = [:] }
-            if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
+            if commonDimension == nil { commonDimension = m.dimensions }
+            if commonDimension != m.dimensions { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless matrices.") }
             allValues.append(contentsOf: m.values)
         default:
             throw MathError.typeMismatch(expected: "Numeric value", found: val.typeName)

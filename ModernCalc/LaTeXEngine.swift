@@ -229,12 +229,16 @@ struct LaTeXEngine {
             return formatComplex(c, settings: settings)
         case .vector(let v):
             let elements = v.values.map { formatScalar($0, settings: settings) }.joined(separator: " \\\\ ")
-            return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+            let matrix = "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+            let unitStr = formatDimensions(v.dimensions)
+            return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .matrix(let m):
             let rows = (0..<m.rows).map { r in
                 (0..<m.columns).map { c in formatScalar(m[r, c], settings: settings) }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
-            return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+            let matrix = "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+            let unitStr = formatDimensions(m.dimensions)
+            return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .tuple(let values):
             return values.map { formatMathValue($0, angleMode: angleMode, settings: settings, expression: expression) }.joined(separator: " \\text{ or } ")
         case .polar(let c):
@@ -247,12 +251,16 @@ struct LaTeXEngine {
             return "\\text{Defined: } \(name)"
         case .complexVector(let cv):
             let elements = cv.values.map { formatComplex($0, settings: settings) }.joined(separator: " \\\\ ")
-            return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+            let matrix = "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+            let unitStr = formatDimensions(cv.dimensions)
+            return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .complexMatrix(let cm):
             let rows = (0..<cm.rows).map { r in
                 (0..<cm.columns).map { c in formatComplex(cm[r, c], settings: settings) }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
-            return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+            let matrix = "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+            let unitStr = formatDimensions(cm.dimensions)
+            return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .regressionResult(let m, let b):
             return "\\text{m = } \(formatScalar(m, settings: settings)), \\text{ b = } \(formatScalar(b, settings: settings))"
         case .polynomialFit(let coeffs):

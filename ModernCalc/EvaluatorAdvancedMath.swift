@@ -273,8 +273,6 @@ extension Evaluator {
     }
     
     func evaluateScatterplot(_ node: ScatterplotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
-        // NOTE: This function remains unit-agnostic for now as vector data types do not intrinsically carry unit information.
-        // It will produce a plot with dimensionless axes.
         let startTime = CFAbsoluteTimeGetCurrent()
         let evaluatedArgs = try node.arguments.map { try _evaluateSingle(node: $0, variables: &variables, functions: &functions, angleMode: .radians).result }
         
@@ -288,9 +286,10 @@ extension Evaluator {
             guard case .matrix(let matrix) = evaluatedArgs[0] else { throw MathError.typeMismatch(expected: "Matrix", found: evaluatedArgs[0].typeName) }
             guard matrix.columns == 2 else { throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns.") }
             guard matrix.rows > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix.") }
-            var xValues: [Double] = []; var yValues: [Double] = []
-            for r in 0..<matrix.rows { xValues.append(matrix[r, 0]); yValues.append(matrix[r, 1]) }
-            xVector = Vector(values: xValues); yVector = Vector(values: yValues)
+            let xCol = try matrix.getcolumn(index: 1)
+            let yCol = try matrix.getcolumn(index: 2)
+            xVector = Vector(values: xCol.values, dimensions: xCol.dimensions)
+            yVector = Vector(values: yCol.values, dimensions: yCol.dimensions)
 
         case 2:
             guard case .vector(let vec1) = evaluatedArgs[0], case .vector(let vec2) = evaluatedArgs[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName)") }
@@ -313,6 +312,10 @@ extension Evaluator {
 
         // --- Fit Generation Logic ---
         if let degree = fitDegree {
+            // Polyfit currently requires dimensionless vectors.
+            guard xVector.dimensions.isEmpty, yVector.dimensions.isEmpty else {
+                throw MathError.unsupportedOperation(op: "scatterplot fit", typeA: "Fitting is only supported for dimensionless data.", typeB: nil)
+            }
             let coeffs = try performPolynomialFit(x: xVector, y: yVector, degree: degree)
             
             let minX = xVector.values.min()!
@@ -335,17 +338,19 @@ extension Evaluator {
         
         let duration = CFAbsoluteTimeGetCurrent() - startTime
         print("[BENCHMARK] Scatterplot generation time: \(duration * 1000) ms")
-        return .plot(PlotData(expression: node.description, series: allSeries, plotType: .scatter, explicitYRange: nil, generationTime: duration))
+        
+        let xAxisLabel = formatDimensionsForAxis(xVector.dimensions, defaultLabel: "X-Axis")
+        let yAxisLabel = formatDimensionsForAxis(yVector.dimensions, defaultLabel: "Y-Axis")
+
+        return .plot(PlotData(expression: node.description, series: allSeries, plotType: .scatter, explicitYRange: nil, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel))
     }
     
     func evaluatePlot(_ node: PlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
         let startTime = CFAbsoluteTimeGetCurrent()
         
-        // 1. Evaluate ranges, which can now have units.
         let (xMinVal, _) = try _evaluateSingle(node: node.xRange.0, variables: &variables, functions: &functions, angleMode: .radians)
         let (xMaxVal, _) = try _evaluateSingle(node: node.xRange.1, variables: &variables, functions: &functions, angleMode: .radians)
         
-        // 2. Extract base values and determine X-axis unit dimension.
         let xMin: UnitValue
         let xMax: UnitValue
         switch (xMinVal, xMaxVal) {
@@ -383,7 +388,6 @@ extension Evaluator {
         if isParametric {
             let xBody = node.expressions[0]; let yBody = node.expressions[1]
             
-            // --- Dry run to determine units ---
             var tempVarsDryRun = variables
             tempVarsDryRun[varName] = .unitValue(xMin)
             let (dryRunX, _) = try _evaluateSingle(node: xBody, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
@@ -407,24 +411,10 @@ extension Evaluator {
                     guard xValue.dimensionsIfUnitOrDimensionless == parametricXAxisDimension,
                           yValue.dimensionsIfUnitOrDimensionless == parametricYAxisDimension else { return }
                     
-                    let x_si: Double
-                    switch xValue {
-                        case .dimensionless(let d): x_si = d
-                        case .unitValue(let u): x_si = u.value
-                        case .uncertain(let u): x_si = u.value
-                        default: return
-                    }
-                    let y_si: Double
-                    switch yValue {
-                        case .dimensionless(let d): y_si = d
-                        case .unitValue(let u): y_si = u.value
-                        case .uncertain(let u): y_si = u.value
-                        default: return
-                    }
+                    let x_si: Double; switch xValue { case .dimensionless(let d): x_si = d; case .unitValue(let u): x_si = u.value; case .uncertain(let u): x_si = u.value; default: return }
+                    let y_si: Double; switch yValue { case .dimensionless(let d): y_si = d; case .unitValue(let u): y_si = u.value; case .uncertain(let u): y_si = u.value; default: return }
 
-                    if x_si.isFinite, y_si.isFinite {
-                        results[i] = DataPoint(x: x_si, y: y_si)
-                    }
+                    if x_si.isFinite, y_si.isFinite { results[i] = DataPoint(x: x_si, y: y_si) }
                 } catch {}
             }
             
@@ -439,7 +429,6 @@ extension Evaluator {
             
             plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: explicitYRange, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: parametricXAxisDimension, yAxisDimension: parametricYAxisDimension)
         } else {
-            // --- Dry run to determine Y-axis unit ---
             let dryRunX = MathValue.unitValue(xMin)
             var tempVarsDryRun = variables
             tempVarsDryRun[varName] = dryRunX
@@ -461,21 +450,9 @@ extension Evaluator {
                         
                         guard yValue.dimensionsIfUnitOrDimensionless == yAxisDimension else { return }
                         
-                        let y_si: Double
-                        switch yValue {
-                        case .dimensionless(let d):
-                            y_si = d
-                        case .unitValue(let u):
-                            y_si = u.value
-                        case .uncertain(let u):
-                            y_si = u.value
-                        default:
-                            return
-                        }
+                        let y_si: Double; switch yValue { case .dimensionless(let d): y_si = d; case .unitValue(let u): y_si = u.value; case .uncertain(let u): y_si = u.value; default: return }
 
-                        if y_si.isFinite {
-                            results[i] = DataPoint(x: x_si, y: y_si)
-                        }
+                        if y_si.isFinite { results[i] = DataPoint(x: x_si, y: y_si) }
                     } catch {}
                 }
                 
@@ -512,7 +489,6 @@ extension Evaluator {
         var roots = Set<Double>()
         let precision = 1e-9
 
-        // Unit-aware path: Check for a guess with units.
         if let guessNode = node.guess {
             let (guessValue, guessUsedAngle) = try _evaluateSingle(node: guessNode, variables: &variables, functions: &functions, angleMode: angleMode)
             usedAngle = usedAngle || guessUsedAngle
@@ -541,7 +517,6 @@ extension Evaluator {
             }
         }
         
-        // Path for dimensionless variables, even in equations with units.
         let f: (Double) throws -> Double = { x in
             var tempVars = capturedVariables
             var tempFuncs = capturedFunctions
@@ -550,14 +525,10 @@ extension Evaluator {
             usedAngle = usedAngle || f_usedAngle
             
             switch result {
-            case .dimensionless(let d):
-                return d
-            case .unitValue(let u):
-                return u.value
-            case .uncertain(let u):
-                return u.value
-            default:
-                throw MathError.dimensionMismatch(reason: "Solver expression must resolve to a dimensioned or dimensionless value.")
+            case .dimensionless(let d): return d
+            case .unitValue(let u): return u.value
+            case .uncertain(let u): return u.value
+            default: throw MathError.dimensionMismatch(reason: "Solver expression must resolve to a dimensioned or dimensionless value.")
             }
         }
         
@@ -568,13 +539,7 @@ extension Evaluator {
             let guessScalar = try guessValue.asScalar()
             searchRanges = [(guessScalar - 100.0)...(guessScalar + 100.0)]
         } else {
-            if angleMode == .radians {
-                // Use a much narrower search range in radians mode to avoid performance issues with periodic functions.
-                searchRanges = [-20...20]
-            } else {
-                // Keep the wide search range for degrees mode and non-trig functions.
-                searchRanges = [-1000...(-100), -100...100, 100...1000]
-            }
+            searchRanges = angleMode == .radians ? [-20...20] : [-1000...(-100), -100...100, 100...1000]
         }
         
         try findRoots(in: searchRanges, for: f, storingIn: &roots, precision: precision)
@@ -583,7 +548,6 @@ extension Evaluator {
         return (result: .roots(finalRoots), usedAngle: usedAngle)
     }
 
-    /// Helper function to scan ranges for roots using Brent's method.
     private func findRoots(in ranges: [ClosedRange<Double>], for f: (Double) throws -> Double, storingIn roots: inout Set<Double>, precision: Double) throws {
         let stepsPerRange = 5000
 
@@ -617,52 +581,26 @@ extension Evaluator {
                     lastX = x
                 } catch let error as MathError {
                     switch error {
-                    case .divisionByZero:
-                        lastY = nil
-                        lastX = nil
-                    case .unsupportedOperation(_, let typeA, _) where typeA.contains("negative number"):
-                        lastY = nil
-                        lastX = nil
-                    case .typeMismatch(_, let found) where found.contains("Negative number"):
-                        lastY = nil
-                        lastX = nil
-                    default:
-                        throw error
+                    case .divisionByZero, .unsupportedOperation, .typeMismatch:
+                        lastY = nil; lastX = nil
+                    default: throw error
                     }
                 }
             }
         }
     }
     
-    // --- NEW: A map of common derived units to their symbols ---
     private static let commonDerivedUnits: [UnitDimension: String] = [
-        // SI Base & Derived
-        [.kilogram: 1, .meter: 1, .second: -2]: "N",
-        [.kilogram: 1, .meter: 2, .second: -2]: "J",
-        [.kilogram: 1, .meter: 2, .second: -3]: "W",
-        [.kilogram: 1, .meter: -1, .second: -2]: "Pa",
-        [.second: -1]: "Hz",
-        [.second: 1, .ampere: 1]: "C",
-        [.kilogram: 1, .meter: 2, .second: -3, .ampere: -1]: "V",
-        [.kilogram: 1, .meter: 2, .second: -3, .ampere: -2]: "Ohm",
-        [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2]: "F",
-        [.kilogram: 1, .meter: 2, .second: -2, .ampere: -1]: "Wb",
-        [.kilogram: 1, .meter: 2, .second: -2, .ampere: -2]: "H",
-        [.kilogram: 1, .second: -2, .ampere: -1]: "T",
+        [.kilogram: 1, .meter: 1, .second: -2]: "N", [.kilogram: 1, .meter: 2, .second: -2]: "J", [.kilogram: 1, .meter: 2, .second: -3]: "W",
+        [.kilogram: 1, .meter: -1, .second: -2]: "Pa", [.second: -1]: "Hz", [.second: 1, .ampere: 1]: "C", [.kilogram: 1, .meter: 2, .second: -3, .ampere: -1]: "V",
+        [.kilogram: 1, .meter: 2, .second: -3, .ampere: -2]: "Ohm", [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2]: "F", [.kilogram: 1, .meter: 2, .second: -2, .ampere: -1]: "Wb",
+        [.kilogram: 1, .meter: 2, .second: -2, .ampere: -2]: "H", [.kilogram: 1, .second: -2, .ampere: -1]: "T",
     ]
     
-    // --- MODIFIED: This function now checks for common derived units ---
     private func formatDimensionsForAxis(_ dimensions: UnitDimension, defaultLabel: String) -> String {
-        if dimensions.isEmpty {
-            return defaultLabel
-        }
+        if dimensions.isEmpty { return defaultLabel }
+        if let unitSymbol = Self.commonDerivedUnits[dimensions] { return "\(defaultLabel) [\(unitSymbol)]" }
         
-        // --- NEW: Check for a matching derived unit first ---
-        if let unitSymbol = Self.commonDerivedUnits[dimensions] {
-            return "\(defaultLabel) [\(unitSymbol)]"
-        }
-        
-        // --- Fallback to original logic if no simple derived unit is found ---
         let positiveDims = dimensions.filter { $0.value > 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
         let negativeDims = dimensions.filter { $0.value < 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
 
@@ -677,19 +615,12 @@ extension Evaluator {
         let numerator = formatPart(positiveDims)
         let denominator = formatPart(negativeDims)
 
-        if numerator.isEmpty && denominator.isEmpty {
-            return defaultLabel
-        } else if !denominator.isEmpty {
+        if numerator.isEmpty && denominator.isEmpty { return defaultLabel }
+        else if !denominator.isEmpty {
             let denStr = denominator.contains("·") ? "(\(denominator))" : denominator
-            if numerator.isEmpty {
-                return "\(defaultLabel) [1/\(denStr)]"
-            } else {
-                let numStr = numerator.contains("·") ? "(\(numerator))" : numerator
-                return "\(defaultLabel) [\(numStr)/\(denStr)]"
-            }
-        } else {
-            return "\(defaultLabel) [\(numerator)]"
-        }
+            if numerator.isEmpty { return "\(defaultLabel) [1/\(denStr)]" }
+            else { let numStr = numerator.contains("·") ? "(\(numerator))" : numerator; return "\(defaultLabel) [\(numStr)/\(denStr)]" }
+        } else { return "\(defaultLabel) [\(numerator)]" }
     }
 }
 
@@ -700,21 +631,11 @@ func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
     let n = A.rows
     guard b.dimension == n else { throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A.") }
 
-    var augmentedMatrix: [[Double]] = []
-    for i in 0..<n {
-        var row = (0..<n).map { A[i, $0] }
-        row.append(b[i])
-        augmentedMatrix.append(row)
-    }
+    var augmentedMatrix: [[Double]] = (0..<n).map { i in (0..<n).map { A[i, $0] } + [b[i]] }
 
-    // Forward elimination with partial pivoting
     for i in 0..<n {
         var maxRow = i
-        for k in (i + 1)..<n {
-            if abs(augmentedMatrix[k][i]) > abs(augmentedMatrix[maxRow][i]) {
-                maxRow = k
-            }
-        }
+        for k in (i + 1)..<n { if abs(augmentedMatrix[k][i]) > abs(augmentedMatrix[maxRow][i]) { maxRow = k } }
         augmentedMatrix.swapAt(i, maxRow)
 
         guard abs(augmentedMatrix[i][i]) > 1e-12 else {
@@ -724,23 +645,20 @@ func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
         for k in (i + 1)..<n {
             let factor = augmentedMatrix[k][i] / augmentedMatrix[i][i]
             augmentedMatrix[k][i] = 0
-            for j in (i + 1)...n {
-                augmentedMatrix[k][j] -= factor * augmentedMatrix[i][j]
-            }
+            for j in (i + 1)...n { augmentedMatrix[k][j] -= factor * augmentedMatrix[i][j] }
         }
     }
 
-    // Back substitution
     var x = [Double](repeating: 0, count: n)
     for i in (0..<n).reversed() {
-        var sum = 0.0
-        for j in (i + 1)..<n {
-            sum += augmentedMatrix[i][j] * x[j]
-        }
+        let sum = (i + 1..<n).map { augmentedMatrix[i][$0] * x[$0] }.reduce(0, +)
         x[i] = (augmentedMatrix[i][n] - sum) / augmentedMatrix[i][i]
     }
+    
+    // Calculate result dimensions: units(x) = units(b) / units(A)
+    let resultDimensions = b.dimensions.merging(A.dimensions.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
 
-    return Vector(values: x)
+    return Vector(values: x, dimensions: resultDimensions)
 }
 
 /// Performs a polynomial regression using the method of least squares.
@@ -750,6 +668,10 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
     }
     guard x.dimension == y.dimension else {
         throw MathError.dimensionMismatch(reason: "x and y vectors must have the same number of elements.")
+    }
+    // --- NEW: Enforce dimensionless vectors for fitting ---
+    guard x.dimensions.isEmpty, y.dimensions.isEmpty else {
+        throw MathError.unsupportedOperation(op: "polyfit", typeA: "Vectors with units are not supported for polynomial fitting.", typeB: nil)
     }
     let numPoints = x.dimension
     let degreeInt = Int(degree)
@@ -778,14 +700,13 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
 private extension MathValue {
     var dimensionsIfUnitOrDimensionless: UnitDimension {
         switch self {
-        case .unitValue(let u):
-            return u.dimensions
-        case .dimensionless:
-            return [:]
-        default:
-            // This case should ideally not be hit in a plotting context,
-            // as we expect plottable values.
-            return [:]
+        case .unitValue(let u): return u.dimensions
+        case .dimensionless: return [:]
+        case .vector(let v): return v.dimensions
+        case .matrix(let m): return m.dimensions
+        case .complexVector(let cv): return cv.dimensions
+        case .complexMatrix(let cm): return cm.dimensions
+        default: return [:]
         }
     }
 }

@@ -18,10 +18,10 @@ extension Evaluator {
             case .dimensionless(let s): return .dimensionless(-s)
             case .unitValue(let u): return .unitValue(UnitValue(value: -u.value, dimensions: u.dimensions))
             case .complex(let c): return .complex(c * -1.0)
-            case .vector(let v): return .vector(Vector(values: v.values.map { -$0 }))
-            case .matrix(let m): return .matrix(Matrix(values: m.values.map { -$0 }, rows: m.rows, columns: m.columns))
-            case .complexVector(let cv): return .complexVector(ComplexVector(values: cv.values.map { $0 * -1.0 }))
-            case .complexMatrix(let cm): return .complexMatrix(ComplexMatrix(values: cm.values.map { $0 * -1.0 }, rows: cm.rows, columns: cm.columns))
+            case .vector(let v): return .vector(Vector(values: v.values.map { -$0 }, dimensions: v.dimensions))
+            case .matrix(let m): return .matrix(Matrix(values: m.values.map { -$0 }, rows: m.rows, columns: m.columns, dimensions: m.dimensions))
+            case .complexVector(let cv): return .complexVector(ComplexVector(values: cv.values.map { $0 * -1.0 }, dimensions: cv.dimensions))
+            case .complexMatrix(let cm): return .complexMatrix(ComplexMatrix(values: cm.values.map { $0 * -1.0 }, rows: cm.rows, columns: cm.columns, dimensions: cm.dimensions))
             case .uncertain(let u): return .uncertain(-u)
             default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
             }
@@ -70,9 +70,9 @@ extension Evaluator {
         
         switch (left, right) {
         // --- Unit & Dimensionless Operations ---
-        case (.unitValue(let l), .unitValue(let r)): return try performUnitUnitOp(op.rawValue, l, r)
-        case (.unitValue(let l), .dimensionless(let r)): return try performUnitUnitOp(op.rawValue, l, .dimensionless(r))
-        case (.dimensionless(let l), .unitValue(let r)): return try performUnitUnitOp(op.rawValue, .dimensionless(l), r)
+        case (.unitValue(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, r))
+        case (.unitValue(let l), .dimensionless(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, l, .dimensionless(r)))
+        case (.dimensionless(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, .dimensionless(l), r))
         case (.dimensionless(let l), .dimensionless(let r)): return .dimensionless(try performDimensionlessOp(op.rawValue, l, r))
 
         // --- Uncertainty propagation rules ---
@@ -88,6 +88,8 @@ extension Evaluator {
         // --- Vector Operations ---
         case (.vector(let v), .dimensionless(let s)): return .vector(try performVectorScalarOp(op.rawValue, v, s))
         case (.dimensionless(let s), .vector(let v)): return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
+        case (.vector(let v), .unitValue(let u)): return .vector(try performVectorUnitOp(op.rawValue, v, u))
+        case (.unitValue(let u), .vector(let v)): return .vector(try performVectorUnitOp(op.rawValue, v, u, reversed: true))
         case (.vector(let l), .vector(let r)):
             if op.rawValue == "*" {
                 return .matrix(l * r)
@@ -97,19 +99,18 @@ extension Evaluator {
         // --- Matrix Operations ---
         case (.matrix(let m), .dimensionless(let s)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s))
         case (.dimensionless(let s), .matrix(let m)): return .matrix(try performMatrixScalarOp(op.rawValue, m, s, reversed: true))
+        case (.matrix(let m), .unitValue(let u)): return .matrix(try performMatrixUnitOp(op.rawValue, m, u))
+        case (.unitValue(let u), .matrix(let m)): return .matrix(try performMatrixUnitOp(op.rawValue, m, u, reversed: true))
         case (.matrix(let l), .matrix(let r)): return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
         case (.matrix(let m), .vector(let v)):
              if op.rawValue == "*" { return .vector(try m * v) }
              else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         case (.vector(let v), .matrix(let m)):
             if op.rawValue == "*" {
-                // NEW: Handle the case where a 1-row matrix should be treated as a vector for an outer product.
                 if m.rows == 1 {
-                    let rowVector = Vector(values: m.values)
-                    // This calls the Vector * Vector outer product operator.
+                    let rowVector = Vector(values: m.values, dimensions: m.dimensions)
                     return .matrix(v * rowVector)
                 }
-                // This is the original row-vector * matrix multiplication
                 return .vector(try v * m)
             }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
@@ -130,14 +131,10 @@ extension Evaluator {
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         case (.complexVector(let v), .complexMatrix(let m)):
             if op.rawValue == "*" {
-                // If the matrix has only one row, treat it as a row vector
-                // and perform an outer product (column vector * row vector).
                 if m.rows == 1 {
-                    let rowVector = ComplexVector(values: m.values)
-                    // This calls the ComplexVector * ComplexVector outer product operator
+                    let rowVector = ComplexVector(values: m.values, dimensions: m.dimensions)
                     return .complexMatrix(v * rowVector)
                 }
-                // Otherwise, perform standard row-vector * matrix multiplication.
                 return .complexVector(try v * m)
             }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
@@ -221,15 +218,15 @@ extension Evaluator {
         default: throw MathError.unknownOperator(op: op)
         }
     }
-    private func performUnitUnitOp(_ op: String, _ l: UnitValue, _ r: UnitValue) throws -> MathValue {
+    private func performUnitUnitOp(_ op: String, _ l: UnitValue, _ r: UnitValue) throws -> UnitValue {
         switch op {
-        case "+": return .unitValue(try l + r)
-        case "-": return .unitValue(try l - r)
-        case "*": return .unitValue(l * r)
-        case "/": return .unitValue(try l / r)
+        case "+": return try l + r
+        case "-": return try l - r
+        case "*": return l * r
+        case "/": return try l / r
         case "^":
             guard r.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless exponent", found: "Value with units") }
-            return .unitValue(l.pow(r.value))
+            return l.pow(r.value)
         // Comparison Operators
         case ">", "<", ">=", "<=", "==", "!=":
             guard l.dimensions == r.dimensions else {
@@ -245,7 +242,7 @@ extension Evaluator {
             case "!=": result = l.value != r.value
             default: throw MathError.unknownOperator(op: op) // Should not be reached
             }
-            return .dimensionless(result ? 1.0 : 0.0)
+            return UnitValue.dimensionless(result ? 1.0 : 0.0)
         default: throw MathError.unknownOperator(op: op)
         }
     }
@@ -266,9 +263,36 @@ extension Evaluator {
             }
         }
     }
+    private func performVectorUnitOp(_ op: String, _ v: Vector, _ u: UnitValue, reversed: Bool = false) throws -> Vector {
+        let s = u.value
+        let d = u.dimensions
+        if reversed {
+            switch op {
+            case "*":
+                let newValues = v.values.map { s * $0 }
+                let newDims = d.merging(v.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+                return Vector(values: newValues, dimensions: newDims)
+            default: throw MathError.unsupportedOperation(op: op, typeA: "UnitValue", typeB: "Vector")
+            }
+        } else {
+            switch op {
+            case "*":
+                let newValues = v.values.map { $0 * s }
+                let newDims = v.dimensions.merging(d, uniquingKeysWith: +).filter { $0.value != 0 }
+                return Vector(values: newValues, dimensions: newDims)
+            case "/":
+                guard s != 0 else { throw MathError.divisionByZero }
+                let newValues = v.values.map { $0 / s }
+                let newDims = v.dimensions.merging(d.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
+                return Vector(values: newValues, dimensions: newDims)
+            default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "UnitValue")
+            }
+        }
+    }
     private func performVectorVectorOp(_ op: String, _ l: Vector, _ r: Vector) throws -> Vector {
         switch op { case "+": return try l + r; case "-": return try l - r; case ".*": return try l.hadamard(with: r); case "./": return try l.hadamardDivision(with: r)
-        case "^": return Vector(values: zip(l.values, r.values).map(pow)); default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Vector")
+        case "^": throw MathError.unsupportedOperation(op: op, typeA: "Vector^Vector", typeB: nil) // a vector exponent doesn't make sense here
+        default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Vector")
         }
     }
     private func performMatrixScalarOp(_ op: String, _ m: Matrix, _ s: Double, reversed: Bool = false) throws -> Matrix {
@@ -278,14 +302,40 @@ extension Evaluator {
         case "/": if reversed { throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix") }; guard s != 0 else { throw MathError.divisionByZero }; newValues = m.values.map { $0 / s }
         default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Scalar")
         }
-        return Matrix(values: newValues, rows: m.rows, columns: m.columns)
+        return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
+    }
+    private func performMatrixUnitOp(_ op: String, _ m: Matrix, _ u: UnitValue, reversed: Bool = false) throws -> Matrix {
+        let s = u.value
+        let d = u.dimensions
+        if reversed {
+            switch op {
+            case "*":
+                let newValues = m.values.map { s * $0 }
+                let newDims = d.merging(m.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+                return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: newDims)
+            default: throw MathError.unsupportedOperation(op: op, typeA: "UnitValue", typeB: "Matrix")
+            }
+        } else {
+            switch op {
+            case "*":
+                let newValues = m.values.map { $0 * s }
+                let newDims = m.dimensions.merging(d, uniquingKeysWith: +).filter { $0.value != 0 }
+                return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: newDims)
+            case "/":
+                guard s != 0 else { throw MathError.divisionByZero }
+                let newValues = m.values.map { $0 / s }
+                let newDims = m.dimensions.merging(d.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
+                return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: newDims)
+            default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "UnitValue")
+            }
+        }
     }
     private func performMatrixMatrixOp(_ op: String, _ l: Matrix, _ r: Matrix) throws -> Matrix {
         switch op { case "+": return try l + r; case "-": return try l - r; case "*": return try l * r; case ".*": return try l.hadamard(with: r); case "./": return try l.hadamardDivision(with: r); default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Matrix") }
     }
     private func performComplexVectorComplexOp(_ op: String, _ v: ComplexVector, _ c: Complex, reversed: Bool = false) throws -> ComplexVector {
          if reversed {
-            switch op { case "+": return ComplexVector(values: v.values.map { c + $0 }); case "*": return ComplexVector(values: v.values.map { c * $0 }); case "-": return ComplexVector(values: v.values.map { c - $0 }); default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex") }
+            switch op { case "+": return ComplexVector(values: v.values.map { c + $0 }, dimensions: v.dimensions); case "*": return ComplexVector(values: v.values.map { c * $0 }, dimensions: v.dimensions); case "-": return ComplexVector(values: v.values.map { c - $0 }, dimensions: v.dimensions); default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex") }
         } else {
             switch op { case "+": return v + c; case "*": return v * c; case "-": return v - c; case "/": return try v / c; default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex") }
         }
@@ -295,7 +345,7 @@ extension Evaluator {
     }
     private func performComplexMatrixComplexOp(_ op: String, _ m: ComplexMatrix, _ c: Complex, reversed: Bool = false) throws -> ComplexMatrix {
          if reversed {
-            switch op { case "+": return ComplexMatrix(values: m.values.map { c + $0 }, rows: m.rows, columns: m.columns); case "*": return ComplexMatrix(values: m.values.map { c * $0 }, rows: m.rows, columns: m.columns); case "-": return ComplexMatrix(values: m.values.map { c - $0 }, rows: m.rows, columns: m.columns); default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "Complex") }
+            switch op { case "+": return ComplexMatrix(values: m.values.map { c + $0 }, rows: m.rows, columns: m.columns, dimensions: m.dimensions); case "*": return ComplexMatrix(values: m.values.map { c * $0 }, rows: m.rows, columns: m.columns, dimensions: m.dimensions); case "-": return ComplexMatrix(values: m.values.map { c - $0 }, rows: m.rows, columns: m.columns, dimensions: m.dimensions); default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "Complex") }
         } else {
             switch op { case "+": return m + c; case "*": return m * c; case "-": return m - c; case "/": return try m / c; default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexMatrix", typeB: "Complex") }
         }

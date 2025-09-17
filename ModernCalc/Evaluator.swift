@@ -202,53 +202,52 @@ struct Evaluator {
             return (.uncertain(uncertainValue), false)
 
         case let vectorNode as VectorNode:
-            var elements: [Double] = []
+            var elements: [MathValue] = []
             for elementNode in vectorNode.elements {
                 let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = usedAngle || elementUsedAngle
-                elements.append(try evaluatedElement.asScalar())
+                elements.append(evaluatedElement)
             }
-            return (.vector(Vector(values: elements)), usedAngle)
-            
+            let (values, commonDimension) = try extractValuesAndDimension(from: elements)
+            return (.vector(Vector(values: values, dimensions: commonDimension)), usedAngle)
+
         case let matrixNode as MatrixNode:
-            var values: [Double] = []
-            let rows = matrixNode.rows.count; let columns = matrixNode.rows.first?.count ?? 0
+            var allElements: [MathValue] = []
             for row in matrixNode.rows {
                 for elementNode in row {
                     let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                     usedAngle = usedAngle || elementUsedAngle
-                    values.append(try evaluatedElement.asScalar())
+                    allElements.append(evaluatedElement)
                 }
             }
-            return (.matrix(Matrix(values: values, rows: rows, columns: columns)), usedAngle)
-
+            let (values, commonDimension) = try extractValuesAndDimension(from: allElements)
+            let rows = matrixNode.rows.count
+            let columns = matrixNode.rows.first?.count ?? 0
+            return (.matrix(Matrix(values: values, rows: rows, columns: columns, dimensions: commonDimension)), usedAngle)
+            
         case let cVectorNode as ComplexVectorNode:
-            var elements: [Complex] = []
+            var elements: [MathValue] = []
             for elementNode in cVectorNode.elements {
                 let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                 usedAngle = usedAngle || elementUsedAngle
-                switch evaluatedElement {
-                case .complex(let c): elements.append(c)
-                case .dimensionless(let s): elements.append(Complex(real: s, imaginary: 0))
-                default: throw MathError.typeMismatch(expected: "Complex or Dimensionless", found: evaluatedElement.typeName)
-                }
+                elements.append(evaluatedElement)
             }
-            return (.complexVector(ComplexVector(values: elements)), usedAngle)
+            let (complexValues, commonDimension) = try extractComplexValuesAndDimension(from: elements)
+            return (.complexVector(ComplexVector(values: complexValues, dimensions: commonDimension)), usedAngle)
 
         case let cMatrixNode as ComplexMatrixNode:
-            var values: [Complex] = []; let rows = cMatrixNode.rows.count; let columns = cMatrixNode.rows.first?.count ?? 0
+            var allElements: [MathValue] = []
             for row in cMatrixNode.rows {
                 for elementNode in row {
                     let (evaluatedElement, elementUsedAngle) = try _evaluateSingle(node: elementNode, variables: &variables, functions: &functions, angleMode: angleMode)
                     usedAngle = usedAngle || elementUsedAngle
-                    switch evaluatedElement {
-                    case .complex(let c): values.append(c)
-                    case .dimensionless(let s): values.append(Complex(real: s, imaginary: 0))
-                    default: throw MathError.typeMismatch(expected: "Complex or Dimensionless", found: evaluatedElement.typeName)
-                    }
+                    allElements.append(evaluatedElement)
                 }
             }
-            return (.complexMatrix(ComplexMatrix(values: values, rows: rows, columns: columns)), usedAngle)
+            let (complexValues, commonDimension) = try extractComplexValuesAndDimension(from: allElements)
+            let rows = cMatrixNode.rows.count
+            let columns = cMatrixNode.rows.first?.count ?? 0
+            return (.complexMatrix(ComplexMatrix(values: complexValues, rows: rows, columns: columns, dimensions: commonDimension)), usedAngle)
 
         case let unaryNode as UnaryOpNode:
             let (childValue, childUsedAngle) = try _evaluateSingle(node: unaryNode.child, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -387,4 +386,82 @@ struct Evaluator {
             throw MathError.invalidNode
         }
     }
+}
+
+// --- NEW: Helper function to build a unit-aware Vector/Matrix ---
+/// Extracts numeric values and a common unit dimension from a list of MathValues.
+private func extractValuesAndDimension(from elements: [MathValue]) throws -> (values: [Double], dimensions: UnitDimension) {
+    guard !elements.isEmpty else {
+        return ([], [:])
+    }
+    
+    var commonDimension: UnitDimension? = nil
+    var values: [Double] = []
+    
+    for element in elements {
+        let currentDimension: UnitDimension
+        let currentValue: Double
+        
+        switch element {
+        case .dimensionless(let d):
+            currentValue = d
+            currentDimension = [:]
+        case .unitValue(let u):
+            currentValue = u.value
+            currentDimension = u.dimensions
+        default:
+            throw MathError.typeMismatch(expected: "Numeric value (with or without units)", found: element.typeName)
+        }
+        
+        if commonDimension == nil {
+            commonDimension = currentDimension
+        }
+        
+        guard currentDimension == commonDimension else {
+            throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units.")
+        }
+        values.append(currentValue)
+    }
+    
+    return (values, commonDimension ?? [:])
+}
+
+// --- NEW: Helper function to build a unit-aware ComplexVector/ComplexMatrix ---
+private func extractComplexValuesAndDimension(from elements: [MathValue]) throws -> (values: [Complex], dimensions: UnitDimension) {
+    guard !elements.isEmpty else {
+        return ([], [:])
+    }
+    
+    var commonDimension: UnitDimension? = nil
+    var values: [Complex] = []
+    
+    for element in elements {
+        let currentDimension: UnitDimension
+        let currentValue: Complex
+        
+        switch element {
+        case .dimensionless(let d):
+            currentValue = Complex(real: d, imaginary: 0)
+            currentDimension = [:]
+        case .unitValue(let u):
+            currentValue = Complex(real: u.value, imaginary: 0)
+            currentDimension = u.dimensions
+        case .complex(let c):
+            currentValue = c
+            currentDimension = [:] // Complex numbers are inherently dimensionless in this system
+        default:
+            throw MathError.typeMismatch(expected: "Numeric or Complex value", found: element.typeName)
+        }
+        
+        if commonDimension == nil {
+            commonDimension = currentDimension
+        }
+        
+        guard currentDimension == commonDimension else {
+            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units.")
+        }
+        values.append(currentValue)
+    }
+    
+    return (values, commonDimension ?? [:])
 }

@@ -485,11 +485,23 @@ class CalculatorViewModel: ObservableObject {
             if unitStr.isEmpty { return valStr }
             return "\(valStr) \(unitStr)"
         case .complex(let c): return formatComplexForDisplay(c, with: settings)
-        case .vector(let v): return formatVectorForDisplay(v, with: settings)
-        case .matrix(let m): return formatMatrixForDisplay(m, with: settings)
+        case .vector(let v):
+            let content = formatVectorForDisplay(v, with: settings)
+            let unitStr = formatDimensionsForHistory(v.dimensions)
+            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
+        case .matrix(let m):
+            let content = formatMatrixForDisplay(m, with: settings)
+            let unitStr = formatDimensionsForHistory(m.dimensions)
+            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
         case .tuple(let t): return t.map { formatForHistory($0, with: settings) }.joined(separator: " OR ")
-        case .complexVector(let cv): return formatComplexVectorForDisplay(cv, with: settings)
-        case .complexMatrix(let cm): return formatComplexMatrixForDisplay(cm, with: settings)
+        case .complexVector(let cv):
+            let content = formatComplexVectorForDisplay(cv, with: settings)
+            let unitStr = formatDimensionsForHistory(cv.dimensions)
+            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
+        case .complexMatrix(let cm):
+            let content = formatComplexMatrixForDisplay(cm, with: settings)
+            let unitStr = formatDimensionsForHistory(cm.dimensions)
+            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForDisplay(p, with: settings)
         case .regressionResult(let s, let i): return "m = \(formatScalar(s)), b = \(formatScalar(i))"
@@ -551,11 +563,23 @@ class CalculatorViewModel: ObservableObject {
             if unitStr.isEmpty { return valStr }
             return "\(valStr)\(unitStr)"
         case .complex(let c): return formatComplexForParsing(c)
-        case .vector(let v): return "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
-        case .matrix(let m): return "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
+        case .vector(let v):
+            let content = "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
+            let unitStr = formatDimensionsForParsing(v.dimensions)
+            return unitStr.isEmpty ? content : "(\(content)) * \(unitStr)"
+        case .matrix(let m):
+            let content = "matrix(\((0..<m.rows).map { r in (0..<m.columns).map { c in formatScalarForParsing(m[r, c]) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
+            let unitStr = formatDimensionsForParsing(m.dimensions)
+            return unitStr.isEmpty ? content : "(\(content)) * \(unitStr)"
         case .tuple(let t): return t.map { formatForParsing($0) }.first ?? ""
-        case .complexVector(let cv): return "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
-        case .complexMatrix(let cm): return "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
+        case .complexVector(let cv):
+            let content = "cvector(\(cv.values.map { formatForParsing(.complex($0)) }.joined(separator: ";")))"
+            let unitStr = formatDimensionsForParsing(cv.dimensions)
+            return unitStr.isEmpty ? content : "(\(content)) * \(unitStr)"
+        case .complexMatrix(let cm):
+            let content = "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c])) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
+            let unitStr = formatDimensionsForParsing(cm.dimensions)
+            return unitStr.isEmpty ? content : "(\(content)) * \(unitStr)"
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForParsing(p)
         case .regressionResult, .polynomialFit: return ""
@@ -681,15 +705,22 @@ class CalculatorViewModel: ObservableObject {
         }
 
         let numerator = formatPart(positiveDims)
-        let denominator = formatPart(negativeDims)
+        let denominatorPart = formatPart(negativeDims)
+        let denominator = denominatorPart.replacingOccurrences(of: ".", with: "")
+
 
         if denominator.isEmpty {
             return numerator
         } else {
+            let denContainsPower = denominator.contains("^")
+            let denMultipleUnits = denominator.count > 1 && !denContainsPower || denominator.count > 3 && denContainsPower // crude check
+            
+            let finalDenominator = (denMultipleUnits || denContainsPower) ? "(\(denominator))" : denominator
+
             if numerator.isEmpty {
-                return "1/\(denominator)"
+                return "1/\(finalDenominator)"
             } else {
-                return "\(numerator)/\(denominator)"
+                return "\(numerator)/\(finalDenominator)"
             }
         }
     }
@@ -858,4 +889,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
