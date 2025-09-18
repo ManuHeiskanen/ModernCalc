@@ -548,7 +548,7 @@ extension Evaluator {
         return (result: .roots(finalRoots), usedAngle: usedAngle)
     }
 
-    private func findRoots(in ranges: [ClosedRange<Double>], for f: (Double) throws -> Double, storingIn roots: inout Set<Double>, precision: Double) throws {
+    private func findRoots(in ranges: [ClosedRange<Double>], for f: (Double) throws -> Double, storingIn: inout Set<Double>, precision: Double) throws {
         let stepsPerRange = 5000
 
         for range in ranges {
@@ -566,14 +566,14 @@ extension Evaluator {
                     
                     if abs(y) < precision {
                         let roundedRoot = (x * 1/precision).rounded() * precision
-                        roots.insert(roundedRoot)
+                        storingIn.insert(roundedRoot)
                     }
 
                     if let prevY = lastY, let prevX = lastX {
                         if prevY * y < 0 {
                             if let root = try Solver.brent(f: f, x1: prevX, x2: x) {
                                 let roundedRoot = (root * 1/precision).rounded() * precision
-                                roots.insert(roundedRoot)
+                                storingIn.insert(roundedRoot)
                             }
                         }
                     }
@@ -590,16 +590,10 @@ extension Evaluator {
         }
     }
     
-    private static let commonDerivedUnits: [UnitDimension: String] = [
-        [.kilogram: 1, .meter: 1, .second: -2]: "N", [.kilogram: 1, .meter: 2, .second: -2]: "J", [.kilogram: 1, .meter: 2, .second: -3]: "W",
-        [.kilogram: 1, .meter: -1, .second: -2]: "Pa", [.second: -1]: "Hz", [.second: 1, .ampere: 1]: "C", [.kilogram: 1, .meter: 2, .second: -3, .ampere: -1]: "V",
-        [.kilogram: 1, .meter: 2, .second: -3, .ampere: -2]: "Ohm", [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2]: "F", [.kilogram: 1, .meter: 2, .second: -2, .ampere: -1]: "Wb",
-        [.kilogram: 1, .meter: 2, .second: -2, .ampere: -2]: "H", [.kilogram: 1, .second: -2, .ampere: -1]: "T",
-    ]
-    
     private func formatDimensionsForAxis(_ dimensions: UnitDimension, defaultLabel: String) -> String {
         if dimensions.isEmpty { return defaultLabel }
-        if let unitSymbol = Self.commonDerivedUnits[dimensions] { return "\(defaultLabel) [\(unitSymbol)]" }
+        // FIX: Use the centralized UnitStore.commonDerivedUnits
+        if let unitSymbol = UnitStore.commonDerivedUnits[dimensions] { return "\(defaultLabel) [\(unitSymbol)]" }
         
         let positiveDims = dimensions.filter { $0.value > 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
         let negativeDims = dimensions.filter { $0.value < 0 }.sorted { $0.key.rawValue < $1.key.rawValue }

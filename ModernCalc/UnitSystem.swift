@@ -46,6 +46,24 @@ struct UnitStore {
         .candela: "cd"
     ]
     
+    /// A map from a specific unit dimension to its common derived unit symbol (e.g., N for force).
+    /// Used for automatically simplifying unit displays.
+    static let commonDerivedUnits: [UnitDimension: String] = [
+        [.kilogram: 1, .meter: 1, .second: -2]: "N",
+        [.kilogram: 1, .meter: 2, .second: -2]: "J",
+        [.kilogram: 1, .meter: 2, .second: -3]: "W",
+        [.kilogram: 1, .meter: -1, .second: -2]: "Pa",
+        [.second: -1]: "Hz",
+        [.second: 1, .ampere: 1]: "C",
+        [.kilogram: 1, .meter: 2, .second: -3, .ampere: -1]: "V",
+        [.kilogram: 1, .meter: 2, .second: -3, .ampere: -2]: "Ohm",
+        [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2]: "F",
+        [.kilogram: 1, .meter: 2, .second: -2, .ampere: -1]: "Wb",
+        [.kilogram: 1, .meter: 2, .second: -2, .ampere: -2]: "H",
+        [.kilogram: 1, .second: -2, .ampere: -1]: "T",
+        [.kilogram: -1, .meter: -2, .second: 3, .ampere: 2]: "S"
+    ]
+    
     static let units: [String: UnitDefinition] = buildUnitMap()
 
     private static func buildUnitMap() -> [String: UnitDefinition] {

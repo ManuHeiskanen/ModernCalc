@@ -10,6 +10,12 @@ struct UnitValue: Equatable, Codable {
     static func dimensionless(_ value: Double) -> UnitValue {
         return UnitValue(value: value, dimensions: [:])
     }
+    
+    // FIX: Centralized factory method to automatically set preferred display units.
+    static func create(value: Double, dimensions: UnitDimension) -> UnitValue {
+        let preferred = UnitStore.commonDerivedUnits[dimensions]
+        return UnitValue(value: value, dimensions: dimensions, preferredDisplayUnit: preferred)
+    }
 
     // --- Operator Overloads for Dimensional Analysis ---
 
@@ -17,21 +23,21 @@ struct UnitValue: Equatable, Codable {
         guard lhs.dimensions == rhs.dimensions else {
             throw MathError.dimensionMismatch(reason: "Cannot add quantities with different units.")
         }
-        return UnitValue(value: lhs.value + rhs.value, dimensions: lhs.dimensions)
+        return UnitValue.create(value: lhs.value + rhs.value, dimensions: lhs.dimensions)
     }
 
     static func - (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
         guard lhs.dimensions == rhs.dimensions else {
             throw MathError.dimensionMismatch(reason: "Cannot subtract quantities with different units.")
         }
-        return UnitValue(value: lhs.value - rhs.value, dimensions: lhs.dimensions)
+        return UnitValue.create(value: lhs.value - rhs.value, dimensions: lhs.dimensions)
     }
     
     static func * (lhs: UnitValue, rhs: UnitValue) -> UnitValue {
         let newValue = lhs.value * rhs.value
         let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +)
             .filter { $0.value != 0 } // Remove dimensions that cancel out
-        return UnitValue(value: newValue, dimensions: newDimensions)
+        return UnitValue.create(value: newValue, dimensions: newDimensions)
     }
 
     static func / (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
@@ -40,14 +46,19 @@ struct UnitValue: Equatable, Codable {
         let negatedRhsDimensions = rhs.dimensions.mapValues { -$0 }
         let newDimensions = lhs.dimensions.merging(negatedRhsDimensions, uniquingKeysWith: +)
             .filter { $0.value != 0 }
-        return UnitValue(value: newValue, dimensions: newDimensions)
+        return UnitValue.create(value: newValue, dimensions: newDimensions)
+    }
+    
+    static func / (lhs: UnitValue, rhs: Double) -> UnitValue {
+        let newValue = lhs.value / rhs
+        return UnitValue.create(value: newValue, dimensions: lhs.dimensions)
     }
     
     func pow(_ exponent: Double) -> UnitValue {
         let newValue = Foundation.pow(self.value, exponent)
         let newDimensions = self.dimensions.mapValues { Int(Double($0) * exponent) }
             .filter { $0.value != 0 }
-        return UnitValue(value: newValue, dimensions: newDimensions)
+        return UnitValue.create(value: newValue, dimensions: newDimensions)
     }
 }
 
@@ -263,7 +274,7 @@ struct Vector: Equatable, Codable {
         }
         let resultValue = zip(self.values, other.values).map(*).reduce(0, +)
         let newDimensions = self.dimensions.merging(other.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
-        return UnitValue(value: resultValue, dimensions: newDimensions)
+        return UnitValue.create(value: resultValue, dimensions: newDimensions)
     }
     
     func cross(with other: Vector) throws -> Vector {
@@ -362,28 +373,28 @@ struct Vector: Equatable, Codable {
     }
     
     // --- Statistical Helpers (Now Returning UnitValue) ---
-    func sum() -> UnitValue { UnitValue(value: values.reduce(0, +), dimensions: self.dimensions) }
+    func sum() -> UnitValue { UnitValue.create(value: values.reduce(0, +), dimensions: self.dimensions) }
     func average() -> UnitValue {
-        guard !values.isEmpty else { return UnitValue(value: 0, dimensions: self.dimensions) }
-        return UnitValue(value: sum().value / Double(dimension), dimensions: self.dimensions)
+        guard !values.isEmpty else { return UnitValue.create(value: 0, dimensions: self.dimensions) }
+        return UnitValue.create(value: sum().value / Double(dimension), dimensions: self.dimensions)
     }
-    func min() -> UnitValue? { values.min().map { UnitValue(value: $0, dimensions: self.dimensions) } }
-    func max() -> UnitValue? { values.max().map { UnitValue(value: $0, dimensions: self.dimensions) } }
+    func min() -> UnitValue? { values.min().map { UnitValue.create(value: $0, dimensions: self.dimensions) } }
+    func max() -> UnitValue? { values.max().map { UnitValue.create(value: $0, dimensions: self.dimensions) } }
     func median() -> UnitValue? {
         guard !values.isEmpty else { return nil }
         let sorted = values.sorted()
         let medianValue = (dimension % 2 == 0) ? (sorted[dimension / 2 - 1] + sorted[dimension / 2]) / 2 : sorted[dimension / 2]
-        return UnitValue(value: medianValue, dimensions: self.dimensions)
+        return UnitValue.create(value: medianValue, dimensions: self.dimensions)
     }
     func stddev() -> UnitValue? {
         guard dimension > 1 else { return nil }
         let mean = average().value
         let sumOfSquaredDiffs = values.map { Foundation.pow($0 - mean, 2.0) }.reduce(0, +)
-        return UnitValue(value: Foundation.sqrt(sumOfSquaredDiffs / Double(dimension - 1)), dimensions: self.dimensions)
+        return UnitValue.create(value: Foundation.sqrt(sumOfSquaredDiffs / Double(dimension - 1)), dimensions: self.dimensions)
     }
     func magnitude() -> UnitValue {
         let magValue = Foundation.sqrt(values.map { $0 * $0 }.reduce(0, +))
-        return UnitValue(value: magValue, dimensions: self.dimensions)
+        return UnitValue.create(value: magValue, dimensions: self.dimensions)
     }
     
     func variance() -> UnitValue? {
@@ -391,14 +402,14 @@ struct Vector: Equatable, Codable {
         let mean = average().value
         let sumOfSquaredDiffs = values.map { Foundation.pow($0 - mean, 2.0) }.reduce(0, +)
         let newDimensions = self.dimensions.mapValues { $0 * 2 }.filter { $0.value != 0 }
-        return UnitValue(value: sumOfSquaredDiffs / Double(dimension - 1), dimensions: newDimensions)
+        return UnitValue.create(value: sumOfSquaredDiffs / Double(dimension - 1), dimensions: newDimensions)
     }
 
     func stddevp() -> UnitValue? {
         guard dimension > 0 else { return nil }
         let mean = average().value
         let sumOfSquaredDiffs = values.map { Foundation.pow($0 - mean, 2.0) }.reduce(0, +)
-        return UnitValue(value: Foundation.sqrt(sumOfSquaredDiffs / Double(dimension)), dimensions: self.dimensions)
+        return UnitValue.create(value: Foundation.sqrt(sumOfSquaredDiffs / Double(dimension)), dimensions: self.dimensions)
     }
 }
 
@@ -445,7 +456,7 @@ struct Matrix: Equatable, Codable {
             }.reduce(0, +)
         }
         let newDimensions = self.dimensions.mapValues { $0 * self.rows }.filter { $0.value != 0 }
-        return UnitValue(value: detValue, dimensions: newDimensions)
+        return UnitValue.create(value: detValue, dimensions: newDimensions)
     }
 
     func inverse() throws -> Matrix {
@@ -483,12 +494,12 @@ struct Matrix: Equatable, Codable {
     func trace() throws -> UnitValue {
         guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square for trace.") }
         let traceValue = (0..<rows).map { self[$0, $0] }.reduce(0, +)
-        return UnitValue(value: traceValue, dimensions: self.dimensions)
+        return UnitValue.create(value: traceValue, dimensions: self.dimensions)
     }
     
     func frobeniusNorm() -> UnitValue {
         let normValue = sqrt(self.values.map { $0 * $0 }.reduce(0, +))
-        return UnitValue(value: normValue, dimensions: self.dimensions)
+        return UnitValue.create(value: normValue, dimensions: self.dimensions)
     }
 
     func rank() -> Int {
@@ -561,6 +572,20 @@ struct Matrix: Equatable, Codable {
     }
 
     static func * (lhs: Matrix, rhs: Matrix) throws -> Matrix {
+        // FIX: Handle scalar multiplication when one matrix is 1x1.
+        if lhs.rows == 1 && lhs.columns == 1 {
+            let scalar = lhs.values[0]
+            let newValues = rhs.values.map { scalar * $0 }
+            let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+            return Matrix(values: newValues, rows: rhs.rows, columns: rhs.columns, dimensions: newDimensions)
+        }
+        if rhs.rows == 1 && rhs.columns == 1 {
+            let scalar = rhs.values[0]
+            let newValues = lhs.values.map { $0 * scalar }
+            let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+            return Matrix(values: newValues, rows: lhs.rows, columns: lhs.columns, dimensions: newDimensions)
+        }
+        
         guard lhs.columns == rhs.rows else { throw MathError.dimensionMismatch(reason: "For A*B, columns of A must equal rows of B.") }
         var newValues = [Double](repeating: 0, count: lhs.rows * rhs.columns)
         for i in 0..<lhs.rows { for j in 0..<rhs.columns { newValues[i * rhs.columns + j] = (0..<lhs.columns).map { k in lhs[i, k] * rhs[k, j] }.reduce(0, +) } }
@@ -792,7 +817,50 @@ enum MathValue: Codable, Equatable {
 
     var typeName: String {
         switch self {
-        case .dimensionless: return "Dimensionless"; case .unitValue: return "UnitValue"; case .complex: return "Complex"; case .vector: return "Vector"; case .matrix: return "Matrix"; case .tuple: return "Tuple"; case .functionDefinition: return "FunctionDefinition"; case .complexVector: return "ComplexVector"; case .complexMatrix: return "ComplexMatrix"; case .polar: return "Polar"; case .regressionResult: return "RegressionResult"; case .polynomialFit: return "PolynomialFit"; case .plot: return "Plot"; case .triggerCSVImport: return "CSVImportTrigger"; case .constant: return "Constant"; case .uncertain: return "UncertainValue"; case .roots: return "Roots"
+        case .dimensionless: return "Dimensionless"
+        case .unitValue: return "UnitValue"
+        case .complex: return "Complex"
+        case .vector: return "Vector"
+        case .matrix: return "Matrix"
+        case .tuple: return "Tuple"
+        case .functionDefinition: return "FunctionDefinition"
+        case .complexVector: return "ComplexVector"
+        case .complexMatrix: return "ComplexMatrix"
+        case .polar: return "Polar"
+        case .regressionResult: return "RegressionResult"
+        case .polynomialFit: return "PolynomialFit"
+        case .plot: return "Plot"
+        case .triggerCSVImport: return "CSVImportTrigger"
+        case .constant: return "Constant"
+        case .uncertain: return "UncertainValue"
+        case .roots: return "Roots"
+        }
+    }
+    
+    // FIX: Moved asScalar() inside the main enum definition.
+    func asScalar() throws -> Double {
+        switch self {
+        case .dimensionless(let d):
+            return d
+        case .unitValue(let u):
+            guard u.dimensions.isEmpty else {
+                throw MathError.typeMismatch(expected: "Dimensionless value", found: "Value with units")
+            }
+            return u.value
+        case .uncertain(let u):
+            return u.value
+        case .vector(let v):
+            guard v.dimensions.isEmpty else {
+                throw MathError.typeMismatch(expected: "Dimensionless vector", found: "Vector with units")
+            }
+            throw MathError.typeMismatch(expected: "Scalar", found: "Vector")
+        case .matrix(let m):
+            guard m.dimensions.isEmpty else {
+                throw MathError.typeMismatch(expected: "Dimensionless matrix", found: "Matrix with units")
+            }
+            throw MathError.typeMismatch(expected: "Scalar", found: "Matrix")
+        default:
+            throw MathError.typeMismatch(expected: "Scalar value", found: self.typeName)
         }
     }
     
@@ -821,6 +889,7 @@ enum MathValue: Codable, Equatable {
             try container.encode("uncertain", forKey: .type); try container.encode(u, forKey: .value)
         case .roots(let r):
             try container.encode("roots", forKey: .type); try container.encode(r, forKey: .value)
+        // FIX: Handle cases for Codable conformance
         case .plot:
             try container.encode("plot", forKey: .type)
         case .triggerCSVImport:
@@ -854,6 +923,7 @@ enum MathValue: Codable, Equatable {
         case "roots":
             if let doubleRoots = try? container.decode([Double].self, forKey: .value) { self = .roots(doubleRoots.map { .dimensionless($0) }) }
             else { self = .roots(try container.decode([MathValue].self, forKey: .value)) }
+        // FIX: Handle cases for Codable conformance
         case "plot": self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
         }
@@ -883,36 +953,6 @@ enum MathValue: Codable, Equatable {
     }
 }
 
-extension MathValue {
-    func asScalar() throws -> Double {
-        switch self {
-        case .dimensionless(let d):
-            return d
-        case .unitValue(let u):
-            guard u.dimensions.isEmpty else {
-                throw MathError.typeMismatch(expected: "Dimensionless value", found: "Value with units")
-            }
-            return u.value
-        case .uncertain(let u):
-            return u.value
-        // --- ADDED: Prevent dimensioned vectors/matrices from being treated as scalars ---
-        case .vector(let v):
-            guard v.dimensions.isEmpty else {
-                throw MathError.typeMismatch(expected: "Dimensionless vector", found: "Vector with units")
-            }
-            throw MathError.typeMismatch(expected: "Scalar", found: "Vector")
-        case .matrix(let m):
-            guard m.dimensions.isEmpty else {
-                throw MathError.typeMismatch(expected: "Dimensionless matrix", found: "Matrix with units")
-            }
-            throw MathError.typeMismatch(expected: "Scalar", found: "Matrix")
-        default:
-            throw MathError.typeMismatch(expected: "Scalar value", found: self.typeName)
-        }
-    }
-}
-
-
 // Helper extension to chunk an array into smaller arrays.
 extension Array {
     func chunks(ofCount chunkSize: Int) -> [[Element]] {
@@ -921,3 +961,4 @@ extension Array {
         }
     }
 }
+

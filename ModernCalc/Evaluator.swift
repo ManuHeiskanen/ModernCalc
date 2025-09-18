@@ -147,7 +147,7 @@ struct Evaluator {
             let finalConversionFactor = Foundation.pow(unitDef.conversionFactor, exponent)
             let finalDimensions = unitDef.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
 
-            let resultUnitValue = UnitValue(value: finalConversionFactor, dimensions: finalDimensions)
+            let resultUnitValue = UnitValue.create(value: finalConversionFactor, dimensions: finalDimensions)
             return (.unitValue(resultUnitValue), expUsedAngle)
 
         case let stringNode as StringNode:
@@ -388,53 +388,69 @@ struct Evaluator {
     }
 }
 
-// --- NEW: Helper function to build a unit-aware Vector/Matrix ---
+// --- FIX: Helper function to build a unit-aware Vector/Matrix ---
 /// Extracts numeric values and a common unit dimension from a list of MathValues.
+/// This version allows dimensionless values (especially zero) to conform to the vector's unit type.
 private func extractValuesAndDimension(from elements: [MathValue]) throws -> (values: [Double], dimensions: UnitDimension) {
     guard !elements.isEmpty else {
         return ([], [:])
     }
     
     var commonDimension: UnitDimension? = nil
-    var values: [Double] = []
-    
+    // First pass: find a non-dimensionless unit to establish the vector's unit type.
     for element in elements {
-        let currentDimension: UnitDimension
-        let currentValue: Double
-        
+        if case .unitValue(let u) = element, !u.dimensions.isEmpty {
+            commonDimension = u.dimensions
+            break
+        }
+    }
+    // If no element with units was found, the vector is dimensionless.
+    let finalDimension = commonDimension ?? [:]
+    
+    var values: [Double] = []
+    for element in elements {
         switch element {
         case .dimensionless(let d):
-            currentValue = d
-            currentDimension = [:]
+            values.append(d)
         case .unitValue(let u):
-            currentValue = u.value
-            currentDimension = u.dimensions
+            // An element is compatible if its dimension matches the vector's,
+            // or if the element is dimensionless (it can adopt the vector's unit).
+            if u.dimensions == finalDimension {
+                values.append(u.value)
+            } else if u.dimensions.isEmpty {
+                 values.append(u.value)
+            } else if finalDimension.isEmpty {
+                // This occurs if the first element had units, but a later one is dimensionless
+                throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units.")
+            } else {
+                 throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units.")
+            }
         default:
             throw MathError.typeMismatch(expected: "Numeric value (with or without units)", found: element.typeName)
         }
-        
-        if commonDimension == nil {
-            commonDimension = currentDimension
-        }
-        
-        guard currentDimension == commonDimension else {
-            throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units.")
-        }
-        values.append(currentValue)
     }
     
-    return (values, commonDimension ?? [:])
+    return (values, finalDimension)
 }
 
-// --- NEW: Helper function to build a unit-aware ComplexVector/ComplexMatrix ---
+// --- FIX: Helper function to build a unit-aware ComplexVector/ComplexMatrix ---
+/// Extracts complex values and a common unit dimension, allowing dimensionless values to conform.
 private func extractComplexValuesAndDimension(from elements: [MathValue]) throws -> (values: [Complex], dimensions: UnitDimension) {
     guard !elements.isEmpty else {
         return ([], [:])
     }
     
     var commonDimension: UnitDimension? = nil
-    var values: [Complex] = []
+    // First pass to find a non-dimensionless unit.
+    for element in elements {
+        if case .unitValue(let u) = element, !u.dimensions.isEmpty {
+            commonDimension = u.dimensions
+            break
+        }
+    }
+    let finalDimension = commonDimension ?? [:]
     
+    var values: [Complex] = []
     for element in elements {
         let currentDimension: UnitDimension
         let currentValue: Complex
@@ -453,15 +469,14 @@ private func extractComplexValuesAndDimension(from elements: [MathValue]) throws
             throw MathError.typeMismatch(expected: "Numeric or Complex value", found: element.typeName)
         }
         
-        if commonDimension == nil {
-            commonDimension = currentDimension
-        }
-        
-        guard currentDimension == commonDimension else {
+        if currentDimension == finalDimension || currentDimension.isEmpty {
+            values.append(currentValue)
+        } else if finalDimension.isEmpty {
+            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units.")
+        } else {
             throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units.")
         }
-        values.append(currentValue)
     }
     
-    return (values, commonDimension ?? [:])
+    return (values, finalDimension)
 }

@@ -530,25 +530,44 @@ extension Evaluator {
             }
             return .vector(try solveLinearSystem(A: matrixA, b: vectorB))
         },
+        // FIX: Handle dot product between vectors represented as matrices
         "dot": { a, b in
-            switch (a, b) {
-            case (.vector(let v1), .vector(let v2)):
-                return .unitValue(try v1.dot(with: v2))
-            case (.complexVector(let v1), .complexVector(let v2)):
-                let (val, dim) = try v1.dot(with: v2)
-                if dim.isEmpty { return .complex(val) }
-                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
-            case (.complexVector(let v1), .vector(let v2)):
-                let (val, dim) = try v1.dot(with: ComplexVector(from: v2))
-                if dim.isEmpty { return .complex(val) }
-                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
-            case (.vector(let v1), .complexVector(let v2)):
-                let (val, dim) = try ComplexVector(from: v1).dot(with: v2)
-                if dim.isEmpty { return .complex(val) }
-                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
-            default:
-                throw MathError.typeMismatch(expected: "Two compatible Vectors", found: "\(a.typeName), \(b.typeName)")
+            // Helper to convert a MathValue to a Vector or ComplexVector if it represents one.
+            func toVector(_ value: MathValue) -> (real: Vector?, complex: ComplexVector?) {
+                switch value {
+                case .vector(let v): return (v, nil)
+                case .matrix(let m) where m.rows == 1 || m.columns == 1: return (Vector(values: m.values, dimensions: m.dimensions), nil)
+                case .complexVector(let cv): return (nil, cv)
+                case .complexMatrix(let cm) where cm.rows == 1 || cm.columns == 1: return (nil, ComplexVector(values: cm.values, dimensions: cm.dimensions))
+                default: return (nil, nil)
+                }
             }
+
+            let (aReal, aComplex) = toVector(a)
+            let (bReal, bComplex) = toVector(b)
+
+            switch (aComplex, bComplex) {
+            case (let cv1?, let cv2?): // C.dot(C)
+                let (val, dim) = try cv1.dot(with: cv2)
+                if dim.isEmpty { return .complex(val) }
+                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
+            case (let cv1?, nil): // C.dot(R)
+                guard let v2 = bReal else { break }
+                let (val, dim) = try cv1.dot(with: ComplexVector(from: v2))
+                if dim.isEmpty { return .complex(val) }
+                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
+            case (nil, let cv2?): // R.dot(C)
+                guard let v1 = aReal else { break }
+                let (val, dim) = try ComplexVector(from: v1).dot(with: cv2)
+                if dim.isEmpty { return .complex(val) }
+                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
+            case (nil, nil): // R.dot(R)
+                if let v1 = aReal, let v2 = bReal {
+                    return .unitValue(try v1.dot(with: v2))
+                }
+            }
+            
+            throw MathError.typeMismatch(expected: "Two compatible Vectors", found: "\(a.typeName), \(b.typeName)")
         },
         "cross": { a, b in guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)") }; return .vector(try v1.cross(with: v2)) },
         "getcolumn": { a, b in
