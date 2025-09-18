@@ -575,25 +575,25 @@ struct CalculatorInputView: View {
                     SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
                 }
             
+            // --- MODIFIED: Apply padding to the ZStack instead of its children ---
             ZStack(alignment: .leading) {
                 HStack(spacing: 0) {
                     Text(expression).font(.system(size: 26, weight: .regular, design: .monospaced)).opacity(0)
                     if !previewText.isEmpty && !expression.isEmpty { Text(previewText).font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary) }
                     if expression.isEmpty { Text(previewText.isEmpty ? "Enter expression..." : previewText).font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary) }
                 }
-                .padding(.horizontal)
 
                 // --- MODIFIED: Pass the cursorRect binding ---
                 CursorAwareTextField(text: $expression, selectedRange: $cursorPosition, cursorRect: $cursorRect)
                     .onTapGesture { onTap() }
-                    // --- MODIFIED: Popover is now attached here and uses the cursorRect ---
+                    // --- MODIFIED: Popover is now attached here and uses the cursorRect with a manual offset ---
                     .popover(isPresented: $viewModel.showAutocomplete,
-                             attachmentAnchor: .rect(.rect(cursorRect)),
+                             attachmentAnchor: .rect(.rect(cursorRect.offsetBy(dx: -71, dy: -11))),
                              arrowEdge: .bottom) {
                         AutocompleteView(viewModel: viewModel)
                     }
-                    .padding(.horizontal)
             }
+            .padding(.horizontal)
             Spacer()
         }
         .frame(height: 70)
@@ -712,3 +712,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
