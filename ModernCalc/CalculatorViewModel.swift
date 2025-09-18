@@ -512,18 +512,15 @@ class CalculatorViewModel: ObservableObject {
             return formatComplexMatrixForDisplay(cm, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForDisplay(p, with: settings)
-        // --- FIX: Display linreg results with their units ---
         case .regressionResult(let slope, let intercept):
             let slopeStr = formatForHistory(.unitValue(slope), with: settings)
             let interceptStr = formatForHistory(.unitValue(intercept), with: settings)
             return "Slope: \(slopeStr)\nIntercept: \(interceptStr)"
-        // --- FIX: Display polyfit results with their units ---
         case .polynomialFit(let polyCoeffs):
             return formatPolynomialWithUnitsForDisplay(polyCoeffs, with: settings)
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         case .triggerCSVImport: return "Importing CSV..."
         case .constant(let s): return s
-        // --- MODIFIED: Handle unit display for UncertainValue ---
         case .uncertain(let u):
             let val = formatScalar(u.value)
             let unc = formatScalar(u.totalUncertainty)
@@ -613,7 +610,6 @@ class CalculatorViewModel: ObservableObject {
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
         case .constant(let s): return s
-        // --- MODIFIED: Handle unit display for UncertainValue ---
         case .uncertain(let u):
             let unitStr = formatDimensionsForParsing(u.dimensions)
             let valueStr = formatScalarForParsing(u.value)
@@ -979,9 +975,14 @@ class CalculatorViewModel: ObservableObject {
             // Format coefficient and its unit
             let formattedCoeff = formatScalarForDisplay(absValue, with: settings)
             let unitPart = UnitValue(value: 1.0, dimensions: coeffUnitValue.dimensions)
-            let formattedUnit = formatForHistory(.unitValue(unitPart), with: settings)
+            var formattedUnit = formatForHistory(.unitValue(unitPart), with: settings)
                 .replacingOccurrences(of: "1 ", with: "")
                 .trimmingCharacters(in: .whitespaces)
+            
+            // FIX: If the formatted unit is just "1", it means it's dimensionless. Treat it as empty.
+            if formattedUnit == "1" {
+                formattedUnit = ""
+            }
 
             // Add coefficient if it's not 1 (or if it's the constant term)
             let needsCoeff = abs(absValue - 1.0) > 1e-9 || i == 0

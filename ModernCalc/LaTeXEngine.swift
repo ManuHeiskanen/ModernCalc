@@ -280,17 +280,14 @@ struct LaTeXEngine {
             let matrix = "\\begin{bmatrix} \(rows) \\end{bmatrix}"
             let unitStr = formatDimensions(cm.dimensions)
             return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
-        // --- FIX: Display linreg results with their units ---
         case .regressionResult(let slope, let intercept):
             let slopeLatex = formatMathValue(.unitValue(slope), angleMode: angleMode, settings: settings)
             let interceptLatex = formatMathValue(.unitValue(intercept), angleMode: angleMode, settings: settings)
             return "\\begin{cases} \\text{Slope} = \(slopeLatex) \\\\ \\text{Intercept} = \(interceptLatex) \\end{cases}"
-        // --- FIX: Display polyfit results with their units ---
         case .polynomialFit(let polyCoeffs):
             return formatPolyFitWithUnits(polyCoeffs, angleMode: angleMode, settings: settings)
         case .plot(let data):
             return "\\text{Plot: \(data.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
-        // --- MODIFIED: Handle unit display for UncertainValue ---
         case .uncertain(let u):
             let baseString = "\(formatScalar(u.value, settings: settings)) \\pm \(formatScalar(u.totalUncertainty, settings: settings))"
             if u.dimensions.isEmpty {
@@ -318,7 +315,6 @@ struct LaTeXEngine {
                 } catch {}
             }
 
-            // FIX: Handle rounding for MathValue roots
             let rootsString = roots.map { rootValue -> String in
                 let tolerance = 1e-7
                 var valueToFormat = rootValue
@@ -404,7 +400,6 @@ struct LaTeXEngine {
             }
         }
         
-        // FIX: Removed the buggy fallback that was causing the issue.
         return nil
     }
 
@@ -493,12 +488,16 @@ struct LaTeXEngine {
             let coeffAbsValue = abs(coeffValue)
             let formattedCoeff = formatScalar(coeffAbsValue, settings: settings)
             
-            let unitValueForFormatting = UnitValue(value: 1.0, dimensions: coeffUnitValue.dimensions)
-            let unitStr = formatMathValue(.unitValue(unitValueForFormatting), angleMode: angleMode, settings: settings)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .replacingOccurrences(of: "1 ", with: "")
-                .trimmingCharacters(in: .whitespaces)
-
+            let dimensions = coeffUnitValue.dimensions
+            var unitStr: String
+            if dimensions.isEmpty {
+                unitStr = ""
+            } else if let bestUnit = findBestUnitFor(dimensions: dimensions) {
+                unitStr = formatUnitSymbol(bestUnit.symbol)
+            } else {
+                unitStr = formatDimensions(dimensions)
+            }
+            
             let needsCoeff = abs(coeffAbsValue - 1.0) > 1e-9 || i == 0
             let hasUnit = !unitStr.isEmpty
             
@@ -544,3 +543,4 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
+
