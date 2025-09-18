@@ -72,9 +72,27 @@ struct LaTeXEngine {
             return latex
 
         case let constantNode as ConstantNode:
-            // Use proper LaTeX command for pi, otherwise use the name.
-            if constantNode.name == "pi" { return "\\pi" }
-            return constantNode.name.replacingOccurrences(of: "π", with: "\\pi")
+            let name = constantNode.name
+            // Use proper LaTeX command for pi.
+            if name == "pi" { return "\\pi" }
+            
+            // Handle subscripts denoted by underscore.
+            if let underscoreIndex = name.firstIndex(of: "_") {
+                let base = name[..<underscoreIndex]
+                let subscriptPart = name[name.index(after: underscoreIndex)...]
+                
+                // If the part after the underscore is longer than a single character,
+                // it must be wrapped in curly braces for correct LaTeX rendering.
+                if subscriptPart.count > 1 {
+                    // Also, handle any other special characters within the base or subscript.
+                    let formattedBase = String(base).replacingOccurrences(of: "π", with: "\\pi")
+                    let formattedSubscript = String(subscriptPart).replacingOccurrences(of: "π", with: "\\pi")
+                    return "\(formattedBase)_{\(formattedSubscript)}"
+                }
+            }
+            
+            // Fallback for names without special subscript handling.
+            return name.replacingOccurrences(of: "π", with: "\\pi")
             
         case let unaryNode as UnaryOpNode:
             let child = formatNode(unaryNode.child, evaluator: evaluator, settings: settings)
