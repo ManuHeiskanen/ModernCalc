@@ -472,6 +472,10 @@ class CalculatorViewModel: ObservableObject {
                 return formatScalar(u.value)
             }
             
+            if let compoundUnitString = UnitStore.commonCompoundUnits[u.dimensions] {
+                return "\(formatScalar(u.value)) \(compoundUnitString)"
+            }
+            
             if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
                 let convertedValue = u.value / bestUnit.conversionFactor
                 if bestUnit.dimensions.isEmpty && !["deg", "rad"].contains(bestUnit.symbol) {
@@ -486,6 +490,9 @@ class CalculatorViewModel: ObservableObject {
             return "\(valStr) \(unitStr)"
         case .complex(let c): return formatComplexForDisplay(c, with: settings)
         case .vector(let v):
+            if let compoundUnitString = UnitStore.commonCompoundUnits[v.dimensions] {
+                return formatVectorForDisplay(v, with: settings, unitString: compoundUnitString)
+            }
             if let bestUnit = findBestUnitFor(dimensions: v.dimensions) {
                 let convertedValues = v.values.map { $0 / bestUnit.conversionFactor }
                 let convertedVector = Vector(values: convertedValues, dimensions: v.dimensions)
@@ -495,6 +502,9 @@ class CalculatorViewModel: ObservableObject {
             let unitStr = formatDimensionsForHistory(v.dimensions)
             return formatVectorForDisplay(v, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
         case .matrix(let m):
+            if let compoundUnitString = UnitStore.commonCompoundUnits[m.dimensions] {
+                return formatMatrixForDisplay(m, with: settings, unitString: compoundUnitString)
+            }
             if let bestUnit = findBestUnitFor(dimensions: m.dimensions) {
                 let convertedValues = m.values.map { $0 / bestUnit.conversionFactor }
                 let convertedMatrix = Matrix(values: convertedValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
@@ -606,7 +616,9 @@ class CalculatorViewModel: ObservableObject {
             return unitStr.isEmpty ? content : "(\(content)) * \(unitStr)"
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForParsing(p)
-        case .regressionResult, .polynomialFit: return ""
+        case .regressionResult: return ""
+        case .polynomialFit(let polyCoeffs):
+            return formatPolynomialForParsing(polyCoeffs)
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
         case .constant(let s): return s
@@ -974,16 +986,18 @@ class CalculatorViewModel: ObservableObject {
 
             // Format coefficient and its unit
             let formattedCoeff = formatScalarForDisplay(absValue, with: settings)
-            let unitPart = UnitValue(value: 1.0, dimensions: coeffUnitValue.dimensions)
-            var formattedUnit = formatForHistory(.unitValue(unitPart), with: settings)
-                .replacingOccurrences(of: "1 ", with: "")
-                .trimmingCharacters(in: .whitespaces)
-            
-            // FIX: If the formatted unit is just "1", it means it's dimensionless. Treat it as empty.
-            if formattedUnit == "1" {
+            let dimensions = coeffUnitValue.dimensions
+            var formattedUnit: String
+            if dimensions.isEmpty {
                 formattedUnit = ""
+            } else if let compound = UnitStore.commonCompoundUnits[dimensions] {
+                formattedUnit = compound
+            } else if let bestUnit = findBestUnitFor(dimensions: dimensions) {
+                formattedUnit = bestUnit.symbol
+            } else {
+                formattedUnit = formatDimensionsForHistory(dimensions)
             }
-
+            
             // Add coefficient if it's not 1 (or if it's the constant term)
             let needsCoeff = abs(absValue - 1.0) > 1e-9 || i == 0
             if needsCoeff {
@@ -1006,6 +1020,40 @@ class CalculatorViewModel: ObservableObject {
             }
         }
         return equation
+    }
+    
+    private func formatPolynomialForParsing(_ polyCoeffs: PolynomialCoefficients) -> String {
+        var equationParts: [String] = []
+        let coefficients = polyCoeffs.coefficients
+
+        for (i, coeffUnitValue) in coefficients.enumerated() {
+            // Skip zero coefficients
+            if abs(coeffUnitValue.value) < 1e-9 {
+                continue
+            }
+
+            let coeffString = formatForParsing(.unitValue(coeffUnitValue))
+
+            let term: String
+            if i == 0 {
+                term = coeffString
+            } else {
+                // Add parentheses if the coefficient string contains operators, to maintain precedence
+                let coeffNeedsParen = coeffString.contains(where: { "+-*/^".contains($0) })
+                let finalCoeffString = coeffNeedsParen ? "(\(coeffString))" : coeffString
+
+                if i == 1 {
+                    term = "\(finalCoeffString)*x"
+                } else {
+                    term = "\(finalCoeffString)*x^\(i)"
+                }
+            }
+            equationParts.append(term)
+        }
+
+        // Join with " + " and then clean up for negative numbers.
+        // E.g., "(...)*x^2 + -5.0*.m*x" becomes "(...)*x^2 - 5.0*.m*x"
+        return equationParts.reversed().joined(separator: " + ").replacingOccurrences(of: "+ -", with: "- ")
     }
     
     private func formatScalarForParsing(_ value: Double) -> String {
@@ -1035,3 +1083,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+

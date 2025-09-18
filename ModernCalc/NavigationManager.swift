@@ -53,6 +53,8 @@ class NavigationManager: ObservableObject {
                 resultCount = 2 // m and b
             } else if case .roots(let values) = selectedItem.result {
                 resultCount = values.count
+            } else if case .polynomialFit = selectedItem.result {
+                resultCount = 1
             } else {
                 resultCount = 1
             }
@@ -101,6 +103,10 @@ class NavigationManager: ObservableObject {
                         // FIX: The `values` array now contains MathValue, not Double.
                         return viewModel.formatForParsing(values[index])
                     }
+                } else if case .polynomialFit = selectedItem.result {
+                    if index == 0 {
+                        return viewModel.formatForParsing(selectedItem.result)
+                    }
                 } else if index == 0 { // For single results
                     return viewModel.formatForParsing(selectedItem.result)
                 }
@@ -117,3 +123,4 @@ class NavigationManager: ObservableObject {
         selectedPart = .result(index: 0)
     }
 }
+

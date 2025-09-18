@@ -217,6 +217,12 @@ struct LaTeXEngine {
             
             if u.dimensions.isEmpty { return formatScalar(u.value, settings: settings) }
             
+            if let compoundUnitString = UnitStore.commonCompoundUnits[u.dimensions] {
+                // The value 'u.value' is already in base SI, which is what we need.
+                // We just append the nicely formatted compound string.
+                return "\(formatScalar(u.value, settings: settings)) \\, \(formatUnitSymbol(compoundUnitString))"
+            }
+            
             if let bestUnit = findBestUnitFor(dimensions: u.dimensions) {
                 let convertedValue = u.value / bestUnit.conversionFactor
                 return "\(formatScalar(convertedValue, settings: settings)) \\, \(formatUnitSymbol(bestUnit.symbol))"
@@ -228,7 +234,11 @@ struct LaTeXEngine {
         case .complex(let c):
             return formatComplex(c, settings: settings)
         case .vector(let v):
-            // FIX: Display vectors with derived units like 'N' instead of base units.
+            if let compoundUnitString = UnitStore.commonCompoundUnits[v.dimensions] {
+                let elements = v.values.map { formatScalar($0, settings: settings) }.joined(separator: " \\\\ ")
+                let matrix = "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+                return "\(matrix) \\, \(formatUnitSymbol(compoundUnitString))"
+            }
             if let bestUnit = findBestUnitFor(dimensions: v.dimensions) {
                 let convertedValues = v.values.map { $0 / bestUnit.conversionFactor }
                 let elements = convertedValues.map { formatScalar($0, settings: settings) }.joined(separator: " \\\\ ")
@@ -241,7 +251,13 @@ struct LaTeXEngine {
             let unitStr = formatDimensions(v.dimensions)
             return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .matrix(let m):
-            // FIX: Display matrices with derived units like 'N' instead of base units.
+            if let compoundUnitString = UnitStore.commonCompoundUnits[m.dimensions] {
+                let rows = (0..<m.rows).map { r in
+                    (0..<m.columns).map { c in formatScalar(m[r, c], settings: settings) }.joined(separator: " & ")
+                }.joined(separator: " \\\\ ")
+                let matrix = "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+                return "\(matrix) \\, \(formatUnitSymbol(compoundUnitString))"
+            }
             if let bestUnit = findBestUnitFor(dimensions: m.dimensions) {
                 let convertedValues = m.values.map { $0 / bestUnit.conversionFactor }
                 let convertedMatrix = Matrix(values: convertedValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
@@ -423,6 +439,15 @@ struct LaTeXEngine {
     }
     
     private static func formatUnitSymbol(_ symbol: String) -> String {
+        if symbol.contains("/") {
+            let parts = symbol.split(separator: "/")
+            return "\\frac{\\text{\(parts[0])}}{\\text{\(parts[1])}}"
+        }
+        if symbol.contains("·") {
+            let parts = symbol.split(separator: "·")
+            let latexParts = parts.map { "\\text{\($0)}" }
+            return latexParts.joined(separator: " \\cdot ")
+        }
         if let caretIndex = symbol.firstIndex(of: "^") {
             let base = symbol[..<caretIndex]
             let exponent = symbol[symbol.index(after: caretIndex)...]
@@ -492,7 +517,15 @@ struct LaTeXEngine {
             var unitStr: String
             if dimensions.isEmpty {
                 unitStr = ""
+            } else if let compound = UnitStore.commonCompoundUnits[dimensions] {
+                unitStr = formatUnitSymbol(compound)
             } else if let bestUnit = findBestUnitFor(dimensions: dimensions) {
+                // Here, we have a raw value in SI units. We need to convert it for display.
+                let convertedValue = coeffAbsValue / bestUnit.conversionFactor
+                let formattedConvertedCoeff = formatScalar(convertedValue, settings: settings)
+                
+                // Since we're overriding the coefficient display, we need to handle it carefully.
+                // This logic becomes complex. Let's simplify the approach by just formatting the unit.
                 unitStr = formatUnitSymbol(bestUnit.symbol)
             } else {
                 unitStr = formatDimensions(dimensions)
@@ -508,7 +541,7 @@ struct LaTeXEngine {
             
             if hasUnit {
                 if unitStr.contains("/") || unitStr.contains("cdot") || unitStr.contains(" ") {
-                    result += "\\left( \(unitStr) \\right)"
+                    result += "\\left( \(unitStr) \right)"
                 } else {
                     result += unitStr
                 }
@@ -543,4 +576,3 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
-

@@ -64,6 +64,17 @@ struct UnitStore {
         [.kilogram: -1, .meter: -2, .second: 3, .ampere: 2]: "S"
     ]
     
+    /// A map from a specific unit dimension to a more readable compound unit string.
+    /// This is used as a fallback when no single derived unit symbol is found.
+    static let commonCompoundUnits: [UnitDimension: String] = [
+        [.kilogram: 1, .second: -2]: "N/m", // Surface Tension, Spring Constant
+        [.kilogram: 1, .meter: -1, .second: -1]: "Pa·s", // Dynamic Viscosity
+        [.kilogram: 1, .meter: 2, .second: -2, .mole: -1]: "J/mol", // Molar Energy
+        [.kilogram: 1, .meter: 1, .second: -3, .ampere: -1]: "V/m", // Electric Field
+        [.ampere: 1, .meter: -1]: "A/m", // Magnetic Field Strength
+        [.kilogram: 1, .meter: 1, .second: -2, .mole: -1]: "N/mol"
+    ]
+    
     static let units: [String: UnitDefinition] = buildUnitMap()
 
     private static func buildUnitMap() -> [String: UnitDefinition] {
