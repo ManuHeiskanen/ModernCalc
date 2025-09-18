@@ -328,6 +328,16 @@ extension Evaluator {
             default: throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName)
             }
         },
+        "ctranspose": { arg in
+            switch arg {
+            case .complexMatrix(let cm):
+                return .complexMatrix(cm.conjugateTranspose())
+            case .complexVector(let cv):
+                return .complexMatrix(cv.conjugateTranspose())
+            default:
+                throw MathError.typeMismatch(expected: "ComplexMatrix or ComplexVector", found: arg.typeName)
+            }
+        },
         "trace": { arg in
             switch arg {
             case .matrix(let m): return .unitValue(try m.trace())

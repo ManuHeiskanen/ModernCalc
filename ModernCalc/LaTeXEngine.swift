@@ -148,6 +148,11 @@ struct LaTeXEngine {
         case let functionCallNode as FunctionCallNode:
             let args = functionCallNode.arguments.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: ", ")
             
+            if functionCallNode.name == "ctranspose" {
+                guard functionCallNode.arguments.count == 1 else { return "\\text{ctranspose()}" }
+                return "{\(args)}^T"
+            }
+            
             if let latexFunc = functionMap[functionCallNode.name] {
                 return "\(latexFunc){\(args)}"
             }

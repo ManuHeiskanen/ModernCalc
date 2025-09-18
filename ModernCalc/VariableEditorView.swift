@@ -132,7 +132,7 @@ struct VariableEditorView: View {
             "Trigonometry": ["acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cos", "cosh", "sin", "sinh", "tan", "tanh", "sec", "csc", "cot", "asec", "acsc", "acot"],
             "Uncertainty": ["uncert"],
             "Utility & Conversion": ["ceil", "floor", "lg", "ln", "log", "root", "round", "sqrt", "sign", "deg2rad", "rad2deg"],
-            "Vector & Matrix": ["cmatrix", "cross", "cvector", "det", "dot", "getcolumn", "getrow", "inv", "linsolve", "matrix", "trace", "transpose", "vector"]
+            "Vector & Matrix": ["cmatrix", "cross", "ctranspose", "cvector", "det", "dot", "getcolumn", "getrow", "inv", "linsolve", "matrix", "trace", "transpose", "vector"]
         ]
 
         var categories: [String: [BuiltinFunction]] = [:]
