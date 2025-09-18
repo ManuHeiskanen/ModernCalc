@@ -757,24 +757,21 @@ class CalculatorViewModel: ObservableObject {
             }.joined()
         }
 
-        let numerator = formatPart(positiveDims)
+        let numeratorPart = formatPart(positiveDims)
         let denominatorPart = formatPart(negativeDims)
-        let denominator = denominatorPart.replacingOccurrences(of: ".", with: "")
 
-
-        if denominator.isEmpty {
-            return numerator
+        if denominatorPart.isEmpty {
+            return numeratorPart
         } else {
-            let denContainsPower = denominator.contains("^")
-            let denMultipleUnits = denominator.count > 1 && !denContainsPower || denominator.count > 3 && denContainsPower // crude check
+            let numeratorString = numeratorPart.isEmpty ? "1" : numeratorPart
             
-            let finalDenominator = (denMultipleUnits || denContainsPower) ? "(\(denominator))" : denominator
-
-            if numerator.isEmpty {
-                return "1/\(finalDenominator)"
-            } else {
-                return "\(numerator)/\(finalDenominator)"
-            }
+            // Group with parentheses if there are multiple units to ensure correct precedence
+            let finalNumerator = positiveDims.count > 1 ? "(\(numeratorPart))" : numeratorString
+            
+            // Always parenthesize the denominator to ensure correct precedence with the division operator
+            let finalDenominator = "(\(denominatorPart))"
+            
+            return "\(finalNumerator)/\(finalDenominator)"
         }
     }
     
@@ -1051,9 +1048,9 @@ class CalculatorViewModel: ObservableObject {
             equationParts.append(term)
         }
 
-        // Join with " + " and then clean up for negative numbers.
-        // E.g., "(...)*x^2 + -5.0*.m*x" becomes "(...)*x^2 - 5.0*.m*x"
-        return equationParts.reversed().joined(separator: " + ").replacingOccurrences(of: "+ -", with: "- ")
+        let equation = equationParts.reversed().joined(separator: " + ").replacingOccurrences(of: "+ -", with: "- ")
+        // Wrap the entire expression in parentheses to ensure correct order of operations.
+        return "(\(equation))"
     }
     
     private func formatScalarForParsing(_ value: Double) -> String {
