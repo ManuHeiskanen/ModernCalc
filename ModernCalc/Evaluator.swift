@@ -172,17 +172,41 @@ struct Evaluator {
         case let functionNode as FunctionCallNode:
             return try evaluateFunctionCall(functionNode, variables: &variables, functions: &functions, angleMode: angleMode)
             
+        // --- MODIFIED: `uncert` function now supports units ---
         case let uncertNode as UncertaintyNode:
             let (value, _) = try _evaluateSingle(node: uncertNode.value, variables: &variables, functions: &functions, angleMode: angleMode)
-            let nominalValue = try value.asScalar()
             
+            let nominalValue: Double
+            let dimensions: UnitDimension
+            switch value {
+            case .dimensionless(let d):
+                nominalValue = d
+                dimensions = [:]
+            case .unitValue(let u):
+                nominalValue = u.value
+                dimensions = u.dimensions
+            default:
+                throw MathError.typeMismatch(expected: "Numeric value for uncert", found: value.typeName)
+            }
+
             var u_rand: Double = 0
             var u_sys_res: Double = 0
             var u_sys_acc: Double = 0
             
             for (name, expr) in uncertNode.namedArgs {
                 let (argVal, _) = try _evaluateSingle(node: expr, variables: &variables, functions: &functions, angleMode: angleMode)
-                let scalarArg = try argVal.asScalar()
+                
+                let scalarArg: Double
+                switch argVal {
+                case .dimensionless(let d):
+                    if !dimensions.isEmpty { throw MathError.dimensionMismatch(reason: "Uncertainty component must have same units as the value.") }
+                    scalarArg = d
+                case .unitValue(let u):
+                    if u.dimensions != dimensions { throw MathError.dimensionMismatch(reason: "Uncertainty component must have same units as the value.") }
+                    scalarArg = u.value
+                default:
+                    throw MathError.typeMismatch(expected: "Numeric value for uncertainty component", found: argVal.typeName)
+                }
                 
                 switch name {
                 case "random", "r":
@@ -198,7 +222,7 @@ struct Evaluator {
             
             let combinedSystematic = sqrt(pow(u_sys_res, 2) + pow(u_sys_acc, 2))
             
-            let uncertainValue = UncertainValue(value: nominalValue, randomUncertainty: u_rand, systematicUncertainty: combinedSystematic)
+            let uncertainValue = UncertainValue(value: nominalValue, randomUncertainty: u_rand, systematicUncertainty: combinedSystematic, dimensions: dimensions)
             return (.uncertain(uncertainValue), false)
 
         case let vectorNode as VectorNode:

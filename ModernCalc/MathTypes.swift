@@ -67,10 +67,12 @@ struct UnitValue: Equatable, Codable {
 
 // ADVANCED MODEL: A struct to represent a value with its associated uncertainties,
 // separating random (statistical) and systematic components.
+// --- MODIFIED: UncertainValue is now unit-aware. ---
 struct UncertainValue: Equatable, Codable {
     var value: Double
     var randomUncertainty: Double // Statistical, Type A
     var systematicUncertainty: Double // Systematic, Type B
+    var dimensions: UnitDimension // Added
 
     // A computed property for the total combined uncertainty.
     // Random and systematic uncertainties are combined in quadrature.
@@ -83,23 +85,30 @@ struct UncertainValue: Equatable, Codable {
     // For addition and subtraction:
     // - Random uncertainties are combined in quadrature.
     // - Systematic uncertainties are added linearly (worst-case scenario).
-    static func + (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
+    static func + (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
+        guard lhs.dimensions == rhs.dimensions else {
+            throw MathError.dimensionMismatch(reason: "Cannot add uncertain values with different units.")
+        }
         let newValue = lhs.value + rhs.value
         let newRandom = Foundation.sqrt(Foundation.pow(lhs.randomUncertainty, 2) + Foundation.pow(rhs.randomUncertainty, 2))
         let newSystematic = lhs.systematicUncertainty + rhs.systematicUncertainty
-        return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
+        return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: lhs.dimensions)
     }
 
-    static func - (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
+    static func - (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
+        guard lhs.dimensions == rhs.dimensions else {
+            throw MathError.dimensionMismatch(reason: "Cannot subtract uncertain values with different units.")
+        }
         let newValue = lhs.value - rhs.value
         let newRandom = Foundation.sqrt(Foundation.pow(lhs.randomUncertainty, 2) + Foundation.pow(rhs.randomUncertainty, 2))
         let newSystematic = lhs.systematicUncertainty + rhs.systematicUncertainty
-        return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
+        return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: lhs.dimensions)
     }
     
     // For multiplication and division, we combine the *relative* uncertainties.
     static func * (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
         let newValue = lhs.value * rhs.value
+        let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
         
         // Handle cases where a value is zero to avoid division by zero
         if lhs.value == 0 || rhs.value == 0 {
@@ -111,7 +120,7 @@ struct UncertainValue: Equatable, Codable {
             let unc_B_due_to_rhs = abs(lhs.value * rhs.systematicUncertainty)
             let newSystematic = unc_B_due_to_lhs + unc_B_due_to_rhs
 
-            return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
+            return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: newDimensions)
         }
 
         let relRandomL = lhs.randomUncertainty / lhs.value
@@ -125,18 +134,21 @@ struct UncertainValue: Equatable, Codable {
         return UncertainValue(
             value: newValue,
             randomUncertainty: abs(newValue * combinedRelRandom),
-            systematicUncertainty: abs(newValue * combinedRelSystematic)
+            systematicUncertainty: abs(newValue * combinedRelSystematic),
+            dimensions: newDimensions
         )
     }
 
     static func / (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
         guard rhs.value != 0 else { throw MathError.divisionByZero }
         let newValue = lhs.value / rhs.value
-        
+        let negatedRhsDimensions = rhs.dimensions.mapValues { -$0 }
+        let newDimensions = lhs.dimensions.merging(negatedRhsDimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+
         if lhs.value == 0 {
             let newRandom = abs(newValue / rhs.value) * rhs.randomUncertainty
             let newSystematic = abs(newValue / rhs.value) * rhs.systematicUncertainty
-            return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic)
+            return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: newDimensions)
         }
 
         let relRandomL = lhs.randomUncertainty / lhs.value
@@ -150,7 +162,8 @@ struct UncertainValue: Equatable, Codable {
         return UncertainValue(
             value: newValue,
             randomUncertainty: abs(newValue * combinedRelRandom),
-            systematicUncertainty: abs(newValue * combinedRelSystematic)
+            systematicUncertainty: abs(newValue * combinedRelSystematic),
+            dimensions: newDimensions
         )
     }
     
@@ -158,6 +171,7 @@ struct UncertainValue: Equatable, Codable {
     func pow(_ exponent: Double) -> UncertainValue {
         guard self.value != 0 else { return self }
         let newValue = Foundation.pow(self.value, exponent)
+        let newDimensions = self.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
         let relativeUncertainty = self.totalUncertainty / self.value
         let newTotalUncertainty = abs(newValue * exponent * relativeUncertainty)
         
@@ -168,13 +182,14 @@ struct UncertainValue: Equatable, Codable {
         return UncertainValue(
             value: newValue,
             randomUncertainty: newTotalUncertainty * randomRatio,
-            systematicUncertainty: newTotalUncertainty * (1 - randomRatio)
+            systematicUncertainty: newTotalUncertainty * (1 - randomRatio),
+            dimensions: newDimensions
         )
     }
     
     // Unary minus flips the value but leaves uncertainties as positive values.
     static prefix func - (operand: UncertainValue) -> UncertainValue {
-        return UncertainValue(value: -operand.value, randomUncertainty: operand.randomUncertainty, systematicUncertainty: operand.systematicUncertainty)
+        return UncertainValue(value: -operand.value, randomUncertainty: operand.randomUncertainty, systematicUncertainty: operand.systematicUncertainty, dimensions: operand.dimensions)
     }
     
     // General function propagation: u_f = |f'(x)| * u_x
@@ -183,7 +198,8 @@ struct UncertainValue: Equatable, Codable {
         return UncertainValue(
             value: self.value,
             randomUncertainty: abs(derivative * self.randomUncertainty),
-            systematicUncertainty: abs(derivative * self.systematicUncertainty)
+            systematicUncertainty: abs(derivative * self.systematicUncertainty),
+            dimensions: self.dimensions
         )
     }
 }
@@ -854,6 +870,10 @@ enum MathValue: Codable, Equatable {
             }
             return u.value
         case .uncertain(let u):
+            // --- MODIFIED: Check for dimensions in UncertainValue ---
+            guard u.dimensions.isEmpty else {
+                throw MathError.typeMismatch(expected: "Dimensionless uncertain value", found: "Uncertain value with units")
+            }
             return u.value
         case .vector(let v):
             guard v.dimensions.isEmpty else {
@@ -967,5 +987,3 @@ extension Array {
         }
     }
 }
-
-

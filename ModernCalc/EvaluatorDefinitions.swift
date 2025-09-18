@@ -106,7 +106,7 @@ extension Evaluator {
                 switch value {
                 case .dimensionless: return ("numeric", [:])
                 case .unitValue(let u): return ("numeric", u.dimensions)
-                case .uncertain: return ("numeric", [:])
+                case .uncertain(let u): return ("numeric", u.dimensions) // MODIFIED
                 case .vector(let v): return ("Vector", v.dimensions)
                 case .matrix(let m): return ("Matrix", m.dimensions)
                 case .complexVector(let cv): return ("ComplexVector", cv.dimensions)
@@ -250,7 +250,7 @@ extension Evaluator {
             case .unitValue(let u): return .unitValue(UnitValue(value: abs(u.value), dimensions: u.dimensions))
             case .complex(let c): return .dimensionless(c.abs())
             case .vector(let v): return .unitValue(v.magnitude())
-            case .uncertain(let u): return .dimensionless(abs(u.value))
+            case .uncertain(let u): return .uncertain(UncertainValue(value: abs(u.value), randomUncertainty: u.randomUncertainty, systematicUncertainty: u.systematicUncertainty, dimensions: u.dimensions))
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, or UncertainValue", found: arg.typeName)
             }
         },
@@ -358,51 +358,57 @@ extension Evaluator {
         "sin": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
+                // --- MODIFIED: Ensure uncertainty for trig functions is dimensionless ---
+                guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for sin", found: "Uncertain value with units") }
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
                 let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
                 
-                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0)
+                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0, dimensions: [:]) // FIX
                 let propagated_u = u_rad_total.propagate(derivative: cos(valRad))
 
                 let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
                 
                 return .uncertain(UncertainValue(value: sin(valRad),
                                                  randomUncertainty: propagated_u.randomUncertainty * randomRatio,
-                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
+                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio), dimensions: [:])) // FIX
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(sin(valRad))
         },
         "cos": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
+                 // --- MODIFIED: Ensure uncertainty for trig functions is dimensionless ---
+                guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for cos", found: "Uncertain value with units") }
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
                 let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
                 
-                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0)
+                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0, dimensions: [:]) // FIX
                 let propagated_u = u_rad_total.propagate(derivative: -sin(valRad))
                 
                 let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
 
                 return .uncertain(UncertainValue(value: cos(valRad),
                                                  randomUncertainty: propagated_u.randomUncertainty * randomRatio,
-                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
+                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio), dimensions: [:])) // FIX
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(cos(valRad))
         },
         "tan": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
+                 // --- MODIFIED: Ensure uncertainty for trig functions is dimensionless ---
+                guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for tan", found: "Uncertain value with units") }
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
                 let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
                 
-                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0)
+                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0, dimensions: [:]) // FIX
                 let propagated_u = u_rad_total.propagate(derivative: 1.0 / pow(cos(valRad), 2))
                 
                 let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
                 
                 return .uncertain(UncertainValue(value: tan(valRad),
                                                  randomUncertainty: propagated_u.randomUncertainty * randomRatio,
-                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio)))
+                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio), dimensions: [:])) // FIX
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(tan(valRad))
         },
@@ -482,7 +488,8 @@ extension Evaluator {
             guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for correlation.") }
             let n = Double(xVec.dimension)
-            let sumX = xVec.sum().value; let sumY = yVec.sum().value
+            let sumX = xVec.sum().value
+            let sumY = yVec.sum().value
             let sumXY = try xVec.hadamard(with: yVec).sum().value
             let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
             let sumY2 = yVec.values.map { $0 * $0 }.reduce(0, +)
@@ -644,7 +651,7 @@ extension Evaluator {
             return try performElementWiseIntegerOp(a, b, opName: "lcm", operation: lcmOp)
         }
     ]
-
+    
     // MARK: - Function & Operator Evaluation
     
     func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
@@ -718,6 +725,8 @@ extension Evaluator {
             let (arg, argUsedAngle) = try _evaluateSingle(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
             
             if case .uncertain(let u) = arg {
+                // --- MODIFIED: Ensure uncertainty for scalar functions is dimensionless ---
+                guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for \(node.name)", found: "Uncertain value with units") }
                 let val = u.value
                 let resultVal = scalarFunc(val)
                 var derivative: Double
@@ -728,7 +737,7 @@ extension Evaluator {
                 default: derivative = 0
                 }
                 let propagated = u.propagate(derivative: derivative)
-                return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty)), argUsedAngle)
+                return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])), argUsedAngle) // FIX
             }
             
             // FIX: Use asScalar() to correctly handle dimensionless UnitValues

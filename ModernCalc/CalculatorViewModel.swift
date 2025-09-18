@@ -517,15 +517,28 @@ class CalculatorViewModel: ObservableObject {
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         case .triggerCSVImport: return "Importing CSV..."
         case .constant(let s): return s
+        // --- MODIFIED: Handle unit display for UncertainValue ---
         case .uncertain(let u):
             let val = formatScalar(u.value)
             let unc = formatScalar(u.totalUncertainty)
-            let rand = formatScalar(u.randomUncertainty)
-            let sys = formatScalar(u.systematicUncertainty)
+            let baseString: String
             if u.randomUncertainty > 0 && u.systematicUncertainty > 0 {
-                return "\(val) ± \(unc) (R: \(rand), S: \(sys))"
+                let rand = formatScalar(u.randomUncertainty)
+                let sys = formatScalar(u.systematicUncertainty)
+                baseString = "\(val) ± \(unc) (R: \(rand), S: \(sys))"
+            } else {
+                baseString = "\(val) ± \(unc)"
             }
-            return "\(val) ± \(unc)"
+            
+            if u.dimensions.isEmpty {
+                return baseString
+            }
+            
+            let unitValueForFormatting = UnitValue(value: 1.0, dimensions: u.dimensions)
+            let unitStr = formatForHistory(.unitValue(unitValueForFormatting), with: settings).trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "1 ", with: "")
+
+            return "(\(baseString)) \(unitStr)"
+
         case .roots(let roots):
              if roots.isEmpty { return "No real roots found" }
             
@@ -594,16 +607,34 @@ class CalculatorViewModel: ObservableObject {
         case .plot(let plotData): return "autoplot(\(plotData.expression))"
         case .triggerCSVImport: return "importcsv()"
         case .constant(let s): return s
+        // --- MODIFIED: Handle unit display for UncertainValue ---
         case .uncertain(let u):
-            var parts = [formatScalarForParsing(u.value)]
-            if u.randomUncertainty > 0 {
-                parts.append("random:\(formatScalarForParsing(u.randomUncertainty))")
+            let unitStr = formatDimensionsForParsing(u.dimensions)
+            let valueStr = formatScalarForParsing(u.value)
+            var parts = [String]()
+
+            if u.dimensions.isEmpty {
+                parts.append(valueStr)
+                if u.randomUncertainty > 0 {
+                    parts.append("random:\(formatScalarForParsing(u.randomUncertainty))")
+                }
+                if u.systematicUncertainty > 0 {
+                    let accuracyEquiv = u.systematicUncertainty * sqrt(3.0)
+                    parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))")
+                }
+                return "uncert(\(parts.joined(separator: ", ")))"
+            } else {
+                parts.append("\(valueStr)\(unitStr)")
+                if u.randomUncertainty > 0 {
+                    parts.append("random:\(formatScalarForParsing(u.randomUncertainty))\(unitStr)")
+                }
+                if u.systematicUncertainty > 0 {
+                    let accuracyEquiv = u.systematicUncertainty * sqrt(3.0)
+                    parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))\(unitStr)")
+                }
+                 return "uncert(\(parts.joined(separator: ", ")))"
             }
-            if u.systematicUncertainty > 0 {
-                let accuracyEquiv = u.systematicUncertainty * sqrt(3.0)
-                parts.append("accuracy:\(formatScalarForParsing(accuracyEquiv))")
-            }
-            return "uncert(\(parts.joined(separator: ", ")))"
+
         case .roots(let roots):
             if roots.isEmpty { return "" }
             return "vector(\(roots.map { formatForParsing($0) }.joined(separator: ";")))"

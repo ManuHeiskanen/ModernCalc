@@ -75,10 +75,12 @@ extension Evaluator {
         case (.dimensionless(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, .dimensionless(l), r))
         case (.dimensionless(let l), .dimensionless(let r)): return .dimensionless(try performDimensionlessOp(op.rawValue, l, r))
 
-        // --- Uncertainty propagation rules ---
+        // --- MODIFIED: Uncertainty propagation rules now handle units ---
         case (.uncertain(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, r))
-        case (.uncertain(let l), .dimensionless(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r, randomUncertainty: 0, systematicUncertainty: 0)))
-        case (.dimensionless(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l, randomUncertainty: 0, systematicUncertainty: 0), r))
+        case (.uncertain(let l), .dimensionless(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r, randomUncertainty: 0, systematicUncertainty: 0, dimensions: [:])))
+        case (.dimensionless(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l, randomUncertainty: 0, systematicUncertainty: 0, dimensions: [:]), r))
+        case (.uncertain(let l), .unitValue(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r.value, randomUncertainty: 0, systematicUncertainty: 0, dimensions: r.dimensions)))
+        case (.unitValue(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l.value, randomUncertainty: 0, systematicUncertainty: 0, dimensions: l.dimensions), r))
             
         // --- Complex Number Operations ---
         case (.complex(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, r))
@@ -194,9 +196,11 @@ extension Evaluator {
 
     private func performUncertainUncertainOp(_ op: String, _ l: UncertainValue, _ r: UncertainValue) throws -> UncertainValue {
         switch op {
-        case "+": return l + r; case "-": return l - r; case "*": return l * r
+        case "+": return try l + r; case "-": return try l - r; case "*": return l * r
         case "/": return try l / r
-        case "^": return l.pow(r.value)
+        case "^":
+            guard r.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless exponent", found: "Uncertain value with units") }
+            return l.pow(r.value)
         default: throw MathError.unknownOperator(op: op)
         }
     }

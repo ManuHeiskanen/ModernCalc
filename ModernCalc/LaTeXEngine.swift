@@ -286,8 +286,17 @@ struct LaTeXEngine {
             return formatPolyFit(coeffs, settings: settings)
         case .plot(let data):
             return "\\text{Plot: \(data.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
+        // --- MODIFIED: Handle unit display for UncertainValue ---
         case .uncertain(let u):
-            return "\(formatScalar(u.value, settings: settings)) \\pm \(formatScalar(u.totalUncertainty, settings: settings))"
+            let baseString = "\(formatScalar(u.value, settings: settings)) \\pm \(formatScalar(u.totalUncertainty, settings: settings))"
+            if u.dimensions.isEmpty {
+                return baseString
+            }
+            
+            let unitValueForFormatting = UnitValue(value: 1.0, dimensions: u.dimensions)
+            let unitStr = formatMathValue(.unitValue(unitValueForFormatting), angleMode: angleMode, settings: settings).trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "1 ", with: "")
+            
+            return "\\left( \(baseString) \\right) \\, \(unitStr)"
         case .roots(let roots):
             if roots.isEmpty {
                 return "\\text{No real roots found}"
