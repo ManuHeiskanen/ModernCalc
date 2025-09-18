@@ -9,6 +9,26 @@ import Foundation
 import Combine
 import SwiftUI
 
+/// A structure to hold information about a single autocomplete suggestion.
+struct AutocompleteSuggestion: Identifiable, Hashable {
+    let id = UUID()
+    var name: String
+    var type: String
+    var description: String
+    
+    /// Provides the text that should be inserted into the expression field.
+    /// For functions, it automatically adds an opening parenthesis.
+    var insertionText: String {
+        if type == "function" {
+            if description.contains("(") {
+                return name + "("
+            }
+        }
+        return name
+    }
+}
+
+
 @MainActor
 class CalculatorViewModel: ObservableObject {
 
@@ -21,6 +41,10 @@ class CalculatorViewModel: ObservableObject {
     @Published var variables: [String: MathValue] = [:]
     @Published var functions: [String: FunctionDefinitionNode] = [:]
     @Published var livePreviewHeight: CGFloat = 60.0
+    
+    // --- ADDED: State for autocomplete ---
+    @Published var autocompleteSuggestions: [AutocompleteSuggestion] = []
+    @Published var showAutocomplete = false
     
     @Published var angleMode: AngleMode = .degrees {
         didSet { saveState() }
@@ -70,14 +94,19 @@ class CalculatorViewModel: ObservableObject {
             .sink { [weak self] (expression, position, angle) in
                 guard let self = self else { return }
 
+                // --- ADDED: Update autocomplete suggestions based on input ---
+                self.updateAutocompleteSuggestions(for: expression, at: position)
+
                 guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
-                    self.lastSuccessfulValue = nil
-                    self.liveHelpText = ""
-                    self.liveErrorText = ""
-                    self.liveLaTeXPreview = ""
-                    self.lastCalculatedExpression = nil
-                    self.lastCalculatedAngleMode = nil
-                    self.livePreviewHeight = 60.0
+                    Task {
+                        self.lastSuccessfulValue = nil
+                        self.liveHelpText = ""
+                        self.liveErrorText = ""
+                        self.liveLaTeXPreview = ""
+                        self.lastCalculatedExpression = nil
+                        self.lastCalculatedAngleMode = nil
+                        self.livePreviewHeight = 60.0
+                    }
                     return
                 }
                 
@@ -97,6 +126,106 @@ class CalculatorViewModel: ObservableObject {
         loadState()
     }
     
+    // --- ADDED: Method to handle selecting a suggestion ---
+    /// Replaces the currently typed word with the selected suggestion.
+    func selectAutocomplete(suggestion: AutocompleteSuggestion) {
+        Task {
+            let nsExpression = rawExpression as NSString
+            let textBeforeCursor = nsExpression.substring(to: cursorPosition.location)
+            
+            // Find the start of the word to be replaced
+            let separators = CharacterSet(charactersIn: " +-*/^()=,;[]{}").union(.whitespacesAndNewlines)
+            let rangeOfLastSeparator = textBeforeCursor.rangeOfCharacter(from: separators, options: .backwards)
+            
+            let locationOfWordStart: Int
+            if let range = rangeOfLastSeparator {
+                // The location in the full string is the distance from the start to the separator's end
+                locationOfWordStart = textBeforeCursor.distance(from: textBeforeCursor.startIndex, to: range.upperBound)
+            } else {
+                // No separator found, the word starts at the beginning of the string
+                locationOfWordStart = 0
+            }
+            
+            let lengthOfWord = cursorPosition.location - locationOfWordStart
+            let replacementNSRange = NSRange(location: locationOfWordStart, length: lengthOfWord)
+
+            guard let replacementRange = Range(replacementNSRange, in: rawExpression) else { return }
+            
+            var newExpression = rawExpression
+            newExpression.replaceSubrange(replacementRange, with: suggestion.insertionText)
+            self.rawExpression = newExpression
+
+            // Update cursor position
+            let newLocation = locationOfWordStart + suggestion.insertionText.utf16.count
+            self.cursorPosition = NSRange(location: newLocation, length: 0)
+
+            // Hide autocomplete
+            self.showAutocomplete = false
+            self.autocompleteSuggestions = []
+        }
+    }
+
+    
+    // --- ADDED: Logic to generate autocomplete suggestions ---
+    /// Finds the word currently being typed and searches for matching variables and functions.
+    private func updateAutocompleteSuggestions(for expression: String, at position: NSRange) {
+        Task {
+            let textBeforeCursor = (expression as NSString).substring(to: position.location)
+            let separators = CharacterSet(charactersIn: " +-*/^()=,;[]{}").union(.whitespacesAndNewlines)
+            
+            let word: String
+            if let lastSeparatorRange = textBeforeCursor.rangeOfCharacter(from: separators, options: .backwards) {
+                let wordStartIndex = lastSeparatorRange.upperBound
+                word = String(textBeforeCursor[wordStartIndex...])
+            } else {
+                word = textBeforeCursor
+            }
+
+            guard !word.isEmpty else {
+                self.autocompleteSuggestions = []
+                self.showAutocomplete = false
+                return
+            }
+
+            var suggestions: [AutocompleteSuggestion] = []
+            let lowercasedWord = word.lowercased()
+
+            // Search built-in functions
+            suggestions.append(contentsOf: builtinFunctions
+                .filter { $0.name.lowercased().starts(with: lowercasedWord) }
+                .map { AutocompleteSuggestion(name: $0.name, type: "function", description: $0.signature) }
+            )
+
+            // Search user-defined functions
+            suggestions.append(contentsOf: functions.keys
+                .filter { $0.lowercased().starts(with: lowercasedWord) }
+                .map { name in
+                    let node = functions[name]!
+                    let signature = "\(name)(\(node.parameterNames.joined(separator: ", ")))"
+                    return AutocompleteSuggestion(name: name, type: "function", description: signature)
+                }
+            )
+
+            // Search user variables
+            suggestions.append(contentsOf: variables.keys
+                .filter { $0.lowercased().starts(with: lowercasedWord) && $0 != ansVariable }
+                .map { AutocompleteSuggestion(name: $0, type: "variable", description: formatForHistory(variables[$0]!)) }
+            )
+
+            // Search physical constants
+            suggestions.append(contentsOf: physicalConstants
+                .filter { $0.symbol.lowercased().starts(with: lowercasedWord) }
+                .map { AutocompleteSuggestion(name: $0.symbol, type: "constant", description: $0.name) }
+            )
+            
+            // Remove duplicates and sort
+            let uniqueSuggestions = Array(Set(suggestions))
+            self.autocompleteSuggestions = uniqueSuggestions.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            
+            self.showAutocomplete = !self.autocompleteSuggestions.isEmpty
+        }
+    }
+    
     func triggerCSVImport() {
         _ = openCSVFile()
     }
@@ -112,11 +241,15 @@ class CalculatorViewModel: ObservableObject {
 
     func requestOpenPlotWindow(for plotData: PlotData) {
         addPlotViewModel(for: plotData)
-        plotToShow = plotData.id
+        Task {
+            plotToShow = plotData.id
+        }
     }
 
     func closePlotWindow(id: PlotData.ID?) {
-        plotViewModels.removeAll { $0.plotData.id == id }
+        Task {
+            plotViewModels.removeAll { $0.plotData.id == id }
+        }
     }
 
     private func getContextualHelp(expression: String, cursor: NSRange) -> String? {
@@ -377,8 +510,19 @@ class CalculatorViewModel: ObservableObject {
     var sortedVariables: [(String, MathValue)] { variables.sorted { $0.key < $1.key } }
     var sortedFunctions: [(String, FunctionDefinitionNode)] { functions.sorted { $0.key < $1.key } }
     
-    func deleteVariable(name: String) { variables.removeValue(forKey: name); saveState() }
-    func deleteFunction(name: String) { functions.removeValue(forKey: name); userFunctionDefinitions.removeValue(forKey: name); saveState() }
+    func deleteVariable(name: String) {
+        Task {
+            variables.removeValue(forKey: name)
+            saveState()
+        }
+    }
+    func deleteFunction(name: String) {
+        Task {
+            functions.removeValue(forKey: name)
+            userFunctionDefinitions.removeValue(forKey: name)
+            saveState()
+        }
+    }
     
     func insertTextAtCursor(_ textToInsert: String) {
         guard let range = Range(cursorPosition, in: rawExpression) else {
@@ -1080,4 +1224,5 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
 

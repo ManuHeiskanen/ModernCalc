@@ -557,7 +557,7 @@ struct FormattedExpressionWithButtonsView: View {
 
 
 struct CalculatorInputView: View {
-    var viewModel: CalculatorViewModel
+    @ObservedObject var viewModel: CalculatorViewModel
     @Binding var expression: String
     @Binding var cursorPosition: NSRange
     var previewText: String
@@ -586,11 +586,81 @@ struct CalculatorInputView: View {
                     .padding(.horizontal)
                     .onTapGesture { onTap() }
             }
+            // --- ADDED: Popover for autocomplete suggestions ---
+            .popover(isPresented: $viewModel.showAutocomplete, arrowEdge: .bottom) {
+                AutocompleteView(viewModel: viewModel)
+            }
             Spacer()
         }
         .frame(height: 70)
     }
 }
+
+// --- ADDED: A new view to display the list of autocomplete suggestions ---
+struct AutocompleteView: View {
+    @ObservedObject var viewModel: CalculatorViewModel
+    @State private var selectedSuggestionId: UUID?
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(viewModel.autocompleteSuggestions) { suggestion in
+                    Button(action: {
+                        viewModel.selectAutocomplete(suggestion: suggestion)
+                    }) {
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(suggestion.name)
+                                    .font(.system(.body, design: .monospaced))
+                                    .fontWeight(.bold)
+                                Text(suggestion.description)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer()
+                            Text(suggestion.type)
+                                .font(.system(.caption, design: .monospaced).bold())
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(colorForType(suggestion.type).opacity(0.8))
+                                .cornerRadius(4)
+                        }
+                        .padding(8)
+                        .background(selectedSuggestionId == suggestion.id ? Color.accentColor.opacity(0.2) : Color.clear)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .cornerRadius(6)
+                    .onHover { isHovering in
+                        if isHovering {
+                            selectedSuggestionId = suggestion.id
+                        } else if selectedSuggestionId == suggestion.id {
+                            selectedSuggestionId = nil
+                        }
+                    }
+                    
+                    if suggestion.id != viewModel.autocompleteSuggestions.last?.id {
+                        Divider().padding(.horizontal, 8)
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .frame(width: 380, height: 280)
+    }
+
+    private func colorForType(_ type: String) -> Color {
+        switch type {
+        case "function": return .blue
+        case "variable": return .green
+        case "constant": return .purple
+        default: return .gray
+        }
+    }
+}
+
 
 struct SymbolsGridView: View {
     var viewModel: CalculatorViewModel
