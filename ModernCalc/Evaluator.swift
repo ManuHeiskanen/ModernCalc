@@ -303,6 +303,7 @@ struct Evaluator {
             let result = try evaluateBinaryOperation(op: binaryNode.op, left: leftValue, right: rightValue)
             return (result, leftUsedAngle || rightUsedAngle)
 
+        // --- MODIFIED: Handle units in derivative calculation ---
         case let derivativeNode as DerivativeNode:
             let (bodyNode, varName): (ExpressionNode, String)
             let pointNode = derivativeNode.point
@@ -312,13 +313,9 @@ struct Evaluator {
                 varName = variableNode.name
             } else {
                 let funcName: String
-                if let funcNameNode = derivativeNode.body as? ConstantNode {
-                    funcName = funcNameNode.name
-                } else if let funcCallNode = derivativeNode.body as? FunctionCallNode {
-                    funcName = funcCallNode.name
-                } else {
-                    throw MathError.incorrectArgumentCount(function: "derivative", expected: "3 arguments (expression, variable, point) for this type of expression", found: 2)
-                }
+                if let funcNameNode = derivativeNode.body as? ConstantNode { funcName = funcNameNode.name }
+                else if let funcCallNode = derivativeNode.body as? FunctionCallNode { funcName = funcCallNode.name }
+                else { throw MathError.incorrectArgumentCount(function: "derivative", expected: "3 arguments (expression, variable, point) for this type of expression", found: 2) }
                 
                 guard let userFunction = functions[funcName] else { throw MathError.unknownFunction(name: funcName) }
                 guard userFunction.parameterNames.count == 1 else { throw MathError.unsupportedOperation(op: "derivative", typeA: "function with \(userFunction.parameterNames.count) variables in 2-argument form", typeB: nil) }
@@ -328,44 +325,56 @@ struct Evaluator {
 
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: pointNode, variables: &variables, functions: &functions, angleMode: angleMode)
             let (orderValue, _) = try _evaluateSingle(node: derivativeNode.order, variables: &variables, functions: &functions, angleMode: angleMode)
+            
+            guard let pointUnitValue = pointValue.asUnitValue() else {
+                 throw MathError.typeMismatch(expected: "A scalar value for the derivative point", found: pointValue.typeName)
+            }
 
-            let point = try pointValue.asScalar()
             guard case .dimensionless(let orderScalar) = orderValue, orderScalar >= 1, orderScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Positive integer for derivative order", found: orderValue.typeName) }
             let order = Int(orderScalar)
 
             var tempVarsForDryRun = variables
-            tempVarsForDryRun[varName] = .dimensionless(0)
+            tempVarsForDryRun[varName] = .unitValue(pointUnitValue)
             let (_, bodyUsedAngle) = try _evaluateSingle(node: bodyNode, variables: &tempVarsForDryRun, functions: &functions, angleMode: angleMode)
             
-            let result = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: point, order: order, variables: &variables, functions: &functions, angleMode: angleMode)
-            return (.dimensionless(result), pointUsedAngle || bodyUsedAngle)
+            let result = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: pointUnitValue, order: order, variables: &variables, functions: &functions, angleMode: angleMode)
+            return (.unitValue(result), pointUsedAngle || bodyUsedAngle)
 
+        // --- MODIFIED: Handle units in integral calculation ---
         case let integralNode as IntegralNode:
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
             let (upperValue, upperUsedAngle) = try _evaluateSingle(node: integralNode.upperBound, variables: &variables, functions: &functions, angleMode: angleMode)
 
-            let a = try lowerValue.asScalar()
-            let b = try upperValue.asScalar()
+            guard let a = lowerValue.asUnitValue(), let b = upperValue.asUnitValue() else {
+                throw MathError.typeMismatch(expected: "Scalar values for integral bounds", found: "\(lowerValue.typeName) or \(upperValue.typeName)")
+            }
+            guard a.dimensions == b.dimensions else {
+                throw MathError.dimensionMismatch(reason: "Integral bounds must have the same units.")
+            }
 
             var bodyUsedAngle = false
-            let f: (Double) throws -> Double = { x in
+            let f: (UnitValue) throws -> UnitValue = { x_unit in
                 let (value, f_usedAngle) = try self.evaluateWithTempVar(
                     node: integralNode.body,
                     varName: integralNode.variable.name,
-                    varValue: .dimensionless(x),
+                    varValue: .unitValue(x_unit),
                     variables: &variables,
                     functions: &functions,
                     angleMode: angleMode
                 )
                 bodyUsedAngle = bodyUsedAngle || f_usedAngle
-                return try value.asScalar()
+                guard let resultUnit = value.asUnitValue() else {
+                    throw MathError.typeMismatch(expected: "A value with units from integral body", found: value.typeName)
+                }
+                return resultUnit
             }
                 
             let tolerance = 1e-7
             let result = try adaptiveSimpson(f: f, a: a, b: b, tolerance: tolerance)
                     
-            return (.dimensionless(result), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
+            return (.unitValue(result), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
 
+        // --- MODIFIED: Handle units in prime notation derivative ---
         case let primeNode as PrimeDerivativeNode:
             guard let userFunction = functions[primeNode.functionName] else {
                 throw MathError.unknownFunction(name: primeNode.functionName)
@@ -376,20 +385,29 @@ struct Evaluator {
             let varName = userFunction.parameterNames[0]
 
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: primeNode.argument, variables: &variables, functions: &functions, angleMode: angleMode)
-            let point = try pointValue.asScalar()
+            
+            guard let pointUnitValue = pointValue.asUnitValue() else {
+                throw MathError.typeMismatch(expected: "A scalar value for the derivative point", found: pointValue.typeName)
+            }
 
             var tempVars = variables
-            tempVars[varName] = .dimensionless(point)
+            tempVars[varName] = .unitValue(pointUnitValue)
             let (_, bodyUsedAngle) = try _evaluateSingle(node: userFunction.body, variables: &tempVars, functions: &functions, angleMode: angleMode)
-
-            let (valPlus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: .dimensionless(point + h), variables: &variables, functions: &functions, angleMode: angleMode)
-            let (valMinus, _) = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: .dimensionless(point - h), variables: &variables, functions: &functions, angleMode: angleMode)
             
-            let scalarPlus = try valPlus.asScalar()
-            let scalarMinus = try valMinus.asScalar()
+            let h_unit = UnitValue(value: h, dimensions: pointUnitValue.dimensions)
 
-            let derivative = (scalarPlus - scalarMinus) / (2 * h)
-            return (.dimensionless(derivative), pointUsedAngle || bodyUsedAngle)
+            let valPlus_Math = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: .unitValue(try pointUnitValue + h_unit), variables: &variables, functions: &functions, angleMode: angleMode).result
+            let valMinus_Math = try evaluateWithTempVar(node: userFunction.body, varName: varName, varValue: .unitValue(try pointUnitValue - h_unit), variables: &variables, functions: &functions, angleMode: angleMode).result
+            
+            guard let valPlus = valPlus_Math.asUnitValue(), let valMinus = valMinus_Math.asUnitValue() else {
+                throw MathError.typeMismatch(expected: "A value with units for derivative calculation", found: "\(valPlus_Math.typeName) or \(valMinus_Math.typeName)")
+            }
+
+            let numerator = try valPlus - valMinus
+            let denominator = UnitValue(value: 2 * h, dimensions: pointUnitValue.dimensions)
+            let derivative = try numerator / denominator
+            
+            return (.unitValue(derivative), pointUsedAngle || bodyUsedAngle)
             
         case let autoplotNode as AutoplotNode:
             return try (evaluateAutoplot(autoplotNode, variables: &variables, functions: &functions), false)

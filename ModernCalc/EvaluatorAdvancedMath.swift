@@ -6,21 +6,35 @@ extension Evaluator {
 
     // MARK: - Calculus Functions
     
-    func calculateNthDerivative(bodyNode: ExpressionNode, varName: String, at a: Double, order n: Int, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> Double {
+    // --- MODIFIED: Function now accepts a UnitValue and returns a UnitValue ---
+    func calculateNthDerivative(bodyNode: ExpressionNode, varName: String, at point: UnitValue, order n: Int, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> UnitValue {
+        
+        let h_unit = UnitValue(value: h, dimensions: point.dimensions)
+        
         if n == 1 {
-            let (valPlus, _) = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: .dimensionless(a + h), variables: &variables, functions: &functions, angleMode: angleMode)
-            let (valMinus, _) = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: .dimensionless(a - h), variables: &variables, functions: &functions, angleMode: angleMode)
+            let valPlus_Math = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: .unitValue(try point + h_unit), variables: &variables, functions: &functions, angleMode: angleMode).result
+            let valMinus_Math = try evaluateWithTempVar(node: bodyNode, varName: varName, varValue: .unitValue(try point - h_unit), variables: &variables, functions: &functions, angleMode: angleMode).result
+
+            guard let valPlus = valPlus_Math.asUnitValue(), let valMinus = valMinus_Math.asUnitValue() else {
+                throw MathError.typeMismatch(expected: "A value with units for derivative calculation", found: "\(valPlus_Math.typeName) or \(valMinus_Math.typeName)")
+            }
+
+            let numerator = try valPlus - valMinus
+            let denominator = UnitValue(value: 2 * h, dimensions: point.dimensions)
             
-            let scalarPlus = try valPlus.asScalar()
-            let scalarMinus = try valMinus.asScalar()
-            
-            return (scalarPlus - scalarMinus) / (2 * h)
+            return try numerator / denominator
         }
         
-        let f_prime_at_a_plus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: a + h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
-        let f_prime_at_a_minus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: a - h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
+        let point_plus_h = try point + h_unit
+        let point_minus_h = try point - h_unit
         
-        return (f_prime_at_a_plus_h - f_prime_at_a_minus_h) / (2 * h)
+        let f_prime_at_a_plus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: point_plus_h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
+        let f_prime_at_a_minus_h = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: point_minus_h, order: n - 1, variables: &variables, functions: &functions, angleMode: angleMode)
+        
+        let numerator = try f_prime_at_a_plus_h - f_prime_at_a_minus_h
+        let denominator = UnitValue(value: 2 * h, dimensions: point.dimensions)
+
+        return try numerator / denominator
     }
 
     func evaluateGradFunction(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
@@ -66,22 +80,36 @@ extension Evaluator {
         return (.vector(Vector(values: partialDerivatives)), overallUsedAngle)
     }
 
-    func adaptiveSimpson(f: (Double) throws -> Double, a: Double, b: Double, tolerance: Double) throws -> Double {
-        let c = (a + b) / 2.0; let h = b - a
+    // --- MODIFIED: Function now accepts and returns UnitValues ---
+    func adaptiveSimpson(f: (UnitValue) throws -> UnitValue, a: UnitValue, b: UnitValue, tolerance: Double) throws -> UnitValue {
+        let c = try (a + b) / 2.0; let h = try b - a
         let fa = try f(a); let fb = try f(b); let fc = try f(c)
-        let s = (h / 6.0) * (fa + 4.0 * fc + fb)
+        let s = (h / 6.0) * (try (try fa + (fc * 4.0)) + fb)
         return try _adaptiveSimpsonRecursive(f: f, a: a, b: b, fa: fa, fb: fb, fc: fc, whole: s, tolerance: tolerance)
     }
 
-    private func _adaptiveSimpsonRecursive(f: (Double) throws -> Double, a: Double, b: Double, fa: Double, fb: Double, fc: Double, whole: Double, tolerance: Double) throws -> Double {
-        let c = (a + b) / 2.0; let d = (a + c) / 2.0; let e = (c + b) / 2.0
+    // --- MODIFIED: Helper now accepts and returns UnitValues ---
+    private func _adaptiveSimpsonRecursive(f: (UnitValue) throws -> UnitValue, a: UnitValue, b: UnitValue, fa: UnitValue, fb: UnitValue, fc: UnitValue, whole: UnitValue, tolerance: Double) throws -> UnitValue {
+        let c = try (a + b) / 2.0;
+        let d = try (a + c) / 2.0;
+        let e = try (c + b) / 2.0
         let fd = try f(d); let fe = try f(e)
-        let left = (c - a) / 6.0 * (fa + 4.0 * fd + fc)
-        let right = (b - c) / 6.0 * (fc + 4.0 * fe + fb)
-        if abs(left + right - whole) <= 15.0 * tolerance { return left + right + (left + right - whole) / 15.0 }
+        
+        let left_h = try c - a
+        let right_h = try b - c
+        
+        let left = (left_h / 6.0) * (try (try fa + (fd * 4.0)) + fc)
+        let right = (right_h / 6.0) * (try (try fc + (fe * 4.0)) + fb)
+
+        let combined = try left + right
+        if abs((try combined - whole).value) <= 15.0 * tolerance {
+            return try combined + ((try combined - whole) / 15.0)
+        }
+        
         let leftHalf = try _adaptiveSimpsonRecursive(f: f, a: a, b: c, fa: fa, fb: fc, fc: fd, whole: left, tolerance: tolerance / 2.0)
         let rightHalf = try _adaptiveSimpsonRecursive(f: f, a: c, b: b, fa: fc, fb: fb, fc: fe, whole: right, tolerance: tolerance / 2.0)
-        return leftHalf + rightHalf
+        
+        return try leftHalf + rightHalf
     }
     
     // MARK: - Plotting Functions
@@ -503,7 +531,7 @@ extension Evaluator {
                     let (result, f_usedAngle) = try self._evaluateSingle(node: functionBody, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
                     usedAngle = usedAngle || f_usedAngle
                     
-                    guard case .unitValue(let resultUnit) = result else {
+                    guard let resultUnit = result.asUnitValue() else {
                         throw MathError.typeMismatch(expected: "Equation to resolve to a value with units", found: result.typeName)
                     }
                     return resultUnit.value
@@ -524,12 +552,11 @@ extension Evaluator {
             let (result, f_usedAngle) = try self._evaluateSingle(node: functionBody, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
             usedAngle = usedAngle || f_usedAngle
             
-            switch result {
-            case .dimensionless(let d): return d
-            case .unitValue(let u): return u.value
-            case .uncertain(let u): return u.value
-            default: throw MathError.dimensionMismatch(reason: "Solver expression must resolve to a dimensioned or dimensionless value.")
+            // Allow dimensionless or unit-based equations to resolve to zero
+            guard let resultScalar = result.asUnitValue()?.value else {
+                throw MathError.dimensionMismatch(reason: "Solver expression must resolve to a dimensioned or dimensionless value.")
             }
+            return resultScalar
         }
         
         let searchRanges: [ClosedRange<Double>]
@@ -691,7 +718,8 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector
     return coefficients
 }
 
-private extension MathValue {
+// --- FIX: Made this extension public (internal) so other files can access its members ---
+extension MathValue {
     var dimensionsIfUnitOrDimensionless: UnitDimension {
         switch self {
         case .unitValue(let u): return u.dimensions
@@ -700,7 +728,17 @@ private extension MathValue {
         case .matrix(let m): return m.dimensions
         case .complexVector(let cv): return cv.dimensions
         case .complexMatrix(let cm): return cm.dimensions
+        case .uncertain(let u): return u.dimensions
         default: return [:]
         }
     }
+    
+    func asUnitValue() -> UnitValue? {
+        switch self {
+        case .dimensionless(let d): return .dimensionless(d)
+        case .unitValue(let u): return u
+        default: return nil
+        }
+    }
 }
+

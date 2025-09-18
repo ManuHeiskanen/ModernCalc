@@ -39,6 +39,10 @@ struct UnitValue: Equatable, Codable {
             .filter { $0.value != 0 } // Remove dimensions that cancel out
         return UnitValue.create(value: newValue, dimensions: newDimensions)
     }
+    
+    static func * (lhs: UnitValue, rhs: Double) -> UnitValue {
+        return UnitValue.create(value: lhs.value * rhs, dimensions: lhs.dimensions)
+    }
 
     static func / (lhs: UnitValue, rhs: UnitValue) throws -> UnitValue {
         guard rhs.value != 0 else { throw MathError.divisionByZero }
