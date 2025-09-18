@@ -821,6 +821,11 @@ struct ComplexMatrix: Equatable, Codable {
     static func / (lhs: ComplexMatrix, rhs: Complex) throws -> ComplexMatrix { try ComplexMatrix(values: lhs.values.map { try $0 / rhs }, rows: lhs.rows, columns: lhs.columns, dimensions: lhs.dimensions) }
 }
 
+/// A struct to hold the results of a polynomial fit, where each coefficient can have a different unit.
+struct PolynomialCoefficients: Equatable, Codable {
+    let coefficients: [UnitValue]
+}
+
 enum MathValue: Codable, Equatable {
     case dimensionless(Double)
     case unitValue(UnitValue)
@@ -833,8 +838,8 @@ enum MathValue: Codable, Equatable {
     case complexMatrix(ComplexMatrix)
     case polar(Complex)
     case constant(String)
-    case regressionResult(slope: Double, intercept: Double)
-    case polynomialFit(coefficients: Vector)
+    case regressionResult(slope: UnitValue, intercept: UnitValue)
+    case polynomialFit(coefficients: PolynomialCoefficients)
     case plot(PlotData)
     case triggerCSVImport
     case uncertain(UncertainValue)
@@ -893,6 +898,22 @@ enum MathValue: Codable, Equatable {
         }
     }
     
+    // --- FIX: New helper function to treat single-row/column matrices as vectors. ---
+    func asVector(for functionName: String) throws -> Vector {
+        switch self {
+        case .vector(let v):
+            return v
+        case .matrix(let m):
+            if m.rows == 1 || m.columns == 1 {
+                return Vector(values: m.values, dimensions: m.dimensions)
+            } else {
+                throw MathError.typeMismatch(expected: "Vector or Matrix with one row/column for function '\(functionName)'", found: "Matrix \(m.rows)x\(m.columns)")
+            }
+        default:
+            throw MathError.typeMismatch(expected: "Vector or Matrix for function '\(functionName)'", found: self.typeName)
+        }
+    }
+    
     enum CodingKeys: String, CodingKey { case type, value, slope, intercept, coefficients, plotData }
 
     func encode(to encoder: Encoder) throws {
@@ -941,10 +962,10 @@ enum MathValue: Codable, Equatable {
         case "complexMatrix": self = .complexMatrix(try container.decode(ComplexMatrix.self, forKey: .value))
         case "polar": self = .polar(try container.decode(Complex.self, forKey: .value))
         case "regressionResult":
-            let slope = try container.decode(Double.self, forKey: .slope); let intercept = try container.decode(Double.self, forKey: .intercept)
+            let slope = try container.decode(UnitValue.self, forKey: .slope); let intercept = try container.decode(UnitValue.self, forKey: .intercept)
             self = .regressionResult(slope: slope, intercept: intercept)
         case "polynomialFit":
-            self = .polynomialFit(coefficients: try container.decode(Vector.self, forKey: .coefficients))
+            self = .polynomialFit(coefficients: try container.decode(PolynomialCoefficients.self, forKey: .coefficients))
         case "constant":
              self = .constant(try container.decode(String.self, forKey: .value))
         case "uncertain":
@@ -990,4 +1011,3 @@ extension Array {
         }
     }
 }
-

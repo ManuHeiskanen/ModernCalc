@@ -158,9 +158,8 @@ extension Evaluator {
         },
         "polyfit": { args in
             guard args.count == 3 else { throw MathError.incorrectArgumentCount(function: "polyfit", expected: "3", found: args.count) }
-            guard case .vector(let xVec) = args[0], case .vector(let yVec) = args[1] else {
-                throw MathError.typeMismatch(expected: "Vector, Vector, Scalar", found: "\(args[0].typeName), \(args[1].typeName), \(args[2].typeName)")
-            }
+            let xVec = try args[0].asVector(for: "polyfit")
+            let yVec = try args[1].asVector(for: "polyfit")
             let degree = try args[2].asScalar()
             let coeffs = try performPolynomialFit(x: xVec, y: yVec, degree: degree)
             return .polynomialFit(coefficients: coeffs)
@@ -321,7 +320,7 @@ extension Evaluator {
         "circum_circle": { arg in let r = try arg.asScalar(); return .dimensionless(2 * Double.pi * r) },
         "vol_sphere": { arg in let r = try arg.asScalar(); return .dimensionless((4.0/3.0) * Double.pi * pow(r, 3)) },
         "vol_cube": { arg in let s = try arg.asScalar(); return .dimensionless(pow(s, 3)) },
-        "unit": { arg in guard case .vector(let v) = arg else { throw MathError.typeMismatch(expected: "Vector", found: arg.typeName) }; return .vector(v.unit()) },
+        "unit": { arg in return .vector(try arg.asVector(for: "unit").unit()) },
         "transpose": { arg in
             switch arg {
             case .matrix(let m): return .matrix(m.transpose())
@@ -475,7 +474,9 @@ extension Evaluator {
             let a = c.argument(); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
         },
         "angle": { args, mode in
-            guard args.count == 2, case .vector(let v1) = args[0], case .vector(let v2) = args[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "other") }
+            guard args.count == 2 else { throw MathError.incorrectArgumentCount(function: "angle", expected: "2", found: args.count) }
+            let v1 = try args[0].asVector(for: "angle")
+            let v2 = try args[1].asVector(for: "angle")
             let angleRad = try v1.angle(with: v2)
             return .dimensionless(mode == .degrees ? angleRad * 180 / .pi : angleRad)
         }
@@ -493,7 +494,8 @@ extension Evaluator {
             return .dimensionless(performPercentile(values: values, p: p))
         },
         "rmse": { a, b in
-            guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            let v1 = try a.asVector(for: "rmse")
+            let v2 = try b.asVector(for: "rmse")
             guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSE.") }
             guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSE.") }
             guard v1.dimension > 0 else { return .dimensionless(0) }
@@ -503,7 +505,8 @@ extension Evaluator {
             return .unitValue(UnitValue(value: sqrt(meanSquaredError), dimensions: finalDimensions))
         },
         "rmsd": { a, b in // alias for rmse
-            guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            let v1 = try a.asVector(for: "rmsd")
+            let v2 = try b.asVector(for: "rmsd")
             guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSD.") }
             guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSD.") }
             guard v1.dimension > 0 else { return .dimensionless(0) }
@@ -519,7 +522,8 @@ extension Evaluator {
             return .dimensionless(Foundation.log(number) / Foundation.log(base))
         },
         "cov": { a, b in
-            guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            let xVec = try a.asVector(for: "cov")
+            let yVec = try b.asVector(for: "cov")
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for covariance.") }
             
             let n = Double(xVec.dimension)
@@ -533,7 +537,8 @@ extension Evaluator {
             return .unitValue(UnitValue(value: covValue, dimensions: newDimensions))
         },
         "corr": { a, b in
-            guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            let xVec = try a.asVector(for: "corr")
+            let yVec = try b.asVector(for: "corr")
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for correlation.") }
             let n = Double(xVec.dimension)
             let sumX = xVec.sum().value
@@ -570,19 +575,34 @@ extension Evaluator {
             return .vector(Vector(values: indices))
         },
         "linreg": { a, b in
-            guard case .vector(let xVec) = a, case .vector(let yVec) = b else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(a.typeName), \(b.typeName)") }
+            let xVec = try a.asVector(for: "linreg")
+            let yVec = try b.asVector(for: "linreg")
             guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for linear regression.") }
-            let n = Double(xVec.dimension); let sumX = xVec.sum().value; let sumY = yVec.sum().value; let sumXY = try xVec.hadamard(with: yVec).sum().value; let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
+            let n = Double(xVec.dimension)
+            let sumX = xVec.sum().value
+            let sumY = yVec.sum().value
+            let sumXY = try xVec.hadamard(with: yVec).sum().value
+            let sumX2 = xVec.values.map { $0 * $0 }.reduce(0, +)
+            
             let denominator = (n * sumX2 - sumX * sumX)
             guard denominator != 0 else { throw MathError.unsupportedOperation(op: "linreg", typeA: "Cannot perform regression on vertical line (undefined slope)", typeB: nil) }
-            let slope = (n * sumXY - sumX * sumY) / denominator
-            let intercept = (sumY - slope * sumX) / n
-            return .regressionResult(slope: slope, intercept: intercept)
+            
+            let slopeVal = (n * sumXY - sumX * sumY) / denominator
+            let interceptVal = (sumY - slopeVal * sumX) / n
+            
+            let slopeDimensions = yVec.dimensions.merging(xVec.dimensions.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
+            let interceptDimensions = yVec.dimensions
+            
+            let slopeUnitValue = UnitValue.create(value: slopeVal, dimensions: slopeDimensions)
+            let interceptUnitValue = UnitValue.create(value: interceptVal, dimensions: interceptDimensions)
+            
+            return .regressionResult(slope: slopeUnitValue, intercept: interceptUnitValue)
         },
         "linsolve": { a, b in
-            guard case .matrix(let matrixA) = a, case .vector(let vectorB) = b else {
-                throw MathError.typeMismatch(expected: "Matrix, Vector", found: "\(a.typeName), \(b.typeName)")
+            guard case .matrix(let matrixA) = a else {
+                throw MathError.typeMismatch(expected: "Matrix", found: a.typeName)
             }
+            let vectorB = try b.asVector(for: "linsolve")
             return .vector(try solveLinearSystem(A: matrixA, b: vectorB))
         },
         // FIX: Handle dot product between vectors represented as matrices

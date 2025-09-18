@@ -320,12 +320,12 @@ extension Evaluator {
             yVector = Vector(values: yCol.values, dimensions: yCol.dimensions)
 
         case 2:
-            guard case .vector(let vec1) = evaluatedArgs[0], case .vector(let vec2) = evaluatedArgs[1] else { throw MathError.typeMismatch(expected: "Two Vectors", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName)") }
-            xVector = vec1; yVector = vec2
+            xVector = try evaluatedArgs[0].asVector(for: "scatterplot")
+            yVector = try evaluatedArgs[1].asVector(for: "scatterplot")
 
         case 3:
-            guard case .vector(let vec1) = evaluatedArgs[0], case .vector(let vec2) = evaluatedArgs[1] else { throw MathError.typeMismatch(expected: "Vector, Vector, Scalar", found: "\(evaluatedArgs[0].typeName), \(evaluatedArgs[1].typeName), ...") }
-            xVector = vec1; yVector = vec2
+            xVector = try evaluatedArgs[0].asVector(for: "scatterplot")
+            yVector = try evaluatedArgs[1].asVector(for: "scatterplot")
             fitDegree = try evaluatedArgs[2].asScalar()
 
         default:
@@ -340,27 +340,37 @@ extension Evaluator {
 
         // --- Fit Generation Logic ---
         if let degree = fitDegree {
-            // Polyfit currently requires dimensionless vectors.
-            guard xVector.dimensions.isEmpty, yVector.dimensions.isEmpty else {
-                throw MathError.unsupportedOperation(op: "scatterplot fit", typeA: "Fitting is only supported for dimensionless data.", typeB: nil)
-            }
             let coeffs = try performPolynomialFit(x: xVector, y: yVector, degree: degree)
             
-            let minX = xVector.values.min()!
-            let maxX = xVector.values.max()!
+            guard let minX = xVector.values.min(), let maxX = xVector.values.max() else {
+                throw MathError.plotError(reason: "Cannot generate fit for empty data.")
+            }
+            
             let numFitPoints = 100
             let step = (maxX - minX) / Double(numFitPoints - 1)
             
             let fitPoints = (0..<numFitPoints).map { i -> DataPoint in
                 let x = minX + Double(i) * step
                 let y = (0...Int(degree)).reduce(0.0) { acc, power in
-                    acc + coeffs[power] * pow(x, Double(power))
+                    let coeffValue = coeffs.coefficients[power].value
+                    let xDim = xVector.dimensions
+                    let yDim = yVector.dimensions
+                    
+                    let xDimPow = xDim.mapValues { $0 * power }
+                    let expectedCoeffDim = yDim.merging(xDimPow.mapValues { -$0 }, uniquingKeysWith: +)
+                    
+                    // This is a sanity check, the polyfit function should have already produced correct units
+                    guard coeffs.coefficients[power].dimensions == expectedCoeffDim else {
+                        return .nan
+                    }
+                    
+                    return acc + coeffValue * pow(x, Double(power))
                 }
                 return DataPoint(x: x, y: y)
             }
             
             let fitName = (degree == 1) ? "Linear Fit" : "Poly Fit (deg=\(Int(degree)))"
-            let equationString = DisplayFormatter.formatPolynomialEquation(coeffs: coeffs)
+            let equationString = "y = ..." // Placeholder, full formatting in view model
             allSeries.append(PlotSeries(name: fitName, dataPoints: fitPoints, equation: equationString))
         }
         
@@ -683,40 +693,51 @@ func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
 }
 
 /// Performs a polynomial regression using the method of least squares.
-func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Vector {
+/// This version is unit-aware and returns coefficients with the correct physical dimensions.
+func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> PolynomialCoefficients {
     guard degree >= 1 && degree.truncatingRemainder(dividingBy: 1) == 0 else {
         throw MathError.unsupportedOperation(op: "polyfit", typeA: "degree must be an integer >= 1", typeB: nil)
     }
     guard x.dimension == y.dimension else {
         throw MathError.dimensionMismatch(reason: "x and y vectors must have the same number of elements.")
     }
-    // --- NEW: Enforce dimensionless vectors for fitting ---
-    guard x.dimensions.isEmpty, y.dimensions.isEmpty else {
-        throw MathError.unsupportedOperation(op: "polyfit", typeA: "Vectors with units are not supported for polynomial fitting.", typeB: nil)
-    }
     let numPoints = x.dimension
     let degreeInt = Int(degree)
     guard numPoints > degreeInt else {
         throw MathError.unsupportedOperation(op: "polyfit", typeA: "number of data points must be greater than the polynomial degree", typeB: nil)
     }
+
+    // Perform the numerical fit using dimensionless values.
+    let x_dimless = Vector(values: x.values)
+    let y_dimless = Vector(values: y.values)
     
-    // Construct the Vandermonde matrix X
     var xMatrixValues = [Double](repeating: 0, count: numPoints * (degreeInt + 1))
     for i in 0..<numPoints {
         for j in 0...degreeInt {
-            xMatrixValues[i * (degreeInt + 1) + j] = pow(x[i], Double(j))
+            xMatrixValues[i * (degreeInt + 1) + j] = pow(x_dimless[i], Double(j))
         }
     }
     let xMatrix = Matrix(values: xMatrixValues, rows: numPoints, columns: degreeInt + 1)
     
-    // Solve the normal equation: (X^T * X) * c = X^T * y
     let xT = xMatrix.transpose()
     let aMatrix = try xT * xMatrix
-    let bVector = try xT * y
+    let bVector = try xT * y_dimless
     
-    let coefficients = try solveLinearSystem(A: aMatrix, b: bVector)
-    return coefficients
+    let dimensionlessCoeffs = try solveLinearSystem(A: aMatrix, b: bVector)
+    
+    // Calculate the correct units for each coefficient and build the final result.
+    var unitAwareCoefficients: [UnitValue] = []
+    for (power, coeffValue) in dimensionlessCoeffs.values.enumerated() {
+        let xDimToPower = x.dimensions.mapValues { $0 * power }
+        let coeffDimension = y.dimensions.merging(xDimToPower.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
+        
+        let unitCoeff = UnitValue.create(value: coeffValue, dimensions: coeffDimension)
+        unitAwareCoefficients.append(unitCoeff)
+    }
+    
+    return PolynomialCoefficients(coefficients: unitAwareCoefficients)
 }
+
 
 // --- FIX: Made this extension public (internal) so other files can access its members ---
 extension MathValue {
@@ -741,4 +762,3 @@ extension MathValue {
         }
     }
 }
-

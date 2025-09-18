@@ -351,26 +351,26 @@ struct CalculationResultView: View {
             }
         } else if case .regressionResult(let slope, let intercept) = calculation.result {
             HStack(spacing: 0) {
-                Text("m = \(viewModel.formatScalarForDisplay(slope))")
+                Text("m = \(viewModel.formatForHistory(.unitValue(slope)))")
                     .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
                     .background(isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear)
                     .onHover { isHovering in
                         withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                     }
-                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(slope))) }
+                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.unitValue(slope))) }
                 
                 Text(", ")
                     .font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
 
-                Text("b = \(viewModel.formatScalarForDisplay(intercept))")
+                Text("b = \(viewModel.formatForHistory(.unitValue(intercept)))")
                     .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
                     .background(isResultSelected(calculation: calculation, index: 1) ? Color.accentColor.opacity(0.25) : Color.clear)
                     .onHover { isHovering in
                         withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 1)) : nil }
                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                     }
-                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.dimensionless(intercept))) }
+                    .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.unitValue(intercept))) }
             }
         } else if case .roots(let roots) = calculation.result {
             let isKeyboardSelectedForExpansion = selectedHistoryId == calculation.id && {
@@ -638,4 +638,3 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
-

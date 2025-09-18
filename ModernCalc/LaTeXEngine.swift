@@ -280,10 +280,14 @@ struct LaTeXEngine {
             let matrix = "\\begin{bmatrix} \(rows) \\end{bmatrix}"
             let unitStr = formatDimensions(cm.dimensions)
             return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
-        case .regressionResult(let m, let b):
-            return "\\text{m = } \(formatScalar(m, settings: settings)), \\text{ b = } \(formatScalar(b, settings: settings))"
-        case .polynomialFit(let coeffs):
-            return formatPolyFit(coeffs, settings: settings)
+        // --- FIX: Display linreg results with their units ---
+        case .regressionResult(let slope, let intercept):
+            let slopeLatex = formatMathValue(.unitValue(slope), angleMode: angleMode, settings: settings)
+            let interceptLatex = formatMathValue(.unitValue(intercept), angleMode: angleMode, settings: settings)
+            return "\\begin{cases} \\text{Slope} = \(slopeLatex) \\\\ \\text{Intercept} = \(interceptLatex) \\end{cases}"
+        // --- FIX: Display polyfit results with their units ---
+        case .polynomialFit(let polyCoeffs):
+            return formatPolyFitWithUnits(polyCoeffs, angleMode: angleMode, settings: settings)
         case .plot(let data):
             return "\\text{Plot: \(data.expression.replacingOccurrences(of: "*", with: "\\cdot"))}"
         // --- MODIFIED: Handle unit display for UncertainValue ---
@@ -469,21 +473,55 @@ struct LaTeXEngine {
         return "\(formatScalar(c.real, settings: settings)) \(sign) \(imagPart)"
     }
     
-    private static func formatPolyFit(_ coeffs: Vector, settings: UserSettings) -> String {
+    private static func formatPolyFitWithUnits(_ polyCoeffs: PolynomialCoefficients, angleMode: AngleMode, settings: UserSettings) -> String {
         var result = "y = "
-        for (i, coeff) in coeffs.values.enumerated().reversed() {
-            if abs(coeff) < 1e-9 && coeffs.dimension > 1 { continue }
-            let isFirst = (result == "y = ")
-            if !isFirst { result += (coeff < 0) ? " - " : " + " }
-            else if coeff < 0 { result += "- " }
+        let coefficients = polyCoeffs.coefficients
+        var isFirstTerm = true
+        
+        for (i, coeffUnitValue) in coefficients.enumerated().reversed() {
+            if abs(coeffUnitValue.value) < 1e-9 && coefficients.count > 1 { continue }
             
-            let formattedCoeff = formatScalar(abs(coeff), settings: settings)
-            if abs(abs(coeff) - 1.0) > 1e-9 || i == 0 { result += formattedCoeff }
+            let coeffValue = coeffUnitValue.value
             
-            if i > 0 { result += "x" }
+            if !isFirstTerm {
+                result += (coeffValue < 0) ? " - " : " + "
+            } else if coeffValue < 0 {
+                result += "- "
+            }
+            isFirstTerm = false
+            
+            let coeffAbsValue = abs(coeffValue)
+            let formattedCoeff = formatScalar(coeffAbsValue, settings: settings)
+            
+            let unitValueForFormatting = UnitValue(value: 1.0, dimensions: coeffUnitValue.dimensions)
+            let unitStr = formatMathValue(.unitValue(unitValueForFormatting), angleMode: angleMode, settings: settings)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "1 ", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            let needsCoeff = abs(coeffAbsValue - 1.0) > 1e-9 || i == 0
+            let hasUnit = !unitStr.isEmpty
+            
+            if needsCoeff {
+                result += formattedCoeff
+                if hasUnit && i > 0 { result += "\\," }
+            }
+            
+            if hasUnit {
+                if unitStr.contains("/") || unitStr.contains("cdot") || unitStr.contains(" ") {
+                    result += "\\left( \(unitStr) \\right)"
+                } else {
+                    result += unitStr
+                }
+            }
+            
+            if i > 0 {
+                if needsCoeff || hasUnit { result += "\\," }
+                result += "x"
+            }
             if i > 1 { result += "^{\(i)}" }
         }
-        return result
+        return result.replacingOccurrences(of: "y =  + ", with: "y = ")
     }
 
     private static func formatScientificNotation(fromString scientificString: String, using settings: UserSettings) -> String {

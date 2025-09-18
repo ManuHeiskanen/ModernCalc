@@ -512,8 +512,14 @@ class CalculatorViewModel: ObservableObject {
             return formatComplexMatrixForDisplay(cm, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForDisplay(p, with: settings)
-        case .regressionResult(let s, let i): return "m = \(formatScalar(s)), b = \(formatScalar(i))"
-        case .polynomialFit(let coeffs): return DisplayFormatter.formatPolynomialEquation(coeffs: coeffs)
+        // --- FIX: Display linreg results with their units ---
+        case .regressionResult(let slope, let intercept):
+            let slopeStr = formatForHistory(.unitValue(slope), with: settings)
+            let interceptStr = formatForHistory(.unitValue(intercept), with: settings)
+            return "Slope: \(slopeStr)\nIntercept: \(interceptStr)"
+        // --- FIX: Display polyfit results with their units ---
+        case .polynomialFit(let polyCoeffs):
+            return formatPolynomialWithUnitsForDisplay(polyCoeffs, with: settings)
         case .plot(let plotData): return "Plot: \(plotData.expression)"
         case .triggerCSVImport: return "Importing CSV..."
         case .constant(let s): return s
@@ -949,6 +955,56 @@ class CalculatorViewModel: ObservableObject {
         }
         
         return content
+    }
+    
+    private func formatPolynomialWithUnitsForDisplay(_ polyCoeffs: PolynomialCoefficients, with settings: UserSettings) -> String {
+        var equation = "y ="
+        let coefficients = polyCoeffs.coefficients
+        
+        for (i, coeffUnitValue) in coefficients.enumerated().reversed() {
+            // Skip zero coefficients unless it's the only term
+            if abs(coeffUnitValue.value) < 1e-9 && coefficients.count > 1 { continue }
+            
+            let value = coeffUnitValue.value
+            let absValue = abs(value)
+            
+            // Add sign
+            if equation == "y =" {
+                equation += (value < 0 ? " -" : "")
+            } else {
+                equation += (value < 0 ? " -" : " +")
+            }
+            equation += " "
+
+            // Format coefficient and its unit
+            let formattedCoeff = formatScalarForDisplay(absValue, with: settings)
+            let unitPart = UnitValue(value: 1.0, dimensions: coeffUnitValue.dimensions)
+            let formattedUnit = formatForHistory(.unitValue(unitPart), with: settings)
+                .replacingOccurrences(of: "1 ", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            // Add coefficient if it's not 1 (or if it's the constant term)
+            let needsCoeff = abs(absValue - 1.0) > 1e-9 || i == 0
+            if needsCoeff {
+                equation += formattedCoeff
+            }
+            
+            // Add unit
+            if !formattedUnit.isEmpty {
+                if needsCoeff { equation += " " } // space between number and unit
+                equation += "(\(formattedUnit))"
+            }
+            
+            // Add variable part (x, x^2, etc.)
+            if i > 0 {
+                if needsCoeff || !formattedUnit.isEmpty { equation += " " }
+                equation += "x"
+            }
+            if i > 1 {
+                equation += "^\(i)"
+            }
+        }
+        return equation
     }
     
     private func formatScalarForParsing(_ value: Double) -> String {

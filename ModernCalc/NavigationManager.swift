@@ -93,8 +93,8 @@ class NavigationManager: ObservableObject {
                         return viewModel.formatForParsing(values[index])
                     }
                 } else if case .regressionResult(let slope, let intercept) = selectedItem.result {
-                    // FIX: Changed .scalar to .dimensionless to match the updated MathValue enum.
-                    let valueToParse = (index == 0) ? MathValue.dimensionless(slope) : MathValue.dimensionless(intercept)
+                    // FIX: Use .unitValue to correctly wrap the UnitValue types for slope and intercept.
+                    let valueToParse = (index == 0) ? MathValue.unitValue(slope) : MathValue.unitValue(intercept)
                     return viewModel.formatForParsing(valueToParse)
                 } else if case .roots(let values) = selectedItem.result {
                     if index < values.count {
