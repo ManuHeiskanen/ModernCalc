@@ -172,7 +172,6 @@ struct Evaluator {
         case let functionNode as FunctionCallNode:
             return try evaluateFunctionCall(functionNode, variables: &variables, functions: &functions, angleMode: angleMode)
             
-        // --- MODIFIED: `uncert` function now supports units ---
         case let uncertNode as UncertaintyNode:
             let (value, _) = try _evaluateSingle(node: uncertNode.value, variables: &variables, functions: &functions, angleMode: angleMode)
             
@@ -192,6 +191,7 @@ struct Evaluator {
             var u_rand: Double = 0
             var u_sys_res: Double = 0
             var u_sys_acc: Double = 0
+            var u_sys_direct: Double = 0
             
             for (name, expr) in uncertNode.namedArgs {
                 let (argVal, _) = try _evaluateSingle(node: expr, variables: &variables, functions: &functions, angleMode: angleMode)
@@ -199,10 +199,11 @@ struct Evaluator {
                 let scalarArg: Double
                 switch argVal {
                 case .dimensionless(let d):
-                    if !dimensions.isEmpty { throw MathError.dimensionMismatch(reason: "Uncertainty component must have same units as the value.") }
-                    scalarArg = d
+                    scalarArg = d // Allow dimensionless uncertainty, assume same units as nominal value
                 case .unitValue(let u):
-                    if u.dimensions != dimensions { throw MathError.dimensionMismatch(reason: "Uncertainty component must have same units as the value.") }
+                    if u.dimensions != dimensions { // If units ARE provided, they must match
+                        throw MathError.dimensionMismatch(reason: "Uncertainty component must have same units as the value.")
+                    }
                     scalarArg = u.value
                 default:
                     throw MathError.typeMismatch(expected: "Numeric value for uncertainty component", found: argVal.typeName)
@@ -215,12 +216,14 @@ struct Evaluator {
                     u_sys_res = scalarArg / sqrt(12.0)
                 case "accuracy", "a":
                     u_sys_acc = scalarArg / sqrt(3.0)
+                case "systematic", "s":
+                    u_sys_direct = scalarArg
                 default:
                     throw ParserError.invalidNamedArgument(function: "uncert", argument: name)
                 }
             }
             
-            let combinedSystematic = sqrt(pow(u_sys_res, 2) + pow(u_sys_acc, 2))
+            let combinedSystematic = sqrt(pow(u_sys_res, 2) + pow(u_sys_acc, 2) + pow(u_sys_direct, 2))
             
             let uncertainValue = UncertainValue(value: nominalValue, randomUncertainty: u_rand, systematicUncertainty: combinedSystematic, dimensions: dimensions)
             return (.uncertain(uncertainValue), false)
@@ -522,3 +525,4 @@ private func extractComplexValuesAndDimension(from elements: [MathValue]) throws
     
     return (values, finalDimension)
 }
+

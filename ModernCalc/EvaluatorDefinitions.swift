@@ -358,66 +358,114 @@ extension Evaluator {
         "sin": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
-                // --- MODIFIED: Ensure uncertainty for trig functions is dimensionless ---
                 guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for sin", found: "Uncertain value with units") }
+                
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
-                let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
+                let randRad = mode == .degrees ? u.randomUncertainty * .pi / 180 : u.randomUncertainty
+                let sysRad = mode == .degrees ? u.systematicUncertainty * .pi / 180 : u.systematicUncertainty
                 
-                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0, dimensions: [:]) // FIX
-                let propagated_u = u_rad_total.propagate(derivative: cos(valRad))
+                let u_rad = UncertainValue(value: valRad, randomUncertainty: randRad, systematicUncertainty: sysRad, dimensions: [:])
+                let propagated = u_rad.propagate(derivative: cos(valRad))
 
-                let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
-                
                 return .uncertain(UncertainValue(value: sin(valRad),
-                                                 randomUncertainty: propagated_u.randomUncertainty * randomRatio,
-                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio), dimensions: [:])) // FIX
+                                                 randomUncertainty: propagated.randomUncertainty,
+                                                 systematicUncertainty: propagated.systematicUncertainty,
+                                                 dimensions: [:]))
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(sin(valRad))
         },
         "cos": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
-                 // --- MODIFIED: Ensure uncertainty for trig functions is dimensionless ---
                 guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for cos", found: "Uncertain value with units") }
+
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
-                let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
-                
-                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0, dimensions: [:]) // FIX
-                let propagated_u = u_rad_total.propagate(derivative: -sin(valRad))
-                
-                let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
+                let randRad = mode == .degrees ? u.randomUncertainty * .pi / 180 : u.randomUncertainty
+                let sysRad = mode == .degrees ? u.systematicUncertainty * .pi / 180 : u.systematicUncertainty
+
+                let u_rad = UncertainValue(value: valRad, randomUncertainty: randRad, systematicUncertainty: sysRad, dimensions: [:])
+                let propagated = u_rad.propagate(derivative: -sin(valRad))
 
                 return .uncertain(UncertainValue(value: cos(valRad),
-                                                 randomUncertainty: propagated_u.randomUncertainty * randomRatio,
-                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio), dimensions: [:])) // FIX
+                                                 randomUncertainty: propagated.randomUncertainty,
+                                                 systematicUncertainty: propagated.systematicUncertainty,
+                                                 dimensions: [:]))
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(cos(valRad))
         },
         "tan": { args, mode in
             guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
             if case .uncertain(let u) = args[0] {
-                 // --- MODIFIED: Ensure uncertainty for trig functions is dimensionless ---
                 guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for tan", found: "Uncertain value with units") }
+                
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
-                let uncTotalRad = mode == .degrees ? u.totalUncertainty * .pi / 180 : u.totalUncertainty
+                let randRad = mode == .degrees ? u.randomUncertainty * .pi / 180 : u.randomUncertainty
+                let sysRad = mode == .degrees ? u.systematicUncertainty * .pi / 180 : u.systematicUncertainty
                 
-                let u_rad_total = UncertainValue(value: valRad, randomUncertainty: uncTotalRad, systematicUncertainty: 0, dimensions: [:]) // FIX
-                let propagated_u = u_rad_total.propagate(derivative: 1.0 / pow(cos(valRad), 2))
-                
-                let randomRatio = u.totalUncertainty > 0 ? u.randomUncertainty / u.totalUncertainty : 0
+                let u_rad = UncertainValue(value: valRad, randomUncertainty: randRad, systematicUncertainty: sysRad, dimensions: [:])
+                let propagated = u_rad.propagate(derivative: 1.0 / pow(cos(valRad), 2))
                 
                 return .uncertain(UncertainValue(value: tan(valRad),
-                                                 randomUncertainty: propagated_u.randomUncertainty * randomRatio,
-                                                 systematicUncertainty: propagated_u.randomUncertainty * (1 - randomRatio), dimensions: [:])) // FIX
+                                                 randomUncertainty: propagated.randomUncertainty,
+                                                 systematicUncertainty: propagated.systematicUncertainty,
+                                                 dimensions: [:]))
             }
             let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(tan(valRad))
         },
         "sec": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / cos(valRad)) },
         "csc": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / sin(valRad)) },
         "cot": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / tan(valRad)) },
-        "asin": { args, mode in let a = asin(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
-        "acos": { args, mode in let a = acos(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
-        "atan": { args, mode in let a = atan(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
+        "asin": { args, mode in
+            if case .uncertain(let u) = args[0] {
+                guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for asin", found: "Uncertain value with units") }
+                let val = u.value
+                let derivative = 1.0 / sqrt(1.0 - pow(val, 2))
+                let propagated = u.propagate(derivative: derivative)
+                
+                var result = UncertainValue(value: asin(val), randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])
+                if mode == .degrees {
+                    result.value *= 180 / .pi
+                    result.randomUncertainty *= 180 / .pi
+                    result.systematicUncertainty *= 180 / .pi
+                }
+                return .uncertain(result)
+            }
+            let a = asin(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "acos": { args, mode in
+            if case .uncertain(let u) = args[0] {
+                guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for acos", found: "Uncertain value with units") }
+                let val = u.value
+                let derivative = -1.0 / sqrt(1.0 - pow(val, 2))
+                let propagated = u.propagate(derivative: derivative)
+                
+                var result = UncertainValue(value: acos(val), randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])
+                if mode == .degrees {
+                    result.value *= 180 / .pi
+                    result.randomUncertainty *= 180 / .pi
+                    result.systematicUncertainty *= 180 / .pi
+                }
+                return .uncertain(result)
+            }
+            let a = acos(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
+        },
+        "atan": { args, mode in
+            if case .uncertain(let u) = args[0] {
+                guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for atan", found: "Uncertain value with units") }
+                let val = u.value
+                let derivative = 1.0 / (1.0 + pow(val, 2))
+                let propagated = u.propagate(derivative: derivative)
+                
+                var result = UncertainValue(value: atan(val), randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])
+                if mode == .degrees {
+                    result.value *= 180 / .pi
+                    result.randomUncertainty *= 180 / .pi
+                    result.systematicUncertainty *= 180 / .pi
+                }
+                return .uncertain(result)
+            }
+            let a = atan(try args[0].asScalar()); return .dimensionless(mode == .degrees ? a * 180 / .pi : a)
+        },
         "asec": { args, mode in let a = acos(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "acsc": { args, mode in let a = asin(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
         "acot": { args, mode in let a = atan(1.0 / (try args[0].asScalar())); return .dimensionless(mode == .degrees ? a * 180 / .pi : a) },
@@ -729,20 +777,27 @@ extension Evaluator {
                 guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for \(node.name)", found: "Uncertain value with units") }
                 let val = u.value
                 let resultVal = scalarFunc(val)
-                var derivative: Double
+                let derivative: Double
                 switch node.name {
-                case "ln", "log", "lg": derivative = 1 / (val * (node.name == "ln" ? 1 : log(10)))
+                case "ln": derivative = 1 / val
+                case "lg", "log": derivative = 1 / (val * Foundation.log(10))
                 case "sinh": derivative = cosh(val); case "cosh": derivative = sinh(val); case "tanh": derivative = 1 - pow(tanh(val), 2)
                 case "asinh": derivative = 1 / sqrt(pow(val, 2) + 1); case "acosh": derivative = 1 / sqrt(pow(val, 2) - 1); case "atanh": derivative = 1 / (1 - pow(val, 2))
-                default: derivative = 0
+                case "sech": derivative = -tanh(val) * (1/cosh(val));
+                case "csch": derivative = -(1 / tanh(val)) * (1 / sinh(val));
+                case "coth": derivative = -pow(1/sinh(val), 2);
+                case "asech": derivative = -1 / (val * sqrt(1 - pow(val, 2)));
+                case "acsch": derivative = -1 / (abs(val) * sqrt(1 + pow(val, 2)));
+                case "acoth": derivative = 1 / (1 - pow(val, 2));
+                default: derivative = 0 // Should not be reached for functions in this map
                 }
                 let propagated = u.propagate(derivative: derivative)
-                return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])), argUsedAngle) // FIX
+                return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])), argUsedAngle)
             }
             
             // FIX: Use asScalar() to correctly handle dimensionless UnitValues
-            let s = try arg.asScalar()
-            return (.dimensionless(scalarFunc(s)), argUsedAngle)
+            let scalarValue = try arg.asScalar()
+            return (.dimensionless(scalarFunc(scalarValue)), argUsedAngle)
         }
         
         if let userFunction = functions[node.name] {
@@ -1006,4 +1061,3 @@ fileprivate func performPercentile(values: [Double], p: Double) -> Double {
         return lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue)
     }
 }
-

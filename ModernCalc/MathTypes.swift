@@ -87,15 +87,14 @@ struct UncertainValue: Equatable, Codable {
     // --- Operator Overloads with Advanced Propagation ---
 
     // For addition and subtraction:
-    // - Random uncertainties are combined in quadrature.
-    // - Systematic uncertainties are added linearly (worst-case scenario).
+    // - Random and systematic uncertainties are combined in quadrature (GUM standard).
     static func + (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
         guard lhs.dimensions == rhs.dimensions else {
             throw MathError.dimensionMismatch(reason: "Cannot add uncertain values with different units.")
         }
         let newValue = lhs.value + rhs.value
         let newRandom = Foundation.sqrt(Foundation.pow(lhs.randomUncertainty, 2) + Foundation.pow(rhs.randomUncertainty, 2))
-        let newSystematic = lhs.systematicUncertainty + rhs.systematicUncertainty
+        let newSystematic = Foundation.sqrt(Foundation.pow(lhs.systematicUncertainty, 2) + Foundation.pow(rhs.systematicUncertainty, 2))
         return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: lhs.dimensions)
     }
 
@@ -105,7 +104,7 @@ struct UncertainValue: Equatable, Codable {
         }
         let newValue = lhs.value - rhs.value
         let newRandom = Foundation.sqrt(Foundation.pow(lhs.randomUncertainty, 2) + Foundation.pow(rhs.randomUncertainty, 2))
-        let newSystematic = lhs.systematicUncertainty + rhs.systematicUncertainty
+        let newSystematic = Foundation.sqrt(Foundation.pow(lhs.systematicUncertainty, 2) + Foundation.pow(rhs.systematicUncertainty, 2))
         return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: lhs.dimensions)
     }
     
@@ -122,7 +121,7 @@ struct UncertainValue: Equatable, Codable {
             
             let unc_B_due_to_lhs = abs(rhs.value * lhs.systematicUncertainty)
             let unc_B_due_to_rhs = abs(lhs.value * rhs.systematicUncertainty)
-            let newSystematic = unc_B_due_to_lhs + unc_B_due_to_rhs
+            let newSystematic = Foundation.sqrt(Foundation.pow(unc_B_due_to_lhs, 2) + Foundation.pow(unc_B_due_to_rhs, 2))
 
             return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: newDimensions)
         }
@@ -133,7 +132,7 @@ struct UncertainValue: Equatable, Codable {
         
         let relSystematicL = lhs.systematicUncertainty / lhs.value
         let relSystematicR = rhs.systematicUncertainty / rhs.value
-        let combinedRelSystematic = abs(relSystematicL) + abs(relSystematicR)
+        let combinedRelSystematic = Foundation.sqrt(Foundation.pow(relSystematicL, 2) + Foundation.pow(relSystematicR, 2))
 
         return UncertainValue(
             value: newValue,
@@ -161,7 +160,7 @@ struct UncertainValue: Equatable, Codable {
         
         let relSystematicL = lhs.systematicUncertainty / lhs.value
         let relSystematicR = rhs.systematicUncertainty / rhs.value
-        let combinedRelSystematic = abs(relSystematicL) + abs(relSystematicR)
+        let combinedRelSystematic = Foundation.sqrt(Foundation.pow(relSystematicL, 2) + Foundation.pow(relSystematicR, 2))
 
         return UncertainValue(
             value: newValue,
@@ -991,3 +990,4 @@ extension Array {
         }
     }
 }
+
