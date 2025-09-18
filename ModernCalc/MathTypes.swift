@@ -586,6 +586,12 @@ struct Matrix: Equatable, Codable {
             return Matrix(values: newValues, rows: lhs.rows, columns: lhs.columns, dimensions: newDimensions)
         }
         
+        // FIX: Automatically transpose a row vector on the right-hand side if it makes the multiplication valid.
+        // This makes expressions like matrix * vector(a,b,c) work as expected.
+        if lhs.columns != rhs.rows && rhs.rows == 1 && lhs.columns == rhs.columns {
+            return try lhs * rhs.transpose()
+        }
+        
         guard lhs.columns == rhs.rows else { throw MathError.dimensionMismatch(reason: "For A*B, columns of A must equal rows of B.") }
         var newValues = [Double](repeating: 0, count: lhs.rows * rhs.columns)
         for i in 0..<lhs.rows { for j in 0..<rhs.columns { newValues[i * rhs.columns + j] = (0..<lhs.columns).map { k in lhs[i, k] * rhs[k, j] }.reduce(0, +) } }
@@ -961,4 +967,5 @@ extension Array {
         }
     }
 }
+
 

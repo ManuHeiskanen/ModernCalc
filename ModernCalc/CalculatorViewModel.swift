@@ -486,6 +486,12 @@ class CalculatorViewModel: ObservableObject {
             return "\(valStr) \(unitStr)"
         case .complex(let c): return formatComplexForDisplay(c, with: settings)
         case .vector(let v):
+            if let bestUnit = findBestUnitFor(dimensions: v.dimensions) {
+                let convertedValues = v.values.map { $0 / bestUnit.conversionFactor }
+                let convertedVector = Vector(values: convertedValues, dimensions: v.dimensions)
+                let content = formatVectorForDisplay(convertedVector, with: settings)
+                return "\(content) \(bestUnit.symbol)"
+            }
             let content = formatVectorForDisplay(v, with: settings)
             let unitStr = formatDimensionsForHistory(v.dimensions)
             return unitStr.isEmpty ? content : "\(content) \(unitStr)"

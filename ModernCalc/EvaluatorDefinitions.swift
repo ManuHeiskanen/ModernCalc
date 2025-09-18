@@ -569,7 +569,24 @@ extension Evaluator {
             
             throw MathError.typeMismatch(expected: "Two compatible Vectors", found: "\(a.typeName), \(b.typeName)")
         },
-        "cross": { a, b in guard case .vector(let v1) = a, case .vector(let v2) = b else { throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)") }; return .vector(try v1.cross(with: v2)) },
+        "cross": { a, b in
+            // Helper to convert a MathValue to a Vector if it represents one.
+            func to3DVector(_ value: MathValue) -> Vector? {
+                switch value {
+                case .vector(let v):
+                    return v.dimension == 3 ? v : nil
+                case .matrix(let m) where (m.rows == 3 && m.columns == 1) || (m.rows == 1 && m.columns == 3):
+                    return Vector(values: m.values, dimensions: m.dimensions)
+                default:
+                    return nil
+                }
+            }
+            
+            guard let v1 = to3DVector(a), let v2 = to3DVector(b) else {
+                throw MathError.typeMismatch(expected: "Two 3D Vectors", found: "\(a.typeName), \(b.typeName)")
+            }
+            return .vector(try v1.cross(with: v2))
+        },
         "getcolumn": { a, b in
             guard case .matrix(let matrix) = a else { throw MathError.typeMismatch(expected: "Matrix", found: a.typeName) }
             let indexScalar = try b.asScalar()
@@ -980,3 +997,4 @@ fileprivate func performPercentile(values: [Double], p: Double) -> Double {
         return lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue)
     }
 }
+
