@@ -489,34 +489,27 @@ class CalculatorViewModel: ObservableObject {
             if let bestUnit = findBestUnitFor(dimensions: v.dimensions) {
                 let convertedValues = v.values.map { $0 / bestUnit.conversionFactor }
                 let convertedVector = Vector(values: convertedValues, dimensions: v.dimensions)
-                let content = formatVectorForDisplay(convertedVector, with: settings)
-                return "\(content) \(bestUnit.symbol)"
+                return formatVectorForDisplay(convertedVector, with: settings, unitString: bestUnit.symbol)
             }
             
-            let content = formatVectorForDisplay(v, with: settings)
             let unitStr = formatDimensionsForHistory(v.dimensions)
-            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
+            return formatVectorForDisplay(v, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
         case .matrix(let m):
-            // FIX: Add best unit formatting for matrices.
             if let bestUnit = findBestUnitFor(dimensions: m.dimensions) {
                 let convertedValues = m.values.map { $0 / bestUnit.conversionFactor }
                 let convertedMatrix = Matrix(values: convertedValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
-                let content = formatMatrixForDisplay(convertedMatrix, with: settings)
-                return "\(content) \(bestUnit.symbol)"
+                return formatMatrixForDisplay(convertedMatrix, with: settings, unitString: bestUnit.symbol)
             }
             
-            let content = formatMatrixForDisplay(m, with: settings)
             let unitStr = formatDimensionsForHistory(m.dimensions)
-            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
+            return formatMatrixForDisplay(m, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
         case .tuple(let t): return t.map { formatForHistory($0, with: settings) }.joined(separator: " OR ")
         case .complexVector(let cv):
-            let content = formatComplexVectorForDisplay(cv, with: settings)
             let unitStr = formatDimensionsForHistory(cv.dimensions)
-            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
+            return formatComplexVectorForDisplay(cv, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
         case .complexMatrix(let cm):
-            let content = formatComplexMatrixForDisplay(cm, with: settings)
             let unitStr = formatDimensionsForHistory(cm.dimensions)
-            return unitStr.isEmpty ? content : "\(content) \(unitStr)"
+            return formatComplexMatrixForDisplay(cm, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForDisplay(p, with: settings)
         case .regressionResult(let s, let i): return "m = \(formatScalar(s)), b = \(formatScalar(i))"
@@ -755,13 +748,15 @@ class CalculatorViewModel: ObservableObject {
         else { return "\(formatScalar(magnitude)) ∠ \(formatScalar(angle)) rad" }
     }
     
-    private func formatVectorForDisplay(_ vector: Vector, with settings: UserSettings) -> String {
+    private func formatVectorForDisplay(_ vector: Vector, with settings: UserSettings, unitString: String? = nil) -> String {
         let formatScalar = { (d: Double) in self.formatScalarForDisplay(d, with: settings) }
         let maxDisplayRows = 10
+        
+        var lines: [String]
         if vector.dimension <= maxDisplayRows {
-            return (0..<vector.dimension).map { "[ \(formatScalar(vector[$0])) ]" }.joined(separator: "\n")
+            lines = (0..<vector.dimension).map { "[ \(formatScalar(vector[$0])) ]" }
         } else {
-            var lines: [String] = []
+            lines = []
             let headCount = 5
             let tailCount = 4
             for i in 0..<headCount {
@@ -771,11 +766,22 @@ class CalculatorViewModel: ObservableObject {
             for i in (vector.dimension - tailCount)..<vector.dimension {
                 lines.append("[ \(formatScalar(vector[i])) ]")
             }
-            return lines.joined(separator: "\n")
         }
+        
+        let content = lines.joined(separator: "\n")
+
+        if let unit = unitString, !unit.isEmpty {
+            if lines.count > 1 {
+                return "\(content)\n  \(unit)"
+            } else {
+                return "\(content) \(unit)"
+            }
+        }
+        
+        return content
     }
     
-    private func formatMatrixForDisplay(_ matrix: Matrix, with settings: UserSettings) -> String {
+    private func formatMatrixForDisplay(_ matrix: Matrix, with settings: UserSettings, unitString: String? = nil) -> String {
         let formatScalar = { (d: Double) in self.formatScalarForDisplay(d, with: settings) }
         let maxDisplayRows = 10
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
@@ -799,10 +805,11 @@ class CalculatorViewModel: ObservableObject {
             columnWidths[c] = maxWidth
         }
 
+        var lines: [String]
         if matrix.rows <= maxDisplayRows {
-            return (0..<matrix.rows).map { r in formatRow(r, columnWidths: columnWidths) }.joined(separator: "\n")
+            lines = (0..<matrix.rows).map { r in formatRow(r, columnWidths: columnWidths) }
         } else {
-            var lines: [String] = []
+            lines = []
             let headCount = 5
             let tailCount = 4
             for r in 0..<headCount {
@@ -812,31 +819,55 @@ class CalculatorViewModel: ObservableObject {
             for r in (matrix.rows - tailCount)..<matrix.rows {
                 lines.append(formatRow(r, columnWidths: columnWidths))
             }
-            return lines.joined(separator: "\n")
         }
+        
+        let content = lines.joined(separator: "\n")
+
+        if let unit = unitString, !unit.isEmpty {
+            if lines.count > 1 {
+                return "\(content)\n  \(unit)"
+            } else {
+                return "\(content) \(unit)"
+            }
+        }
+        
+        return content
     }
     
-    private func formatComplexVectorForDisplay(_ vector: ComplexVector, with settings: UserSettings) -> String {
+    private func formatComplexVectorForDisplay(_ vector: ComplexVector, with settings: UserSettings, unitString: String? = nil) -> String {
         let formatComplex = { (c: Complex) in self.formatComplexForDisplay(c, with: settings) }
         let maxDisplayRows = 10
+        
+        var lines: [String]
         if vector.dimension <= maxDisplayRows {
-            return (0..<vector.dimension).map { "[ \(formatComplex(vector[$0])) ]" }.joined(separator: "\n")
+            lines = (0..<vector.dimension).map { "[ \(formatComplex(vector[$0])) ]" }
         } else {
-            var lines: [String] = []
+            lines = []
             let headCount = 5
             let tailCount = 4
             for i in 0..<headCount {
                 lines.append("[ \(formatComplex(vector[i])) ]")
             }
-            lines.append("... (\(vector.dimension - tailCount)) more items) ...")
+            lines.append("... (\(vector.dimension - (headCount + tailCount)) more items) ...")
             for i in (vector.dimension - tailCount)..<vector.dimension {
                 lines.append("[ \(formatComplex(vector[i])) ]")
             }
-            return lines.joined(separator: "\n")
         }
+
+        let content = lines.joined(separator: "\n")
+
+        if let unit = unitString, !unit.isEmpty {
+            if lines.count > 1 {
+                return "\(content)\n  \(unit)"
+            } else {
+                return "\(content) \(unit)"
+            }
+        }
+        
+        return content
     }
     
-    private func formatComplexMatrixForDisplay(_ matrix: ComplexMatrix, with settings: UserSettings) -> String {
+    private func formatComplexMatrixForDisplay(_ matrix: ComplexMatrix, with settings: UserSettings, unitString: String? = nil) -> String {
         let formatComplex = { (c: Complex) in self.formatComplexForDisplay(c, with: settings) }
         let maxDisplayRows = 10
         if matrix.rows == 0 || matrix.columns == 0 { return "[]" }
@@ -860,10 +891,11 @@ class CalculatorViewModel: ObservableObject {
             columnWidths[c] = maxWidth
         }
 
+        var lines: [String]
         if matrix.rows <= maxDisplayRows {
-            return (0..<matrix.rows).map { r in formatRow(r, columnWidths: columnWidths) }.joined(separator: "\n")
+            lines = (0..<matrix.rows).map { r in formatRow(r, columnWidths: columnWidths) }
         } else {
-            var lines: [String] = []
+            lines = []
             let headCount = 5
             let tailCount = 4
             for r in 0..<headCount {
@@ -873,8 +905,19 @@ class CalculatorViewModel: ObservableObject {
             for r in (matrix.rows - tailCount)..<matrix.rows {
                 lines.append(formatRow(r, columnWidths: columnWidths))
             }
-            return lines.joined(separator: "\n")
         }
+
+        let content = lines.joined(separator: "\n")
+
+        if let unit = unitString, !unit.isEmpty {
+            if lines.count > 1 {
+                return "\(content)\n  \(unit)"
+            } else {
+                return "\(content) \(unit)"
+            }
+        }
+        
+        return content
     }
     
     private func formatScalarForParsing(_ value: Double) -> String {
@@ -904,4 +947,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
