@@ -111,7 +111,9 @@ class CalculatorViewModel: ObservableObject {
                 }
                 
                 if expression == self.lastCalculatedExpression && angle == self.lastCalculatedAngleMode {
-                    self.liveHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
+                    Task {
+                        self.liveHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
+                    }
                     return
                 }
                 
@@ -153,15 +155,21 @@ class CalculatorViewModel: ObservableObject {
             
             var newExpression = rawExpression
             newExpression.replaceSubrange(replacementRange, with: suggestion.insertionText)
-            self.rawExpression = newExpression
+            Task {
+                self.rawExpression = newExpression
+            }
 
             // Update cursor position
             let newLocation = locationOfWordStart + suggestion.insertionText.utf16.count
-            self.cursorPosition = NSRange(location: newLocation, length: 0)
+            Task {
+                self.cursorPosition = NSRange(location: newLocation, length: 0)
+            }
 
             // Hide autocomplete
-            self.showAutocomplete = false
-            self.autocompleteSuggestions = []
+            Task {
+                self.showAutocomplete = false
+                self.autocompleteSuggestions = []
+            }
         }
     }
 
@@ -218,11 +226,23 @@ class CalculatorViewModel: ObservableObject {
                 .map { AutocompleteSuggestion(name: $0.symbol, type: "constant", description: $0.name) }
             )
             
-            // Remove duplicates and sort
+            // Remove duplicates
             let uniqueSuggestions = Array(Set(suggestions))
-            self.autocompleteSuggestions = uniqueSuggestions.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+
+            // Hide popup if only one suggestion that is an exact match
+            if uniqueSuggestions.count == 1, let suggestion = uniqueSuggestions.first, suggestion.name.lowercased() == lowercasedWord {
+                Task {
+                    self.autocompleteSuggestions = []
+                    self.showAutocomplete = false
+                }
+                return
+            }
             
-            self.showAutocomplete = !self.autocompleteSuggestions.isEmpty
+            // Sort and publish
+            Task {
+                self.autocompleteSuggestions = uniqueSuggestions.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                self.showAutocomplete = !self.autocompleteSuggestions.isEmpty
+            }
         }
     }
     
@@ -387,11 +407,12 @@ class CalculatorViewModel: ObservableObject {
             calculatedHeight = 100.0
         }
 
-        self.livePreviewHeight = min(calculatedHeight, maxHeight)
-        
-        self.liveHelpText = finalLiveHelpText
-        self.liveErrorText = finalLiveErrorText
-        self.liveLaTeXPreview = finalLiveLaTeXPreview
+        Task {
+            self.livePreviewHeight = min(calculatedHeight, maxHeight)
+            self.liveHelpText = finalLiveHelpText
+            self.liveErrorText = finalLiveErrorText
+            self.liveLaTeXPreview = finalLiveLaTeXPreview
+        }
     }
     
     func commitCalculation() -> PlotData? {
@@ -572,7 +593,9 @@ class CalculatorViewModel: ObservableObject {
                 _ = try evaluator.evaluate(node: expressionTree, variables: &tempVars, functions: &tempFuncs, angleMode: self.angleMode)
             } catch { print("Error rebuilding function '\(definitionString)': \(error)") }
         }
-        self.functions = tempFuncs; self.variables = tempVars; self.liveHelpText = ""; self.liveErrorText = ""
+        Task {
+            self.functions = tempFuncs; self.variables = tempVars; self.liveHelpText = ""; self.liveErrorText = ""
+        }
     }
     
     func formatCalculationAsLaTeX(_ calculation: Calculation) -> String {
@@ -1224,5 +1247,3 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
-

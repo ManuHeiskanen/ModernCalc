@@ -11,6 +11,8 @@ import SwiftUI
 struct CursorAwareTextField: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
+    // --- ADDED: A binding to report the cursor's frame back to SwiftUI ---
+    @Binding var cursorRect: CGRect
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -50,17 +52,21 @@ struct CursorAwareTextField: NSViewRepresentable {
         func updateView(text: String, selectedRange: NSRange) {
             guard let textField = self.textField else { return }
 
-            // Set a flag to prevent delegate methods from firing during this update.
             isUpdatingFromSwiftUI = true
 
             if textField.stringValue != text {
                 textField.stringValue = text
             }
-            if let editor = textField.currentEditor(), editor.selectedRange != selectedRange {
+            
+            if let editor = textField.currentEditor() as? NSTextView, editor.selectedRange != selectedRange {
                 editor.selectedRange = selectedRange
+                
+                // --- ADDED: Update the cursor rectangle when selection changes programmatically ---
+                DispatchQueue.main.async {
+                    self.updateCursorRect()
+                }
             }
             
-            // The update is complete. Asynchronously reset the flag after the current run loop cycle.
             DispatchQueue.main.async {
                 self.isUpdatingFromSwiftUI = false
             }
@@ -71,15 +77,11 @@ struct CursorAwareTextField: NSViewRepresentable {
         }
 
         func controlTextDidChange(_ obj: Notification) {
-            // If the view is being updated by SwiftUI, ignore this delegate callback.
             guard !isUpdatingFromSwiftUI,
                   let textField = obj.object as? NSTextField,
-                  // FIX: Cast the current editor to NSTextView to access hasMarkedText.
                   let editor = textField.currentEditor() as? NSTextView
             else { return }
 
-            // If text is being composed (e.g., after a dead key press),
-            // wait until composition is finished before updating the binding.
             if editor.hasMarkedText() {
                 return
             }
@@ -105,7 +107,6 @@ struct CursorAwareTextField: NSViewRepresentable {
         }
         
         @objc func textViewDidChangeSelection(_ notification: Notification) {
-            // If the view is being updated by SwiftUI, ignore this delegate callback.
             guard !isUpdatingFromSwiftUI,
                   let textView = notification.object as? NSTextView,
                   let ourTextField = self.textField,
@@ -114,14 +115,37 @@ struct CursorAwareTextField: NSViewRepresentable {
                 return
             }
 
-            // Also guard selection changes against marked text to avoid conflicts.
             if textView.hasMarkedText() {
                 return
             }
             
-            // The flag system allows us to update the binding synchronously without warnings.
             parent.selectedRange = textView.selectedRange
+            // --- ADDED: Update the cursor rectangle whenever the selection changes ---
+            updateCursorRect()
+        }
+        
+        /// --- ADDED: A helper to calculate the cursor's rect and update the binding ---
+        private func updateCursorRect() {
+            guard let textField = self.textField, let editor = textField.currentEditor() as? NSTextView else { return }
+            
+            do {
+                let range = NSRange(location: editor.selectedRange.location, length: 0)
+                let rectInTextView = try editor.firstRect(forCharacterRange: range, actualRange: nil)
+                
+                // The rect is relative to the NSTextView (the field editor).
+                // We convert it to the coordinate space of our parent NSTextField.
+                let rectInTextField = textField.convert(rectInTextView, from: editor)
+                
+                // Update the binding on the main thread to be safe
+                DispatchQueue.main.async {
+                    self.parent.cursorRect = rectInTextField
+                }
+            } catch {
+                // If we can't get the rect (e.g., empty text field), reset it.
+                DispatchQueue.main.async {
+                    self.parent.cursorRect = .zero
+                }
+            }
         }
     }
 }
-

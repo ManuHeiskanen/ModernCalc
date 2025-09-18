@@ -328,7 +328,6 @@ struct CalculationResultView: View {
     var selectedHistoryPart: SelectionPart
     
     @State private var isHoverForExpansion = false
-    // --- FIX: Give columns more minimum space and make them flexible ---
     private let columns = [GridItem(.adaptive(minimum: 100))]
     
     var body: some View {
@@ -566,6 +565,8 @@ struct CalculatorInputView: View {
     var onTap: () -> Void
     
     @State private var isShowingSymbolsPopover = false
+    // --- ADDED: State to hold the cursor's rectangle ---
+    @State private var cursorRect: CGRect = .zero
 
     var body: some View {
         HStack(spacing: 0) {
@@ -582,13 +583,16 @@ struct CalculatorInputView: View {
                 }
                 .padding(.horizontal)
 
-                CursorAwareTextField(text: $expression, selectedRange: $cursorPosition)
-                    .padding(.horizontal)
+                // --- MODIFIED: Pass the cursorRect binding ---
+                CursorAwareTextField(text: $expression, selectedRange: $cursorPosition, cursorRect: $cursorRect)
                     .onTapGesture { onTap() }
-            }
-            // --- ADDED: Popover for autocomplete suggestions ---
-            .popover(isPresented: $viewModel.showAutocomplete, arrowEdge: .bottom) {
-                AutocompleteView(viewModel: viewModel)
+                    // --- MODIFIED: Popover is now attached here and uses the cursorRect ---
+                    .popover(isPresented: $viewModel.showAutocomplete,
+                             attachmentAnchor: .rect(.rect(cursorRect)),
+                             arrowEdge: .bottom) {
+                        AutocompleteView(viewModel: viewModel)
+                    }
+                    .padding(.horizontal)
             }
             Spacer()
         }
@@ -596,7 +600,6 @@ struct CalculatorInputView: View {
     }
 }
 
-// --- ADDED: A new view to display the list of autocomplete suggestions ---
 struct AutocompleteView: View {
     @ObservedObject var viewModel: CalculatorViewModel
     @State private var selectedSuggestionId: UUID?
@@ -648,7 +651,8 @@ struct AutocompleteView: View {
             }
         }
         .padding(4)
-        .frame(width: 380, height: 280)
+        .frame(width: 380)
+        .frame(maxHeight: 280)
     }
 
     private func colorForType(_ type: String) -> Color {
