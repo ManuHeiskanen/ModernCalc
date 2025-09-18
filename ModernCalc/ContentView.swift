@@ -565,7 +565,6 @@ struct CalculatorInputView: View {
     var onTap: () -> Void
     
     @State private var isShowingSymbolsPopover = false
-    // --- ADDED: State to hold the cursor's rectangle ---
     @State private var cursorRect: CGRect = .zero
 
     var body: some View {
@@ -575,7 +574,6 @@ struct CalculatorInputView: View {
                     SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
                 }
             
-            // --- MODIFIED: Apply padding to the ZStack instead of its children ---
             ZStack(alignment: .leading) {
                 HStack(spacing: 0) {
                     Text(expression).font(.system(size: 26, weight: .regular, design: .monospaced)).opacity(0)
@@ -583,10 +581,8 @@ struct CalculatorInputView: View {
                     if expression.isEmpty { Text(previewText.isEmpty ? "Enter expression..." : previewText).font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary) }
                 }
 
-                // --- MODIFIED: Pass the cursorRect binding ---
                 CursorAwareTextField(text: $expression, selectedRange: $cursorPosition, cursorRect: $cursorRect)
                     .onTapGesture { onTap() }
-                    // --- MODIFIED: Popover is now attached here and uses the cursorRect with a manual offset ---
                     .popover(isPresented: $viewModel.showAutocomplete,
                              attachmentAnchor: .rect(.rect(cursorRect.offsetBy(dx: -71, dy: -11))),
                              arrowEdge: .bottom) {
@@ -605,6 +601,10 @@ struct AutocompleteView: View {
     @State private var selectedSuggestionId: UUID?
 
     var body: some View {
+        let estimatedRowHeight: CGFloat = 58
+        let idealHeight = CGFloat(viewModel.autocompleteSuggestions.count) * estimatedRowHeight
+        let maxHeight: CGFloat = 280
+
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(viewModel.autocompleteSuggestions) { suggestion in
@@ -652,7 +652,8 @@ struct AutocompleteView: View {
         }
         .padding(4)
         .frame(width: 380)
-        .frame(maxHeight: 280)
+        .frame(height: min(idealHeight, maxHeight))
+        .animation(.default, value: viewModel.autocompleteSuggestions)
     }
 
     private func colorForType(_ type: String) -> Color {

@@ -545,7 +545,7 @@ struct LaTeXEngine {
             } else if let bestUnit = findBestUnitFor(dimensions: dimensions) {
                 // Here, we have a raw value in SI units. We need to convert it for display.
                 let convertedValue = coeffAbsValue / bestUnit.conversionFactor
-                let formattedConvertedCoeff = formatScalar(convertedValue, settings: settings)
+                _ = formatScalar(convertedValue, settings: settings)
                 
                 // Since we're overriding the coefficient display, we need to handle it carefully.
                 // This logic becomes complex. Let's simplify the approach by just formatting the unit.

@@ -128,9 +128,8 @@ struct CursorAwareTextField: NSViewRepresentable {
         private func updateCursorRect() {
             guard let textField = self.textField, let editor = textField.currentEditor() as? NSTextView else { return }
             
-            do {
                 let range = NSRange(location: editor.selectedRange.location, length: 0)
-                let rectInTextView = try editor.firstRect(forCharacterRange: range, actualRange: nil)
+                let rectInTextView = editor.firstRect(forCharacterRange: range, actualRange: nil)
                 
                 // The rect is relative to the NSTextView (the field editor).
                 // We convert it to the coordinate space of our parent NSTextField.
@@ -139,12 +138,6 @@ struct CursorAwareTextField: NSViewRepresentable {
                 // Update the binding on the main thread to be safe
                 DispatchQueue.main.async {
                     self.parent.cursorRect = rectInTextField
-                }
-            } catch {
-                // If we can't get the rect (e.g., empty text field), reset it.
-                DispatchQueue.main.async {
-                    self.parent.cursorRect = .zero
-                }
             }
         }
     }

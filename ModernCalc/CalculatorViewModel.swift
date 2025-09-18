@@ -10,7 +10,7 @@ import Combine
 import SwiftUI
 
 /// A structure to hold information about a single autocomplete suggestion.
-struct AutocompleteSuggestion: Identifiable, Hashable {
+struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
     let id = UUID()
     var name: String
     var type: String
@@ -42,7 +42,7 @@ class CalculatorViewModel: ObservableObject {
     @Published var functions: [String: FunctionDefinitionNode] = [:]
     @Published var livePreviewHeight: CGFloat = 60.0
     
-    // --- ADDED: State for autocomplete ---
+    // --- State for autocomplete ---
     @Published var autocompleteSuggestions: [AutocompleteSuggestion] = []
     @Published var showAutocomplete = false
     
@@ -94,7 +94,6 @@ class CalculatorViewModel: ObservableObject {
             .sink { [weak self] (expression, position, angle) in
                 guard let self = self else { return }
 
-                // --- ADDED: Update autocomplete suggestions based on input ---
                 self.updateAutocompleteSuggestions(for: expression, at: position)
 
                 guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -128,23 +127,19 @@ class CalculatorViewModel: ObservableObject {
         loadState()
     }
     
-    // --- ADDED: Method to handle selecting a suggestion ---
     /// Replaces the currently typed word with the selected suggestion.
     func selectAutocomplete(suggestion: AutocompleteSuggestion) {
         Task {
             let nsExpression = rawExpression as NSString
             let textBeforeCursor = nsExpression.substring(to: cursorPosition.location)
             
-            // Find the start of the word to be replaced
             let separators = CharacterSet(charactersIn: " +-*/^()=,;[]{}").union(.whitespacesAndNewlines)
             let rangeOfLastSeparator = textBeforeCursor.rangeOfCharacter(from: separators, options: .backwards)
             
             let locationOfWordStart: Int
             if let range = rangeOfLastSeparator {
-                // The location in the full string is the distance from the start to the separator's end
                 locationOfWordStart = textBeforeCursor.distance(from: textBeforeCursor.startIndex, to: range.upperBound)
             } else {
-                // No separator found, the word starts at the beginning of the string
                 locationOfWordStart = 0
             }
             
@@ -155,17 +150,12 @@ class CalculatorViewModel: ObservableObject {
             
             var newExpression = rawExpression
             newExpression.replaceSubrange(replacementRange, with: suggestion.insertionText)
-            Task {
-                self.rawExpression = newExpression
-            }
-
-            // Update cursor position
+            
+            self.rawExpression = newExpression
+            
             let newLocation = locationOfWordStart + suggestion.insertionText.utf16.count
-            Task {
-                self.cursorPosition = NSRange(location: newLocation, length: 0)
-            }
+            self.cursorPosition = NSRange(location: newLocation, length: 0)
 
-            // Hide autocomplete
             Task {
                 self.showAutocomplete = false
                 self.autocompleteSuggestions = []
@@ -174,7 +164,6 @@ class CalculatorViewModel: ObservableObject {
     }
 
     
-    // --- ADDED: Logic to generate autocomplete suggestions ---
     /// Finds the word currently being typed and searches for matching variables and functions.
     private func updateAutocompleteSuggestions(for expression: String, at position: NSRange) {
         Task {
@@ -190,21 +179,20 @@ class CalculatorViewModel: ObservableObject {
             }
 
             guard !word.isEmpty else {
-                self.autocompleteSuggestions = []
-                self.showAutocomplete = false
+                Task {
+                    self.autocompleteSuggestions = []
+                    self.showAutocomplete = false
+                }
                 return
             }
 
             var suggestions: [AutocompleteSuggestion] = []
             let lowercasedWord = word.lowercased()
 
-            // Search built-in functions
             suggestions.append(contentsOf: builtinFunctions
                 .filter { $0.name.lowercased().starts(with: lowercasedWord) }
                 .map { AutocompleteSuggestion(name: $0.name, type: "function", description: $0.signature) }
             )
-
-            // Search user-defined functions
             suggestions.append(contentsOf: functions.keys
                 .filter { $0.lowercased().starts(with: lowercasedWord) }
                 .map { name in
@@ -213,35 +201,32 @@ class CalculatorViewModel: ObservableObject {
                     return AutocompleteSuggestion(name: name, type: "function", description: signature)
                 }
             )
-
-            // Search user variables
             suggestions.append(contentsOf: variables.keys
                 .filter { $0.lowercased().starts(with: lowercasedWord) && $0 != ansVariable }
                 .map { AutocompleteSuggestion(name: $0, type: "variable", description: formatForHistory(variables[$0]!)) }
             )
-
-            // Search physical constants
             suggestions.append(contentsOf: physicalConstants
                 .filter { $0.symbol.lowercased().starts(with: lowercasedWord) }
                 .map { AutocompleteSuggestion(name: $0.symbol, type: "constant", description: $0.name) }
             )
             
-            // Remove duplicates
-            let uniqueSuggestions = Array(Set(suggestions))
-
-            // Hide popup if only one suggestion that is an exact match
-            if uniqueSuggestions.count == 1, let suggestion = uniqueSuggestions.first, suggestion.name.lowercased() == lowercasedWord {
+            let newSuggestions = Array(Set(suggestions)).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            
+            if newSuggestions.count == 1, let suggestion = newSuggestions.first, suggestion.name.lowercased() == lowercasedWord {
                 Task {
-                    self.autocompleteSuggestions = []
                     self.showAutocomplete = false
+                    self.autocompleteSuggestions = []
                 }
                 return
             }
             
-            // Sort and publish
+            if self.autocompleteSuggestions != newSuggestions {
+                Task {
+                    self.autocompleteSuggestions = newSuggestions
+                }
+            }
             Task {
-                self.autocompleteSuggestions = uniqueSuggestions.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-                self.showAutocomplete = !self.autocompleteSuggestions.isEmpty
+                self.showAutocomplete = !newSuggestions.isEmpty
             }
         }
     }
@@ -606,7 +591,6 @@ class CalculatorViewModel: ObservableObject {
         return formatForHistory(value, with: self.settings)
     }
     
-    /// --- FIX: New public helper to format roots with correct settings ---
     func formatRootsForDisplay(_ roots: [MathValue]) -> [String] {
         let formattingSettings: UserSettings
         if self.settings.enableSolverRounding {
@@ -620,7 +604,6 @@ class CalculatorViewModel: ObservableObject {
         return roots.map { formatForHistory($0, with: formattingSettings) }
     }
     
-    // --- FIX: Made this internal so views can call it with temporary settings ---
     func formatForHistory(_ value: MathValue, with settings: UserSettings) -> String {
         func formatScalar(_ scalar: Double) -> String {
             return self.formatScalarForDisplay(scalar, with: settings)
@@ -722,7 +705,6 @@ class CalculatorViewModel: ObservableObject {
         case .roots(let roots):
              if roots.isEmpty { return "No real roots found" }
             
-            // --- FIX: Use the new centralized helper for consistent formatting ---
             let formattedRoots = self.formatRootsForDisplay(roots)
 
             let maxDisplayRoots = 4
@@ -1247,3 +1229,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
