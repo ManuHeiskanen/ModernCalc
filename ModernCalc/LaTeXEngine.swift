@@ -228,11 +228,30 @@ struct LaTeXEngine {
         case .complex(let c):
             return formatComplex(c, settings: settings)
         case .vector(let v):
+            // FIX: Display vectors with derived units like 'N' instead of base units.
+            if let bestUnit = findBestUnitFor(dimensions: v.dimensions) {
+                let convertedValues = v.values.map { $0 / bestUnit.conversionFactor }
+                let elements = convertedValues.map { formatScalar($0, settings: settings) }.joined(separator: " \\\\ ")
+                let matrix = "\\begin{bmatrix} \(elements) \\end{bmatrix}"
+                return "\(matrix) \\, \\text{\(bestUnit.symbol)}"
+            }
+
             let elements = v.values.map { formatScalar($0, settings: settings) }.joined(separator: " \\\\ ")
             let matrix = "\\begin{bmatrix} \(elements) \\end{bmatrix}"
             let unitStr = formatDimensions(v.dimensions)
             return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .matrix(let m):
+            // FIX: Display matrices with derived units like 'N' instead of base units.
+            if let bestUnit = findBestUnitFor(dimensions: m.dimensions) {
+                let convertedValues = m.values.map { $0 / bestUnit.conversionFactor }
+                let convertedMatrix = Matrix(values: convertedValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
+                let rows = (0..<convertedMatrix.rows).map { r in
+                    (0..<convertedMatrix.columns).map { c in formatScalar(convertedMatrix[r, c], settings: settings) }.joined(separator: " & ")
+                }.joined(separator: " \\\\ ")
+                let matrix = "\\begin{bmatrix} \(rows) \\end{bmatrix}"
+                return "\(matrix) \\, \\text{\(bestUnit.symbol)}"
+            }
+            
             let rows = (0..<m.rows).map { r in
                 (0..<m.columns).map { c in formatScalar(m[r, c], settings: settings) }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
@@ -401,6 +420,7 @@ struct LaTeXEngine {
             let exponent = symbol[symbol.index(after: caretIndex)...]
             return "\\text{\(base)}^{\(exponent)}"
         }
+        if symbol == "Ω" { return "\\Omega" }
         return "\\text{\(symbol)}"
     }
 

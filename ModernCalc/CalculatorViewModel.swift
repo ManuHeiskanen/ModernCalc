@@ -492,10 +492,19 @@ class CalculatorViewModel: ObservableObject {
                 let content = formatVectorForDisplay(convertedVector, with: settings)
                 return "\(content) \(bestUnit.symbol)"
             }
+            
             let content = formatVectorForDisplay(v, with: settings)
             let unitStr = formatDimensionsForHistory(v.dimensions)
             return unitStr.isEmpty ? content : "\(content) \(unitStr)"
         case .matrix(let m):
+            // FIX: Add best unit formatting for matrices.
+            if let bestUnit = findBestUnitFor(dimensions: m.dimensions) {
+                let convertedValues = m.values.map { $0 / bestUnit.conversionFactor }
+                let convertedMatrix = Matrix(values: convertedValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
+                let content = formatMatrixForDisplay(convertedMatrix, with: settings)
+                return "\(content) \(bestUnit.symbol)"
+            }
+            
             let content = formatMatrixForDisplay(m, with: settings)
             let unitStr = formatDimensionsForHistory(m.dimensions)
             return unitStr.isEmpty ? content : "\(content) \(unitStr)"
@@ -895,3 +904,4 @@ class CalculatorViewModel: ObservableObject {
         return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
+
