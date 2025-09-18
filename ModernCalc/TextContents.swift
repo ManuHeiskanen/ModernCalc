@@ -52,6 +52,7 @@ struct TextContents {
         .init(name: "hypot", signature: "hypot(sideA, sideB)", description: "Calculates the hypotenuse of a right triangle."),
         .init(name: "if", signature: "if(condition, true_val, false_val)", description: "Returns true_val if condition is non-zero, otherwise returns false_val. Works also when plotting. The types and units of true_val and false_val must be compatible. **Example:** `if(1 > 0, 10.m, 20.m)`"),
         .init(name: "imag", signature: "imag(complex)", description: "Extracts the imaginary part of a complex number."),
+        .init(name: "impedance", signature: "impedance(f, component)", description: "Calculates impedance Z for a component (R, L, or C) at a given frequency f. Component type is inferred from its unit (Ω, H, F). Returns a complex value."),
         .init(name: "importcsv", signature: "importcsv()", description: "Opens a file dialog to import data from a CSV file."),
         .init(name: "integral", signature: "integral(expr, var, from, to)", description: "Calculates the total area under a function's curve between two points."),
         .init(name: "inv", signature: "inv(matrix)", description: "Calculates the inverse of a square matrix."),

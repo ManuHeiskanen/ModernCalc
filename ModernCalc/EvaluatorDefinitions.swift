@@ -1,3 +1,10 @@
+//
+//  EvaluatorDefinitions.swift
+//  ModernCalc
+//
+//  Created by Manu Heiskanen on 16.9.2025.
+//
+
 import Foundation
 
 /// This extension contains all the built-in constant and function definitions,
@@ -727,6 +734,52 @@ extension Evaluator {
                 return abs(n1 * n2) / performGcd(abs(n1), abs(n2))
             }
             return try performElementWiseIntegerOp(a, b, opName: "lcm", operation: lcmOp)
+        },
+        "impedance": { freq_val, comp_val in
+            let f: Double
+            switch freq_val {
+            case .dimensionless(let d):
+                f = d // a dimensionless frequency is assumed to be in Hz
+            case .unitValue(let u):
+                // Frequency is 1/s
+                guard u.dimensions == [.second: -1] else {
+                    throw MathError.dimensionMismatch(reason: "First argument for impedance() must be a frequency (e.g., in Hz).")
+                }
+                f = u.value // value is already in base SI units (Hz)
+            default:
+                throw MathError.typeMismatch(expected: "Frequency value", found: freq_val.typeName)
+            }
+            
+            let omega = 2 * Double.pi * f
+            
+            switch comp_val {
+            case .dimensionless(let r):
+                // Assume dimensionless is resistance in Ohms.
+                return .complex(Complex(real: r, imaginary: 0))
+            case .unitValue(let u):
+                // Resistance dimensions: kg*m^2*s^-3*A^-2 (Ohm)
+                let resistanceDim: UnitDimension = [.kilogram: 1, .meter: 2, .second: -3, .ampere: -2]
+                // Inductance dimensions: kg*m^2*s^-2*A^-2 (Henry)
+                let inductanceDim: UnitDimension = [.kilogram: 1, .meter: 2, .second: -2, .ampere: -2]
+                // Capacitance dimensions: kg^-1*m^-2*s^4*A^2 (Farad)
+                let capacitanceDim: UnitDimension = [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2]
+
+                if u.dimensions == resistanceDim {
+                    // It's a resistor
+                    return .complex(Complex(real: u.value, imaginary: 0))
+                } else if u.dimensions == inductanceDim {
+                    // It's an inductor
+                    return .complex(Complex(real: 0, imaginary: omega * u.value))
+                } else if u.dimensions == capacitanceDim {
+                    // It's a capacitor
+                    guard omega * u.value != 0 else { throw MathError.divisionByZero }
+                    return .complex(Complex(real: 0, imaginary: -1 / (omega * u.value)))
+                } else {
+                    throw MathError.dimensionMismatch(reason: "Second argument for impedance() must be resistance (Ω), inductance (H), or capacitance (F).")
+                }
+            default:
+                throw MathError.typeMismatch(expected: "Resistance, Inductance, or Capacitance value", found: comp_val.typeName)
+            }
         }
     ]
     

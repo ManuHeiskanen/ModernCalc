@@ -167,6 +167,14 @@ class CalculatorViewModel: ObservableObject {
     /// Finds the word currently being typed and searches for matching variables and functions.
     private func updateAutocompleteSuggestions(for expression: String, at position: NSRange) {
         Task {
+            guard position.location <= (expression as NSString).length else {
+                // This prevents a crash if the expression updates faster than the cursor position,
+                // leaving a position that is out of bounds for the now-empty string.
+                self.autocompleteSuggestions = []
+                self.showAutocomplete = false
+                return
+            }
+            
             let textBeforeCursor = (expression as NSString).substring(to: position.location)
             let separators = CharacterSet(charactersIn: " +-*/^()=,;[]{}").union(.whitespacesAndNewlines)
             
@@ -1225,8 +1233,6 @@ class CalculatorViewModel: ObservableObject {
     }
     
     private func formatPolarForParsing(_ value: Complex) -> String {
-        let magnitude = value.abs(); let angleDegrees = value.argument() * (180.0 / .pi)
-        return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
+        let magnitude = value.abs(); let angleDegrees = value.argument() * (180.0 / .pi); return "\(formatScalarForParsing(magnitude))∠\(formatScalarForParsing(angleDegrees))"
     }
 }
-
