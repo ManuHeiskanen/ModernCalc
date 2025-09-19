@@ -198,7 +198,7 @@ struct AutocompletePillView: View {
                             .font(.system(.callout, design: .monospaced))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(Color.primary.opacity(0.1))
+                            .background(pillColor(for: suggestion.type))
                             .foregroundColor(.primary)
                             .cornerRadius(16)
                     }
@@ -206,6 +206,19 @@ struct AutocompletePillView: View {
                 }
             }
             .padding(.horizontal)
+        }
+    }
+    
+    private func pillColor(for type: String) -> Color {
+        switch type {
+        case "function":
+            return .indigo.opacity(0.2)
+        case "variable":
+            return .teal.opacity(0.2)
+        case "constant":
+            return .orange.opacity(0.2)
+        default:
+            return Color.primary.opacity(0.1)
         }
     }
 }
