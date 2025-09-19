@@ -14,8 +14,8 @@ struct FunctionCategory: Identifiable {
 }
 
 struct VariableEditorView: View {
-    @ObservedObject var viewModel: CalculatorViewModel
-    @ObservedObject var settings: UserSettings
+    @Bindable var viewModel: CalculatorViewModel
+    @ObservedObject var settings: UserSettings // Kept as-is, assuming UserSettings is still an ObservableObject
     @Environment(\.dismiss) var dismiss
     @Environment(\.dismissSearch) private var dismissSearch
     
@@ -464,4 +464,3 @@ struct VariableEditorView: View {
         .scrollContentBackground(.hidden)
     }
 }
-

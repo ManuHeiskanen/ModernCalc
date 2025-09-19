@@ -9,7 +9,7 @@ import SwiftUI
 
 /// A view that displays CSV data in a grid and provides interactive controls for importing it.
 struct CSVView: View {
-    @ObservedObject var viewModel: CSVViewModel
+    @Bindable var viewModel: CSVViewModel
     
     @Environment(\.dismiss) private var dismiss
 
@@ -172,4 +172,3 @@ struct CSVView: View {
         .background(.bar)
     }
 }
-

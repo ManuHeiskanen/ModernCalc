@@ -35,8 +35,9 @@ enum DecimalConversionOption: String, CaseIterable, Identifiable {
 }
 
 
+@Observable
 @MainActor
-class CSVViewModel: ObservableObject {
+class CSVViewModel {
     
     // The file name and raw content are stored directly for re-parsing.
     let sourceFileName: String
@@ -49,37 +50,37 @@ class CSVViewModel: ObservableObject {
     private weak var mainViewModel: CalculatorViewModel?
     
     // --- NEW UI State Properties ---
-    @Published var columnSeparator: ColumnSeparator = .comma {
+    var columnSeparator: ColumnSeparator = .comma {
         didSet {
             // Re-parse data whenever the separator is changed.
             reparseData()
         }
     }
-    @Published var decimalConversion: DecimalConversionOption = .none
+    var decimalConversion: DecimalConversionOption = .none
     
     // --- Properties to hold the currently parsed data ---
-    @Published private var parsedHeaders: [String] = []
-    @Published private var parsedGrid: [[String]] = []
+    private var parsedHeaders: [String] = []
+    private var parsedGrid: [[String]] = []
     
     // --- UI State Properties ---
-    @Published var matrixVariableName: String = ""
-    @Published var selectedColumns: [Bool] = []
-    @Published var useFirstRowAsHeader: Bool = true {
+    var matrixVariableName: String = ""
+    var selectedColumns: [Bool] = []
+    var useFirstRowAsHeader: Bool = true {
         didSet {
             // No need to re-parse, just update the effective row count.
             updateRowCounts()
         }
     }
-    @Published var errorMessage: String? = nil
+    var errorMessage: String? = nil
     
     // --- Row properties now use didSet for robust validation ---
-    @Published var startRow: Int = 1 {
+    var startRow: Int = 1 {
         didSet {
             if startRow <= 0 { startRow = 1 }
             if startRow > endRow { endRow = startRow }
         }
     }
-    @Published var endRow: Int = 0 {
+    var endRow: Int = 0 {
         didSet {
             if endRow < startRow { endRow = oldValue }
         }
@@ -240,4 +241,3 @@ class CSVViewModel: ObservableObject {
         return formattedString
     }
 }
-

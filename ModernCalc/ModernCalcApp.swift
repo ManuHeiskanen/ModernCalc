@@ -9,14 +9,14 @@ import SwiftUI
 
 @main
 struct ModernCalcApp: App {
-    @StateObject private var userSettings = UserSettings()
+    @State private var userSettings = UserSettings()
     // The view model now manages plot windows
-    @StateObject private var calculatorViewModel: CalculatorViewModel
+    @State private var calculatorViewModel: CalculatorViewModel
 
     init() {
         let settings = UserSettings()
-        _userSettings = StateObject(wrappedValue: settings)
-        _calculatorViewModel = StateObject(wrappedValue: CalculatorViewModel(settings: settings))
+        _userSettings = State(wrappedValue: settings)
+        _calculatorViewModel = State(wrappedValue: CalculatorViewModel(settings: settings))
     }
     
     var body: some Scene {

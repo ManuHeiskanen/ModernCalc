@@ -8,15 +8,16 @@
 import Foundation
 import SwiftUI
 
+@Observable
 @MainActor
-class PlotViewModel: ObservableObject {
-    @Published var plotData: PlotData
-    @Published var viewDomainX: ClosedRange<Double>
-    @Published var viewDomainY: ClosedRange<Double>
+class PlotViewModel {
+    var plotData: PlotData
+    var viewDomainX: ClosedRange<Double>
+    var viewDomainY: ClosedRange<Double>
     
     // --- NEW PROPERTIES ---
-    @Published var xAxisLabel: String
-    @Published var yAxisLabel: String
+    var xAxisLabel: String
+    var yAxisLabel: String
     
     init(plotData: PlotData) {
         self.plotData = plotData

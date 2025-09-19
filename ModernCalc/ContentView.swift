@@ -8,8 +8,8 @@
 import SwiftUI
 
 struct ContentView: View {
-    @ObservedObject var settings: UserSettings
-    @StateObject var viewModel: CalculatorViewModel
+    var settings: UserSettings
+    @State var viewModel: CalculatorViewModel
     
     @FocusState private var isInputFocused: Bool
     @State private var isShowingSheet = false
@@ -21,7 +21,7 @@ struct ContentView: View {
     
     init(settings: UserSettings, viewModel: CalculatorViewModel) {
         self.settings = settings
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self._viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
@@ -163,7 +163,7 @@ struct ContentView: View {
 // --- Subviews ---
 
 struct HistoryView: View {
-    @ObservedObject var viewModel: CalculatorViewModel
+    @Bindable var viewModel: CalculatorViewModel
     var history: [Calculation]
     @Binding var rawExpression: String
     var selectedHistoryId: UUID?
@@ -320,7 +320,7 @@ struct HistoryView: View {
 /// A new subview to render the different types of calculation results.
 /// This simplifies the main HistoryView and fixes the compiler error.
 struct CalculationResultView: View {
-    @ObservedObject var viewModel: CalculatorViewModel
+    @Bindable var viewModel: CalculatorViewModel
     let calculation: Calculation
     
     @Binding var hoveredItem: (id: UUID, part: SelectionPart)?
@@ -507,7 +507,7 @@ struct CalculationResultView: View {
 
 
 struct FormattedExpressionWithButtonsView: View {
-    var viewModel: CalculatorViewModel
+    @Bindable var viewModel: CalculatorViewModel
     var latexPreview: String
     var helpText: String
     var errorText: String
@@ -556,7 +556,7 @@ struct FormattedExpressionWithButtonsView: View {
 
 
 struct CalculatorInputView: View {
-    @ObservedObject var viewModel: CalculatorViewModel
+    @Bindable var viewModel: CalculatorViewModel
     @Binding var expression: String
     @Binding var cursorPosition: NSRange
     var previewText: String
@@ -602,7 +602,7 @@ struct CalculatorInputView: View {
 }
 
 struct AutocompleteView: View {
-    @ObservedObject var viewModel: CalculatorViewModel
+    @Bindable var viewModel: CalculatorViewModel
     @State private var selectedSuggestionId: UUID?
 
     var body: some View {
@@ -673,7 +673,7 @@ struct AutocompleteView: View {
 
 
 struct SymbolsGridView: View {
-    var viewModel: CalculatorViewModel
+    @Bindable var viewModel: CalculatorViewModel
     let operatorSymbols: [MathSymbol]
     let constantSymbols: [MathSymbol]
     let columns = [GridItem(.adaptive(minimum: 45))]
@@ -701,7 +701,7 @@ struct SymbolsGridView: View {
 }
 
 struct GreekSymbolsGridView: View {
-    var viewModel: CalculatorViewModel
+    @Bindable var viewModel: CalculatorViewModel
     let greekSymbols: [MathSymbol]
     let columns = [GridItem(.adaptive(minimum: 45))]
     
@@ -718,4 +718,3 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
-

@@ -6,8 +6,8 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
+// --- 1. REMOVED: import Combine ---
 
 /// A structure to hold information about a single autocomplete suggestion.
 struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
@@ -29,40 +29,53 @@ struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
 }
 
 
+@Observable
 @MainActor
-class CalculatorViewModel: ObservableObject {
+class CalculatorViewModel {
 
-    @Published var rawExpression: String = ""
-    @Published var history: [Calculation] = []
-    @Published var liveHelpText: String = ""
-    @Published var liveErrorText: String = ""
-    @Published var liveLaTeXPreview: String = ""
-    @Published var previewText: String = ""
-    @Published var variables: [String: MathValue] = [:]
-    @Published var functions: [String: FunctionDefinitionNode] = [:]
-    @Published var livePreviewHeight: CGFloat = 60.0
+    // --- 2. MODIFIED: Removed @Published and added didSet ---
+    var rawExpression: String = "" {
+        didSet { handleInputChange() }
+    }
+    var history: [Calculation] = []
+    var liveHelpText: String = ""
+    var liveErrorText: String = ""
+    var liveLaTeXPreview: String = ""
+    var previewText: String = ""
+    var variables: [String: MathValue] = [:]
+    var functions: [String: FunctionDefinitionNode] = [:]
+    var livePreviewHeight: CGFloat = 60.0
     
     // --- State for autocomplete ---
-    @Published var autocompleteSuggestions: [AutocompleteSuggestion] = []
-    @Published var showAutocomplete = false
+    var autocompleteSuggestions: [AutocompleteSuggestion] = []
+    var showAutocomplete = false
     
-    @Published var angleMode: AngleMode = .degrees {
-        didSet { saveState() }
+    // --- 2. MODIFIED: Removed @Published and added didSet ---
+    var angleMode: AngleMode = .degrees {
+        didSet {
+            // Keep the original logic and add the new handler
+            saveState()
+            handleInputChange()
+        }
     }
-    @Published var userFunctionDefinitions: [String: String] = [:]
-    @Published var cursorPosition = NSRange()
+    var userFunctionDefinitions: [String: String] = [:]
+    // --- 2. MODIFIED: Removed @Published and added didSet ---
+    var cursorPosition = NSRange() {
+        didSet { handleInputChange() }
+    }
     
-    @Published var plotViewModels: [PlotViewModel] = []
-    @Published var plotToShow: PlotData.ID? = nil
+    var plotViewModels: [PlotViewModel] = []
+    var plotToShow: PlotData.ID? = nil
     
-    @Published var csvViewModel: CSVViewModel? = nil
-    @Published var showCSVView: Bool = false
+    var csvViewModel: CSVViewModel? = nil
+    var showCSVView: Bool = false
     
     private var settings: UserSettings
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
     private var lastUsedAngleFlag: Bool = false
-    private var cancellables = Set<AnyCancellable>()
+    // --- 3. REPLACED: Combine's cancellables with a Task for debouncing ---
+    private var debounceTask: Task<Void, Never>?
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
     
@@ -89,87 +102,100 @@ class CalculatorViewModel: ObservableObject {
         
         self.constantSymbols = TextContents.physicalConstants.map { .init(symbol: $0.symbol, name: $0.name, insertionText: $0.symbol) }
         
-        Publishers.CombineLatest3($rawExpression, $cursorPosition, $angleMode)
-            .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
-            .sink { [weak self] (expression, position, angle) in
-                guard let self = self else { return }
-
-                self.updateAutocompleteSuggestions(for: expression, at: position)
-
-                guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
-                    Task {
-                        self.lastSuccessfulValue = nil
-                        self.liveHelpText = ""
-                        self.liveErrorText = ""
-                        self.liveLaTeXPreview = ""
-                        self.lastCalculatedExpression = nil
-                        self.lastCalculatedAngleMode = nil
-                        self.livePreviewHeight = 60.0
-                    }
-                    return
-                }
-                
-                if expression == self.lastCalculatedExpression && angle == self.lastCalculatedAngleMode {
-                    Task {
-                        self.liveHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
-                    }
-                    return
-                }
-                
-                Task {
-                    await self.calculate(expression: expression, cursor: position)
-                    self.lastCalculatedExpression = expression
-                    self.lastCalculatedAngleMode = angle
-                }
-            }
-            .store(in: &cancellables)
+        // --- 4. REMOVED: The entire Publishers.CombineLatest3... block ---
             
         loadState()
     }
     
-    /// Replaces the currently typed word with the selected suggestion.
-    func selectAutocomplete(suggestion: AutocompleteSuggestion) {
-        Task {
-            let nsExpression = rawExpression as NSString
-            let textBeforeCursor = nsExpression.substring(to: cursorPosition.location)
-            
-            let separators = CharacterSet(charactersIn: " +-*/^()=,;[]{}").union(.whitespacesAndNewlines)
-            let rangeOfLastSeparator = textBeforeCursor.rangeOfCharacter(from: separators, options: .backwards)
-            
-            let locationOfWordStart: Int
-            if let range = rangeOfLastSeparator {
-                locationOfWordStart = textBeforeCursor.distance(from: textBeforeCursor.startIndex, to: range.upperBound)
-            } else {
-                locationOfWordStart = 0
-            }
-            
-            let lengthOfWord = cursorPosition.location - locationOfWordStart
-            let replacementNSRange = NSRange(location: locationOfWordStart, length: lengthOfWord)
+    // --- 5. ADDED: New functions to handle debouncing with Swift Concurrency ---
+    private func handleInputChange() {
+        // Cancel any previously scheduled task to reset the debounce timer
+        debounceTask?.cancel()
 
-            guard let replacementRange = Range(replacementNSRange, in: rawExpression) else { return }
-            
-            var newExpression = rawExpression
-            newExpression.replaceSubrange(replacementRange, with: suggestion.insertionText)
-            
-            self.rawExpression = newExpression
-            
-            let newLocation = locationOfWordStart + suggestion.insertionText.utf16.count
-            self.cursorPosition = NSRange(location: newLocation, length: 0)
+        // Schedule a new task to run after a 50ms delay
+        debounceTask = Task {
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+                
+                // If the task wasn't cancelled while it was sleeping, perform the update
+                guard !Task.isCancelled else { return }
+                
+                await performLiveUpdate()
 
-            Task {
-                self.showAutocomplete = false
-                self.autocompleteSuggestions = []
+            } catch {
+                // This catch block is needed to handle cancellation errors from Task.sleep
             }
         }
+    }
+
+    private func performLiveUpdate() async {
+        // This is the logic that was previously inside the Combine .sink { ... } block
+        let expression = self.rawExpression
+        let position = self.cursorPosition
+        let angle = self.angleMode
+
+        self.updateAutocompleteSuggestions(for: expression, at: position)
+
+        guard !expression.trimmingCharacters(in: .whitespaces).isEmpty else {
+            self.lastSuccessfulValue = nil
+            self.liveHelpText = ""
+            self.liveErrorText = ""
+            self.liveLaTeXPreview = ""
+            self.lastCalculatedExpression = nil
+            self.lastCalculatedAngleMode = nil
+            self.livePreviewHeight = 60.0
+            return
+        }
+        
+        if expression == self.lastCalculatedExpression && angle == self.lastCalculatedAngleMode {
+            self.liveHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
+            return
+        }
+        
+        await self.calculate(expression: expression, cursor: position)
+        self.lastCalculatedExpression = expression
+        self.lastCalculatedAngleMode = angle
+    }
+    
+    /// Replaces the currently typed word with the selected suggestion.
+    func selectAutocomplete(suggestion: AutocompleteSuggestion) {
+        let nsExpression = rawExpression as NSString
+        let textBeforeCursor = nsExpression.substring(to: cursorPosition.location)
+        
+        let separators = CharacterSet(charactersIn: " +-*/^()=,;[]{}").union(.whitespacesAndNewlines)
+        let rangeOfLastSeparator = textBeforeCursor.rangeOfCharacter(from: separators, options: .backwards)
+        
+        let locationOfWordStart: Int
+        if let range = rangeOfLastSeparator {
+            locationOfWordStart = textBeforeCursor.distance(from: textBeforeCursor.startIndex, to: range.upperBound)
+        } else {
+            locationOfWordStart = 0
+        }
+        
+        let lengthOfWord = cursorPosition.location - locationOfWordStart
+        let replacementNSRange = NSRange(location: locationOfWordStart, length: lengthOfWord)
+
+        guard let replacementRange = Range(replacementNSRange, in: rawExpression) else { return }
+        
+        var newExpression = rawExpression
+        newExpression.replaceSubrange(replacementRange, with: suggestion.insertionText)
+        
+        self.rawExpression = newExpression
+        
+        let newLocation = locationOfWordStart + suggestion.insertionText.utf16.count
+        self.cursorPosition = NSRange(location: newLocation, length: 0)
+
+        self.showAutocomplete = false
+        self.autocompleteSuggestions = []
     }
 
     
     /// Finds the word currently being typed and searches for matching variables and functions.
     private func updateAutocompleteSuggestions(for expression: String, at position: NSRange) {
+        // Run as a Task to avoid blocking the main thread during typing
         Task {
             guard position.location <= (expression as NSString).length else {
-                // This prevents a crash if the expression updates faster than the cursor position,
-                // leaving a position that is out of bounds for the now-empty string.
+                // This prevents a crash if the expression updates faster than the cursor position
                 self.autocompleteSuggestions = []
                 self.showAutocomplete = false
                 return
@@ -187,10 +213,8 @@ class CalculatorViewModel: ObservableObject {
             }
 
             guard !word.isEmpty else {
-                Task {
-                    self.autocompleteSuggestions = []
-                    self.showAutocomplete = false
-                }
+                self.autocompleteSuggestions = []
+                self.showAutocomplete = false
                 return
             }
 
@@ -220,22 +244,17 @@ class CalculatorViewModel: ObservableObject {
             
             let newSuggestions = Array(Set(suggestions)).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             
+            // Hide popover if there's only one suggestion and it's an exact match
             if newSuggestions.count == 1, let suggestion = newSuggestions.first, suggestion.name.lowercased() == lowercasedWord {
-                Task {
-                    self.showAutocomplete = false
-                    self.autocompleteSuggestions = []
-                }
+                self.showAutocomplete = false
+                self.autocompleteSuggestions = []
                 return
             }
             
             if self.autocompleteSuggestions != newSuggestions {
-                Task {
-                    self.autocompleteSuggestions = newSuggestions
-                }
+                self.autocompleteSuggestions = newSuggestions
             }
-            Task {
-                self.showAutocomplete = !newSuggestions.isEmpty
-            }
+            self.showAutocomplete = !newSuggestions.isEmpty
         }
     }
     

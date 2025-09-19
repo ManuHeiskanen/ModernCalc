@@ -12,7 +12,7 @@ import Charts
 private let chartColors: [Color] = [.blue, .green, .orange, .red, .purple, .pink, .teal, .indigo]
 
 struct PlotView: View {
-    @StateObject var viewModel: PlotViewModel
+    @State var viewModel: PlotViewModel
 
     // Helper to create a color map for the chart's legend and styles.
     // This ensures that the color assigned by the chart framework matches our manual color selection.
