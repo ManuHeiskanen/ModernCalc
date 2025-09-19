@@ -11,7 +11,6 @@ import SwiftUI
 struct CursorAwareTextField: NSViewRepresentable {
     @Binding var text: String
     @Binding var selectedRange: NSRange
-    // --- ADDED: A binding to report the cursor's frame back to SwiftUI ---
     @Binding var cursorRect: CGRect
 
     func makeCoordinator() -> Coordinator {
@@ -46,6 +45,14 @@ struct CursorAwareTextField: NSViewRepresentable {
 
         func setTextField(_ textField: NSTextField) {
             self.textField = textField
+            // Observe frame changes to update cursor rect on window resize/move
+            textField.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(viewFrameDidChange(_:)),
+                name: NSView.frameDidChangeNotification,
+                object: textField
+            )
         }
         
         /// Updates the NSTextField from SwiftUI state changes.
@@ -61,7 +68,6 @@ struct CursorAwareTextField: NSViewRepresentable {
             if let editor = textField.currentEditor() as? NSTextView, editor.selectedRange != selectedRange {
                 editor.selectedRange = selectedRange
                 
-                // --- ADDED: Update the cursor rectangle when selection changes programmatically ---
                 DispatchQueue.main.async {
                     self.updateCursorRect()
                 }
@@ -120,25 +126,32 @@ struct CursorAwareTextField: NSViewRepresentable {
             }
             
             parent.selectedRange = textView.selectedRange
-            // --- ADDED: Update the cursor rectangle whenever the selection changes ---
             updateCursorRect()
         }
         
-        /// --- ADDED: A helper to calculate the cursor's rect and update the binding ---
+        @objc func viewFrameDidChange(_ notification: Notification) {
+            updateCursorRect()
+        }
+        
+        /// --- MODIFIED: A simplified and more direct cursor position calculation ---
         private func updateCursorRect() {
-            guard let textField = self.textField, let editor = textField.currentEditor() as? NSTextView else { return }
+            guard let textField = self.textField,
+                  let editor = textField.currentEditor() as? NSTextView else { return }
             
-                let range = NSRange(location: editor.selectedRange.location, length: 0)
-                let rectInTextView = editor.firstRect(forCharacterRange: range, actualRange: nil)
-                
-                // The rect is relative to the NSTextView (the field editor).
-                // We convert it to the coordinate space of our parent NSTextField.
-                let rectInTextField = textField.convert(rectInTextView, from: editor)
-                
-                // Update the binding on the main thread to be safe
-                DispatchQueue.main.async {
-                    self.parent.cursorRect = rectInTextField
+            let range = NSRange(location: editor.selectedRange.location, length: 0)
+            
+            // 1. Get rect in the text editor's local coordinates.
+            let rectInEditor = editor.firstRect(forCharacterRange: range, actualRange: nil)
+
+            // 2. Convert the rect directly from the editor's coordinate system to the text field's system.
+            // This is more direct and avoids the buggy intermediate conversion to window coordinates.
+            let rectInTextField = editor.convert(rectInEditor, to: textField)
+            
+            // Update the binding on the main thread to be safe.
+            DispatchQueue.main.async {
+                self.parent.cursorRect = rectInTextField
             }
         }
     }
 }
+
