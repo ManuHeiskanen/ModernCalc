@@ -18,7 +18,7 @@ struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
     /// Provides the text that should be inserted into the expression field.
     /// For functions, it automatically adds an opening parenthesis.
     var insertionText: String {
-        if type == "function" {
+        if type == "function" || type == "user_function" {
             if description.contains("(") {
                 return name + "("
             }
@@ -221,7 +221,7 @@ class CalculatorViewModel {
                 .map { name in
                     let node = functions[name]!
                     let signature = "\(name)(\(node.parameterNames.joined(separator: ", ")))"
-                    return AutocompleteSuggestion(name: name, type: "function", description: signature)
+                    return AutocompleteSuggestion(name: name, type: "user_function", description: signature)
                 }
             )
             suggestions.append(contentsOf: variables.keys

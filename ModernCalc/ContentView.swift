@@ -213,10 +213,12 @@ struct AutocompletePillView: View {
         switch type {
         case "function":
             return .indigo.opacity(0.2)
+        case "user_function":
+            return .purple.opacity(0.2)
         case "variable":
             return .teal.opacity(0.2)
         case "constant":
-            return .orange.opacity(0.2)
+            return .yellow.opacity(0.2)
         default:
             return Color.primary.opacity(0.1)
         }
@@ -682,7 +684,6 @@ struct CalculatorInputView: View {
     var onTap: () -> Void
     
     @State private var isShowingSymbolsPopover = false
-    @State private var cursorRect: CGRect = .zero
 
     var body: some View {
         HStack(spacing: 0) {
@@ -691,7 +692,7 @@ struct CalculatorInputView: View {
                     SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
                 }
             
-            CursorAwareTextField(text: $expression, selectedRange: $cursorPosition, cursorRect: $cursorRect)
+            CursorAwareTextField(text: $expression, selectedRange: $cursorPosition)
                 .onTapGesture { onTap() }
                 .padding(.horizontal)
                 .font(.system(size: 26, weight: .regular, design: .monospaced))
@@ -755,4 +756,3 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
-
