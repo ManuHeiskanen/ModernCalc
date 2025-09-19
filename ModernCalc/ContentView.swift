@@ -210,38 +210,58 @@ struct AutocompletePillView: View {
     }
 }
 
-// --- FIX: Replaced @State-based animation with TimelineView ---
+// --- FIX: Replaced TimelineView with a controlled Timer to save power ---
 struct ShimmerView: View {
+    @Environment(\.controlActiveState) private var controlActiveState
+    @State private var phase: CGFloat = -2.0
+    @State private var timer: Timer?
+
     var body: some View {
-        // TimelineView provides a time-based context to drive the animation
-        // without needing a @State variable, which prevents the animation from
-        // affecting parent views.
-        TimelineView(.animation) { context in
-            // Calculate a phase value based on the current time.
-            // Using sin() creates a smooth back-and-forth oscillation.
-            let time = context.date.timeIntervalSince1970
-            let phase = sin(time * 2) // A value that cycles between -1 and 1
+        ZStack {
+            Color.gray.opacity(0.1)
 
-            ZStack {
-                Color.gray.opacity(0.1)
-
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                .gray.opacity(0.1),
-                                .gray.opacity(0.25),
-                                .gray.opacity(0.1)
-                            ]),
-                            // The start and end points of the gradient move based on the phase.
-                            startPoint: .init(x: phase - 1, y: 0.5),
-                            endPoint: .init(x: phase + 1, y: 0.5)
-                        )
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            .gray.opacity(0.1),
+                            .gray.opacity(0.25),
+                            .gray.opacity(0.1)
+                        ]),
+                        startPoint: .init(x: phase, y: 0.5),
+                        endPoint: .init(x: phase + 2.0, y: 0.5)
                     )
-            }
-            // .drawingGroup() is still good for performance here, but it wasn't the root cause.
-            .drawingGroup()
+                )
         }
+        .drawingGroup()
+        .onAppear(perform: startTimer)
+        .onDisappear(perform: stopTimer)
+        .onChange(of: controlActiveState) { oldState, newState in
+            if newState == .active {
+                startTimer()
+            } else {
+                stopTimer()
+            }
+        }
+    }
+
+    private func startTimer() {
+        guard timer == nil else { return }
+        
+        // This timer triggers a quick 1.5-second animation every 10 seconds.
+        timer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
+            phase = -2.0 // Reset to the start
+            withAnimation(.linear(duration: 1.5)) {
+                phase = 2.0 // Animate to the end
+            }
+        }
+        // Fire the timer immediately for the first animation cycle.
+        timer?.fire()
+    }
+
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
     }
 }
 
@@ -722,3 +742,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
