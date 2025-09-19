@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-// --- 1. REMOVED: import Combine ---
 
 /// A structure to hold information about a single autocomplete suggestion.
 struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
@@ -33,7 +32,6 @@ struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
 @MainActor
 class CalculatorViewModel {
 
-    // --- 2. MODIFIED: Removed @Published and added didSet ---
     var rawExpression: String = "" {
         didSet { handleInputChange() }
     }
@@ -50,16 +48,13 @@ class CalculatorViewModel {
     var autocompleteSuggestions: [AutocompleteSuggestion] = []
     var showAutocomplete = false
     
-    // --- 2. MODIFIED: Removed @Published and added didSet ---
     var angleMode: AngleMode = .degrees {
         didSet {
-            // Keep the original logic and add the new handler
             saveState()
             handleInputChange()
         }
     }
     var userFunctionDefinitions: [String: String] = [:]
-    // --- 2. MODIFIED: Removed @Published and added didSet ---
     var cursorPosition = NSRange() {
         didSet { handleInputChange() }
     }
@@ -74,7 +69,6 @@ class CalculatorViewModel {
     private let evaluator = Evaluator()
     private var lastSuccessfulValue: MathValue?
     private var lastUsedAngleFlag: Bool = false
-    // --- 3. REPLACED: Combine's cancellables with a Task for debouncing ---
     private var debounceTask: Task<Void, Never>?
     private let navigationManager = NavigationManager()
     private let ansVariable = "ans"
@@ -101,13 +95,10 @@ class CalculatorViewModel {
         self.helpTopics = TextContents.helpTopics
         
         self.constantSymbols = TextContents.physicalConstants.map { .init(symbol: $0.symbol, name: $0.name, insertionText: $0.symbol) }
-        
-        // --- 4. REMOVED: The entire Publishers.CombineLatest3... block ---
             
         loadState()
     }
     
-    // --- 5. ADDED: New functions to handle debouncing with Swift Concurrency ---
     private func handleInputChange() {
         // Cancel any previously scheduled task to reset the debounce timer
         debounceTask?.cancel()

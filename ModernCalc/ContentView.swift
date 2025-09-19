@@ -15,7 +15,6 @@ struct ContentView: View {
     @State private var isShowingSheet = false
     @Environment(\.openWindow) private var openWindow
     
-    // --- ADDED: State for toolbar button hover effects ---
     @State private var isHoveringOnMenuButton = false
     @State private var isHoveringOnCSVButton = false
     
@@ -43,6 +42,13 @@ struct ContentView: View {
                 greekSymbols: viewModel.greekSymbols
             )
             .frame(height: viewModel.livePreviewHeight)
+            .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight)
+
+            Divider()
+
+            ActionShelfView(viewModel: viewModel)
+                .frame(height: 45)
+
             Divider()
 
             CalculatorInputView(
@@ -86,7 +92,6 @@ struct ContentView: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight)
         .frame(minWidth: 410, minHeight: 300)
         .toolbar {
             ToolbarItemGroup(placement: .principal) {
@@ -161,6 +166,85 @@ struct ContentView: View {
 }
 
 // --- Subviews ---
+
+struct ActionShelfView: View {
+    @Bindable var viewModel: CalculatorViewModel
+
+    var body: some View {
+        ZStack {
+            if viewModel.showAutocomplete && !viewModel.autocompleteSuggestions.isEmpty {
+                AutocompletePillView(viewModel: viewModel)
+                    .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+            } else {
+                ShimmerView()
+                    .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+            }
+        }
+        .clipped()
+    }
+}
+
+struct AutocompletePillView: View {
+    @Bindable var viewModel: CalculatorViewModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(viewModel.autocompleteSuggestions) { suggestion in
+                    Button(action: {
+                        viewModel.selectAutocomplete(suggestion: suggestion)
+                    }) {
+                        Text(suggestion.insertionText)
+                            .font(.system(.callout, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.primary.opacity(0.1))
+                            .foregroundColor(.primary)
+                            .cornerRadius(16)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+}
+
+// --- FIX: Replaced @State-based animation with TimelineView ---
+struct ShimmerView: View {
+    var body: some View {
+        // TimelineView provides a time-based context to drive the animation
+        // without needing a @State variable, which prevents the animation from
+        // affecting parent views.
+        TimelineView(.animation) { context in
+            // Calculate a phase value based on the current time.
+            // Using sin() creates a smooth back-and-forth oscillation.
+            let time = context.date.timeIntervalSince1970
+            let phase = sin(time * 2) // A value that cycles between -1 and 1
+
+            ZStack {
+                Color.gray.opacity(0.1)
+
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                .gray.opacity(0.1),
+                                .gray.opacity(0.25),
+                                .gray.opacity(0.1)
+                            ]),
+                            // The start and end points of the gradient move based on the phase.
+                            startPoint: .init(x: phase - 1, y: 0.5),
+                            endPoint: .init(x: phase + 1, y: 0.5)
+                        )
+                    )
+            }
+            // .drawingGroup() is still good for performance here, but it wasn't the root cause.
+            .drawingGroup()
+        }
+    }
+}
+
 
 struct HistoryView: View {
     @Bindable var viewModel: CalculatorViewModel
@@ -574,103 +658,23 @@ struct CalculatorInputView: View {
                     SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
                 }
             
-            ZStack(alignment: .topLeading) {
-                HStack(spacing: 0) {
-                    Text(expression).font(.system(size: 26, weight: .regular, design: .monospaced)).opacity(0)
-                    if !previewText.isEmpty && !expression.isEmpty { Text(previewText).font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary) }
-                    if expression.isEmpty { Text(previewText.isEmpty ? "Enter expression..." : previewText).font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary) }
-                }
-
-                // The text field itself is at the bottom of the ZStack
-                CursorAwareTextField(text: $expression, selectedRange: $cursorPosition, cursorRect: $cursorRect)
-                    .onTapGesture { onTap() }
-                
-                Color.clear
-                    .frame(width: 1, height: cursorRect.height)
-                    .offset(x: cursorRect.origin.x, y: cursorRect.origin.y)
-                    .popover(isPresented: $viewModel.showAutocomplete,
-                             attachmentAnchor: .rect(.bounds), // Anchor to the bounds of this invisible view
-                             arrowEdge: .bottom) {
-                        AutocompleteView(viewModel: viewModel)
+            CursorAwareTextField(text: $expression, selectedRange: $cursorPosition, cursorRect: $cursorRect)
+                .onTapGesture { onTap() }
+                .padding(.horizontal)
+                .font(.system(size: 26, weight: .regular, design: .monospaced))
+                .overlay(alignment: .leading) {
+                    if expression.isEmpty {
+                        Text(previewText.isEmpty ? "Enter expression..." : previewText)
+                            .font(.system(size: 26, weight: .regular, design: .monospaced))
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal)
+                            .allowsHitTesting(false)
                     }
-            }
-            .padding(.horizontal)
-            Spacer()
+                }
         }
         .frame(height: 70)
     }
 }
-
-struct AutocompleteView: View {
-    @Bindable var viewModel: CalculatorViewModel
-    @State private var selectedSuggestionId: UUID?
-
-    var body: some View {
-        let estimatedRowHeight: CGFloat = 58
-        let idealHeight = CGFloat(viewModel.autocompleteSuggestions.count) * estimatedRowHeight
-        let maxHeight: CGFloat = 280
-
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(viewModel.autocompleteSuggestions) { suggestion in
-                    Button(action: {
-                        viewModel.selectAutocomplete(suggestion: suggestion)
-                    }) {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(suggestion.name)
-                                    .font(.system(.body, design: .monospaced))
-                                    .fontWeight(.bold)
-                                Text(suggestion.description)
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(2)
-                            }
-                            Spacer()
-                            Text(suggestion.type)
-                                .font(.system(.caption, design: .monospaced).bold())
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(colorForType(suggestion.type).opacity(0.8))
-                                .cornerRadius(4)
-                        }
-                        .padding(8)
-                        .background(selectedSuggestionId == suggestion.id ? Color.accentColor.opacity(0.2) : Color.clear)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .cornerRadius(6)
-                    .onHover { isHovering in
-                        if isHovering {
-                            selectedSuggestionId = suggestion.id
-                        } else if selectedSuggestionId == suggestion.id {
-                            selectedSuggestionId = nil
-                        }
-                    }
-                    
-                    if suggestion.id != viewModel.autocompleteSuggestions.last?.id {
-                        Divider().padding(.horizontal, 8)
-                    }
-                }
-            }
-        }
-        .padding(4)
-        .frame(width: 380)
-        .frame(height: min(idealHeight, maxHeight))
-        .animation(.default, value: viewModel.autocompleteSuggestions)
-    }
-
-    private func colorForType(_ type: String) -> Color {
-        switch type {
-        case "function": return .blue
-        case "variable": return .green
-        case "constant": return .purple
-        default: return .gray
-        }
-    }
-}
-
 
 struct SymbolsGridView: View {
     @Bindable var viewModel: CalculatorViewModel
