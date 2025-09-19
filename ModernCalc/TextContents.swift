@@ -141,7 +141,7 @@ struct TextContents {
         .init(symbol: "b", name: "Wien's displacement", value: 2.897771955e-3),
         .init(symbol: "c", name: "Speed of light", value: 299792458),
         .init(symbol: "c0", name: "Speed of sound (STP)", value: 343),
-        .init(symbol: "e", name: "Elementary charge", value: 1.602176634e-19),
+        .init(symbol: "e0", name: "Elementary charge", value: 1.602176634e-19),
         .init(symbol: "g", name: "Standard gravity", value: 9.80665),
         .init(symbol: "G", name: "Gravitational constant", value: 6.67430e-11),
         .init(symbol: "h", name: "Planck constant", value: 6.62607015e-34),
