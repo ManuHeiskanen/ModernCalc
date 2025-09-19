@@ -25,6 +25,19 @@ struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
         }
         return name
     }
+    
+    /// Provides the text that should be displayed in the autocomplete pill.
+    /// e.g., "cos()", "f(x, y)", "my_variable"
+    var displayText: String {
+        if type == "function" {
+            return name + "()"
+        }
+        if type == "user_function" {
+            // The description field for user functions is already the desired signature.
+            return description
+        }
+        return name
+    }
 }
 
 

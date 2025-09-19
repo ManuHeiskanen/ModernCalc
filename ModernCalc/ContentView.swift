@@ -194,7 +194,7 @@ struct AutocompletePillView: View {
                     Button(action: {
                         viewModel.selectAutocomplete(suggestion: suggestion)
                     }) {
-                        Text(suggestion.insertionText)
+                        Text(suggestion.displayText)
                             .font(.system(.callout, design: .monospaced))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -763,3 +763,4 @@ struct GreekSymbolsGridView: View {
         .padding().frame(width: 320)
     }
 }
+
