@@ -1,6 +1,40 @@
 import Foundation
 
-// --- NEW: A struct to represent a value with its associated physical dimensions. ---
+// --- NEW: A struct to represent a complex value with its associated physical dimensions ---
+struct ComplexUnitValue: Equatable, Codable {
+    var value: Complex
+    var dimensions: UnitDimension
+
+    static func + (lhs: ComplexUnitValue, rhs: ComplexUnitValue) throws -> ComplexUnitValue {
+        guard lhs.dimensions == rhs.dimensions else {
+            throw MathError.dimensionMismatch(reason: "Cannot add quantities with different units.")
+        }
+        return ComplexUnitValue(value: lhs.value + rhs.value, dimensions: lhs.dimensions)
+    }
+
+    static func - (lhs: ComplexUnitValue, rhs: ComplexUnitValue) throws -> ComplexUnitValue {
+        guard lhs.dimensions == rhs.dimensions else {
+            throw MathError.dimensionMismatch(reason: "Cannot subtract quantities with different units.")
+        }
+        return ComplexUnitValue(value: lhs.value - rhs.value, dimensions: lhs.dimensions)
+    }
+
+    static func * (lhs: ComplexUnitValue, rhs: ComplexUnitValue) -> ComplexUnitValue {
+        let newValue = lhs.value * rhs.value
+        let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+        return ComplexUnitValue(value: newValue, dimensions: newDimensions)
+    }
+
+    static func / (lhs: ComplexUnitValue, rhs: ComplexUnitValue) throws -> ComplexUnitValue {
+        let newValue = try lhs.value / rhs.value
+        let negatedRhsDimensions = rhs.dimensions.mapValues { -$0 }
+        let newDimensions = lhs.dimensions.merging(negatedRhsDimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+        return ComplexUnitValue(value: newValue, dimensions: newDimensions)
+    }
+}
+
+
+// --- A struct to represent a value with its associated physical dimensions. ---
 struct UnitValue: Equatable, Codable {
     var value: Double
     var dimensions: UnitDimension
@@ -11,7 +45,6 @@ struct UnitValue: Equatable, Codable {
         return UnitValue(value: value, dimensions: [:])
     }
     
-    // FIX: Centralized factory method to automatically set preferred display units.
     static func create(value: Double, dimensions: UnitDimension) -> UnitValue {
         let preferred = UnitStore.commonDerivedUnits[dimensions]
         return UnitValue(value: value, dimensions: dimensions, preferredDisplayUnit: preferred)
@@ -69,25 +102,16 @@ struct UnitValue: Equatable, Codable {
 
 // --- CORE DATA TYPES ---
 
-// ADVANCED MODEL: A struct to represent a value with its associated uncertainties,
-// separating random (statistical) and systematic components.
-// --- MODIFIED: UncertainValue is now unit-aware. ---
 struct UncertainValue: Equatable, Codable {
     var value: Double
-    var randomUncertainty: Double // Statistical, Type A
-    var systematicUncertainty: Double // Systematic, Type B
-    var dimensions: UnitDimension // Added
+    var randomUncertainty: Double
+    var systematicUncertainty: Double
+    var dimensions: UnitDimension
 
-    // A computed property for the total combined uncertainty.
-    // Random and systematic uncertainties are combined in quadrature.
     var totalUncertainty: Double {
         return Foundation.sqrt(Foundation.pow(randomUncertainty, 2) + Foundation.pow(systematicUncertainty, 2))
     }
 
-    // --- Operator Overloads with Advanced Propagation ---
-
-    // For addition and subtraction:
-    // - Random and systematic uncertainties are combined in quadrature (GUM standard).
     static func + (lhs: UncertainValue, rhs: UncertainValue) throws -> UncertainValue {
         guard lhs.dimensions == rhs.dimensions else {
             throw MathError.dimensionMismatch(reason: "Cannot add uncertain values with different units.")
@@ -108,12 +132,10 @@ struct UncertainValue: Equatable, Codable {
         return UncertainValue(value: newValue, randomUncertainty: newRandom, systematicUncertainty: newSystematic, dimensions: lhs.dimensions)
     }
     
-    // For multiplication and division, we combine the *relative* uncertainties.
     static func * (lhs: UncertainValue, rhs: UncertainValue) -> UncertainValue {
         let newValue = lhs.value * rhs.value
         let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
         
-        // Handle cases where a value is zero to avoid division by zero
         if lhs.value == 0 || rhs.value == 0 {
             let unc_A_due_to_lhs = rhs.value * lhs.randomUncertainty
             let unc_A_due_to_rhs = lhs.value * rhs.randomUncertainty
@@ -170,7 +192,6 @@ struct UncertainValue: Equatable, Codable {
         )
     }
     
-    // Power propagation: u_f = |f * n * (u_x / x)|
     func pow(_ exponent: Double) -> UncertainValue {
         guard self.value != 0 else { return self }
         let newValue = Foundation.pow(self.value, exponent)
@@ -178,8 +199,6 @@ struct UncertainValue: Equatable, Codable {
         let relativeUncertainty = self.totalUncertainty / self.value
         let newTotalUncertainty = abs(newValue * exponent * relativeUncertainty)
         
-        // We'll assume the ratio of random to systematic uncertainty remains the same.
-        // A more rigorous treatment might be needed for complex cases, but this is a reasonable approximation.
         let randomRatio = self.totalUncertainty > 0 ? self.randomUncertainty / self.totalUncertainty : 0
         
         return UncertainValue(
@@ -190,13 +209,10 @@ struct UncertainValue: Equatable, Codable {
         )
     }
     
-    // Unary minus flips the value but leaves uncertainties as positive values.
     static prefix func - (operand: UncertainValue) -> UncertainValue {
         return UncertainValue(value: -operand.value, randomUncertainty: operand.randomUncertainty, systematicUncertainty: operand.systematicUncertainty, dimensions: operand.dimensions)
     }
     
-    // General function propagation: u_f = |f'(x)| * u_x
-    // This is applied to both random and systematic components.
     func propagate(derivative: Double) -> UncertainValue {
         return UncertainValue(
             value: self.value,
@@ -271,22 +287,20 @@ struct Complex: Equatable, Codable {
     }
 }
 
-// --- MODIFIED: Vector is now unit-aware ---
 struct Vector: Equatable, Codable {
     let values: [Double]
-    let dimensions: UnitDimension // Added
+    let dimensions: UnitDimension
     var dimension: Int { values.count }
     
     init(values: [Double], dimensions: UnitDimension = [:]) {
         self.values = values
-        self.dimensions = dimensions // Added
+        self.dimensions = dimensions
     }
     
     subscript(index: Int) -> Double {
         return values[index]
     }
     
-    // --- Vector Operations (Now Unit-Aware) ---
     func dot(with other: Vector) throws -> UnitValue {
         guard self.dimension == other.dimension else {
             throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for dot product.")
@@ -323,7 +337,6 @@ struct Vector: Equatable, Codable {
     func unit() -> Vector {
         let mag = self.magnitude().value
         guard mag != 0 else { return self }
-        // A unit vector is dimensionless by definition.
         return Vector(values: self.values.map { $0 / mag }, dimensions: [:])
     }
 
@@ -345,7 +358,6 @@ struct Vector: Equatable, Codable {
         return Vector(values: newValues, dimensions: self.dimensions)
     }
 
-    // --- Vector-Vector Operators ---
     static func + (lhs: Vector, rhs: Vector) throws -> Vector {
         guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimensions for addition.") }
         guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have same units for addition.") }
@@ -357,7 +369,6 @@ struct Vector: Equatable, Codable {
         return Vector(values: zip(lhs.values, rhs.values).map(-), dimensions: lhs.dimensions)
     }
 
-    // Outer product
     static func * (lhs: Vector, rhs: Vector) -> Matrix {
         let newValues = [Double](repeating: 0, count: lhs.dimension * rhs.dimension).enumerated().map { (idx, _) -> Double in
             let i = idx / rhs.dimension
@@ -368,7 +379,6 @@ struct Vector: Equatable, Codable {
         return Matrix(values: newValues, rows: lhs.dimension, columns: rhs.dimension, dimensions: newDimensions)
     }
 
-    // --- Scalar-Vector Operators ---
     static func + (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 + rhs }, dimensions: lhs.dimensions) }
     static func + (lhs: Double, rhs: Vector) -> Vector { rhs + lhs }
     static func - (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 - rhs }, dimensions: lhs.dimensions) }
@@ -378,7 +388,6 @@ struct Vector: Equatable, Codable {
     static func / (lhs: Vector, rhs: Double) -> Vector { Vector(values: lhs.values.map { $0 / rhs }, dimensions: lhs.dimensions) }
     static func / (lhs: Double, rhs: Vector) -> Vector { Vector(values: rhs.values.map { lhs / $0 }, dimensions: rhs.dimensions.mapValues { -$0 }) }
     
-    // --- Vector-Matrix Multiplication (Row Vector * Matrix) ---
     static func * (lhs: Vector, rhs: Matrix) throws -> Vector {
         guard lhs.dimension == rhs.rows else {
             throw MathError.dimensionMismatch(reason: "For v*M, dimension of v must equal rows of M.")
@@ -391,7 +400,6 @@ struct Vector: Equatable, Codable {
         return Vector(values: newValues, dimensions: newDimensions)
     }
     
-    // --- Statistical Helpers (Now Returning UnitValue) ---
     func sum() -> UnitValue { UnitValue.create(value: values.reduce(0, +), dimensions: self.dimensions) }
     func average() -> UnitValue {
         guard !values.isEmpty else { return UnitValue.create(value: 0, dimensions: self.dimensions) }
@@ -432,25 +440,23 @@ struct Vector: Equatable, Codable {
     }
 }
 
-// --- MODIFIED: Matrix is now unit-aware ---
 struct Matrix: Equatable, Codable {
     let values: [Double]
     let rows: Int
     let columns: Int
-    let dimensions: UnitDimension // Added
+    let dimensions: UnitDimension
     
     init(values: [Double], rows: Int, columns: Int, dimensions: UnitDimension = [:]) {
         self.values = values
         self.rows = rows
         self.columns = columns
-        self.dimensions = dimensions // Added
+        self.dimensions = dimensions
     }
     
     subscript(row: Int, col: Int) -> Double {
         return values[row * columns + col]
     }
     
-    // --- Matrix Operations (Now Unit-Aware) ---
     func submatrix(excludingRow: Int, excludingCol: Int) -> Matrix {
         var newValues: [Double] = []
         for r in 0..<rows {
@@ -577,7 +583,6 @@ struct Matrix: Equatable, Codable {
         return Vector(values: rowValues, dimensions: self.dimensions)
     }
     
-    // --- Matrix-Matrix Operators ---
     static func + (lhs: Matrix, rhs: Matrix) throws -> Matrix {
         guard lhs.rows == rhs.rows && lhs.columns == rhs.columns else { throw MathError.dimensionMismatch(reason: "Matrices must have same dimensions for +/-.") }
         guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Matrices must have the same units for addition.") }
@@ -591,7 +596,6 @@ struct Matrix: Equatable, Codable {
     }
 
     static func * (lhs: Matrix, rhs: Matrix) throws -> Matrix {
-        // FIX: Handle scalar multiplication when one matrix is 1x1.
         if lhs.rows == 1 && lhs.columns == 1 {
             let scalar = lhs.values[0]
             let newValues = rhs.values.map { scalar * $0 }
@@ -605,8 +609,6 @@ struct Matrix: Equatable, Codable {
             return Matrix(values: newValues, rows: lhs.rows, columns: lhs.columns, dimensions: newDimensions)
         }
         
-        // FIX: Automatically transpose a row vector on the right-hand side if it makes the multiplication valid.
-        // This makes expressions like matrix * vector(a,b,c) work as expected.
         if lhs.columns != rhs.rows && rhs.rows == 1 && lhs.columns == rhs.columns {
             return try lhs * rhs.transpose()
         }
@@ -618,7 +620,6 @@ struct Matrix: Equatable, Codable {
         return Matrix(values: newValues, rows: lhs.rows, columns: rhs.columns, dimensions: newDimensions)
     }
 
-    // --- Matrix-Vector Multiplication ---
     static func * (lhs: Matrix, rhs: Vector) throws -> Vector {
         guard lhs.columns == rhs.dimension else {
             throw MathError.dimensionMismatch(reason: "For M*v, columns of M must equal dimension of v.")
@@ -629,7 +630,6 @@ struct Matrix: Equatable, Codable {
     }
 }
 
-// --- Standalone Math Functions ---
 func factorial(_ n: Double) throws -> Double {
     guard n >= 0 && n.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "non-negative integer", found: "number") }
     if n == 0 { return 1 }
@@ -646,10 +646,9 @@ func combinations(n: Double, k: Double) throws -> Double {
     return try permutations(n: n, k: k) / factorial(k)
 }
 
-// --- MODIFIED: ComplexVector is now unit-aware ---
 struct ComplexVector: Equatable, Codable {
     let values: [Complex]
-    let dimensions: UnitDimension // Added
+    let dimensions: UnitDimension
     var dimension: Int { values.count }
     
     init(values: [Complex], dimensions: UnitDimension = [:]) { self.values = values; self.dimensions = dimensions }
@@ -689,7 +688,6 @@ struct ComplexVector: Equatable, Codable {
         return ComplexVector(values: zip(lhs.values, rhs.values).map(-), dimensions: lhs.dimensions)
     }
     
-    // Outer Product
     static func * (lhs: ComplexVector, rhs: ComplexVector) -> ComplexMatrix {
         let newValues = (0..<lhs.dimension).flatMap { i in (0..<rhs.dimension).map { j in lhs[i] * rhs[j] } }
         let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
@@ -711,12 +709,11 @@ struct ComplexVector: Equatable, Codable {
     }
 }
 
-// --- MODIFIED: ComplexMatrix is now unit-aware ---
 struct ComplexMatrix: Equatable, Codable {
     let values: [Complex]
     let rows: Int
     let columns: Int
-    let dimensions: UnitDimension // Added
+    let dimensions: UnitDimension
     
     init(values: [Complex], rows: Int, columns: Int, dimensions: UnitDimension = [:]) { self.values = values; self.rows = rows; self.columns = columns; self.dimensions = dimensions }
     init(from realMatrix: Matrix) { self.values = realMatrix.values.map { Complex(real: $0, imaginary: 0) }; self.rows = realMatrix.rows; self.columns = realMatrix.columns; self.dimensions = realMatrix.dimensions }
@@ -821,7 +818,6 @@ struct ComplexMatrix: Equatable, Codable {
     static func / (lhs: ComplexMatrix, rhs: Complex) throws -> ComplexMatrix { try ComplexMatrix(values: lhs.values.map { try $0 / rhs }, rows: lhs.rows, columns: lhs.columns, dimensions: lhs.dimensions) }
 }
 
-/// A struct to hold the results of a polynomial fit, where each coefficient can have a different unit.
 struct PolynomialCoefficients: Equatable, Codable {
     let coefficients: [UnitValue]
 }
@@ -836,6 +832,7 @@ enum MathValue: Codable, Equatable {
     case functionDefinition(String)
     case complexVector(ComplexVector)
     case complexMatrix(ComplexMatrix)
+    case complexUnitValue(ComplexUnitValue) // NEW
     case polar(Complex)
     case constant(String)
     case regressionResult(slope: UnitValue, intercept: UnitValue)
@@ -856,6 +853,7 @@ enum MathValue: Codable, Equatable {
         case .functionDefinition: return "FunctionDefinition"
         case .complexVector: return "ComplexVector"
         case .complexMatrix: return "ComplexMatrix"
+        case .complexUnitValue: return "ComplexUnitValue" // NEW
         case .polar: return "Polar"
         case .regressionResult: return "RegressionResult"
         case .polynomialFit: return "PolynomialFit"
@@ -867,7 +865,6 @@ enum MathValue: Codable, Equatable {
         }
     }
     
-    // FIX: Moved asScalar() inside the main enum definition.
     func asScalar() throws -> Double {
         switch self {
         case .dimensionless(let d):
@@ -878,7 +875,6 @@ enum MathValue: Codable, Equatable {
             }
             return u.value
         case .uncertain(let u):
-            // --- MODIFIED: Check for dimensions in UncertainValue ---
             guard u.dimensions.isEmpty else {
                 throw MathError.typeMismatch(expected: "Dimensionless uncertain value", found: "Uncertain value with units")
             }
@@ -898,7 +894,6 @@ enum MathValue: Codable, Equatable {
         }
     }
     
-    // --- FIX: New helper function to treat single-row/column matrices as vectors. ---
     func asVector(for functionName: String) throws -> Vector {
         switch self {
         case .vector(let v):
@@ -928,6 +923,7 @@ enum MathValue: Codable, Equatable {
         case .functionDefinition(let f): try container.encode("functionDefinition", forKey: .type); try container.encode(f, forKey: .value)
         case .complexVector(let cv): try container.encode("complexVector", forKey: .type); try container.encode(cv, forKey: .value)
         case .complexMatrix(let cm): try container.encode("complexMatrix", forKey: .type); try container.encode(cm, forKey: .value)
+        case .complexUnitValue(let cu): try container.encode("complexUnitValue", forKey: .type); try container.encode(cu, forKey: .value) // NEW
         case .polar(let p): try container.encode("polar", forKey: .type); try container.encode(p, forKey: .value)
         case .regressionResult(let slope, let intercept):
             try container.encode("regressionResult", forKey: .type); try container.encode(slope, forKey: .slope); try container.encode(intercept, forKey: .intercept)
@@ -939,7 +935,6 @@ enum MathValue: Codable, Equatable {
             try container.encode("uncertain", forKey: .type); try container.encode(u, forKey: .value)
         case .roots(let r):
             try container.encode("roots", forKey: .type); try container.encode(r, forKey: .value)
-        // FIX: Handle cases for Codable conformance
         case .plot:
             try container.encode("plot", forKey: .type)
         case .triggerCSVImport:
@@ -960,6 +955,7 @@ enum MathValue: Codable, Equatable {
         case "functionDefinition": self = .functionDefinition(try container.decode(String.self, forKey: .value))
         case "complexVector": self = .complexVector(try container.decode(ComplexVector.self, forKey: .value))
         case "complexMatrix": self = .complexMatrix(try container.decode(ComplexMatrix.self, forKey: .value))
+        case "complexUnitValue": self = .complexUnitValue(try container.decode(ComplexUnitValue.self, forKey: .value)) // NEW
         case "polar": self = .polar(try container.decode(Complex.self, forKey: .value))
         case "regressionResult":
             let slope = try container.decode(UnitValue.self, forKey: .slope); let intercept = try container.decode(UnitValue.self, forKey: .intercept)
@@ -973,7 +969,6 @@ enum MathValue: Codable, Equatable {
         case "roots":
             if let doubleRoots = try? container.decode([Double].self, forKey: .value) { self = .roots(doubleRoots.map { .dimensionless($0) }) }
             else { self = .roots(try container.decode([MathValue].self, forKey: .value)) }
-        // FIX: Handle cases for Codable conformance
         case "plot": self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
         }
@@ -990,6 +985,7 @@ enum MathValue: Codable, Equatable {
         case (.functionDefinition(let a), .functionDefinition(let b)): return a == b
         case (.complexVector(let a), .complexVector(let b)): return a == b
         case (.complexMatrix(let a), .complexMatrix(let b)): return a == b
+        case (.complexUnitValue(let a), .complexUnitValue(let b)): return a == b // NEW
         case (.polar(let a), .polar(let b)): return a == b
         case (.regressionResult(let s1, let i1), .regressionResult(let s2, let i2)): return s1 == s2 && i1 == i2
         case (.polynomialFit(let c1), .polynomialFit(let c2)): return c1 == c2
@@ -1003,7 +999,6 @@ enum MathValue: Codable, Equatable {
     }
 }
 
-// Helper extension to chunk an array into smaller arrays.
 extension Array {
     func chunks(ofCount chunkSize: Int) -> [[Element]] {
         return stride(from: 0, to: self.count, by: chunkSize).map {
@@ -1011,3 +1006,4 @@ extension Array {
         }
     }
 }
+

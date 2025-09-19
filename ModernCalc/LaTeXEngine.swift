@@ -88,6 +88,8 @@ struct LaTeXEngine {
                     let formattedBase = String(base).replacingOccurrences(of: "π", with: "\\pi")
                     let formattedSubscript = String(subscriptPart).replacingOccurrences(of: "π", with: "\\pi")
                     return "\(formattedBase)_{\(formattedSubscript)}"
+                } else {
+                    return "\(String(base))_{\(String(subscriptPart))}"
                 }
             }
             
@@ -319,6 +321,32 @@ struct LaTeXEngine {
             let matrix = "\\begin{bmatrix} \(rows) \\end{bmatrix}"
             let unitStr = formatDimensions(cm.dimensions)
             return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
+        case .complexUnitValue(let cu):
+            let complexValue = cu.value
+            let dimensions = cu.dimensions
+            
+            if dimensions.isEmpty {
+                return formatComplex(complexValue, settings: settings)
+            }
+            
+            let unitStr: String
+            let complexStrToFormat: String
+
+            if let bestUnit = findBestUnitFor(dimensions: dimensions) {
+                let convertedReal = complexValue.real / bestUnit.conversionFactor
+                let convertedImag = complexValue.imaginary / bestUnit.conversionFactor
+                let convertedComplex = Complex(real: convertedReal, imaginary: convertedImag)
+                complexStrToFormat = formatComplex(convertedComplex, settings: settings)
+                unitStr = formatUnitSymbol(bestUnit.symbol)
+            } else if let compoundUnitString = UnitStore.commonCompoundUnits[dimensions] {
+                complexStrToFormat = formatComplex(complexValue, settings: settings) // Already in base SI
+                unitStr = formatUnitSymbol(compoundUnitString)
+            } else {
+                complexStrToFormat = formatComplex(complexValue, settings: settings) // Already in base SI
+                unitStr = formatDimensions(dimensions)
+            }
+            
+            return "\\left( \(complexStrToFormat) \\right) \\, \(unitStr)"
         case .regressionResult(let slope, let intercept):
             let slopeLatex = formatMathValue(.unitValue(slope), angleMode: angleMode, settings: settings)
             let interceptLatex = formatMathValue(.unitValue(intercept), angleMode: angleMode, settings: settings)
@@ -564,7 +592,7 @@ struct LaTeXEngine {
             
             if hasUnit {
                 if unitStr.contains("/") || unitStr.contains("cdot") || unitStr.contains(" ") {
-                    result += "\\left( \(unitStr) \right)"
+                    result += "\\left( \(unitStr) \\right)"
                 } else {
                     result += unitStr
                 }
@@ -599,3 +627,4 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
+

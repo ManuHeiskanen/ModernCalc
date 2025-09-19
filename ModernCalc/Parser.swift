@@ -1,3 +1,10 @@
+//
+//  Parser.swift
+//  ModernCalc
+//
+//  Created by Manu Heiskanen on 28.8.2025.
+//
+
 import Foundation
 
 // --- ABSTRACT SYNTAX TREE NODES ---
@@ -764,4 +771,3 @@ class Parser {
         try advance()
     }
 }
-

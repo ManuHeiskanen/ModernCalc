@@ -647,6 +647,20 @@ class CalculatorViewModel: ObservableObject {
             if unitStr.isEmpty { return valStr }
             return "\(valStr) \(unitStr)"
         case .complex(let c): return formatComplexForDisplay(c, with: settings)
+        // --- NEW: Formatting for ComplexUnitValue ---
+        case .complexUnitValue(let cu):
+            let complexStr = formatComplexForDisplay(cu.value, with: settings)
+            if cu.dimensions.isEmpty {
+                return complexStr
+            }
+            let unitValueForFormatting = UnitValue(value: 1.0, dimensions: cu.dimensions)
+            let unitStr = formatForHistory(.unitValue(unitValueForFormatting), with: settings)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "1 ", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            if unitStr.isEmpty { return complexStr }
+            return "(\(complexStr)) \(unitStr)"
         case .vector(let v):
             if let compoundUnitString = UnitStore.commonCompoundUnits[v.dimensions] {
                 return formatVectorForDisplay(v, with: settings, unitString: compoundUnitString)
@@ -754,6 +768,12 @@ class CalculatorViewModel: ObservableObject {
             if unitStr.isEmpty { return valStr }
             return "\(valStr)\(unitStr)"
         case .complex(let c): return formatComplexForParsing(c)
+        // --- NEW: Parsing for ComplexUnitValue ---
+        case .complexUnitValue(let cu):
+            let complexStr = formatComplexForParsing(cu.value)
+            let unitStr = formatDimensionsForParsing(cu.dimensions)
+            if unitStr.isEmpty { return complexStr }
+            return "\(complexStr)\(unitStr)"
         case .vector(let v):
             let content = "vector(\(v.values.map { formatScalarForParsing($0) }.joined(separator: ";")))"
             let unitStr = formatDimensionsForParsing(v.dimensions)

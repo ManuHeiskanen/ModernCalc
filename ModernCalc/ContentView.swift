@@ -574,9 +574,7 @@ struct CalculatorInputView: View {
                     SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
                 }
             
-            // --- MODIFIED: Use a ZStack with an explicit anchor view for the popover ---
             ZStack(alignment: .topLeading) {
-                // The placeholder text logic remains the same
                 HStack(spacing: 0) {
                     Text(expression).font(.system(size: 26, weight: .regular, design: .monospaced)).opacity(0)
                     if !previewText.isEmpty && !expression.isEmpty { Text(previewText).font(.system(size: 26, weight: .regular, design: .monospaced)).foregroundColor(.secondary) }
@@ -587,8 +585,6 @@ struct CalculatorInputView: View {
                 CursorAwareTextField(text: $expression, selectedRange: $cursorPosition, cursorRect: $cursorRect)
                     .onTapGesture { onTap() }
                 
-                // This is an invisible view that we'll use as a stable anchor for the popover.
-                // It's positioned exactly where the cursor is.
                 Color.clear
                     .frame(width: 1, height: cursorRect.height)
                     .offset(x: cursorRect.origin.x, y: cursorRect.origin.y)

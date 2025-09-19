@@ -22,6 +22,7 @@ extension Evaluator {
             case .matrix(let m): return .matrix(Matrix(values: m.values.map { -$0 }, rows: m.rows, columns: m.columns, dimensions: m.dimensions))
             case .complexVector(let cv): return .complexVector(ComplexVector(values: cv.values.map { $0 * -1.0 }, dimensions: cv.dimensions))
             case .complexMatrix(let cm): return .complexMatrix(ComplexMatrix(values: cm.values.map { $0 * -1.0 }, rows: cm.rows, columns: cm.columns, dimensions: cm.dimensions))
+            case .complexUnitValue(let cu): return .complexUnitValue(ComplexUnitValue(value: cu.value * -1.0, dimensions: cu.dimensions))
             case .uncertain(let u): return .uncertain(-u)
             default: throw MathError.unsupportedOperation(op: op.rawValue, typeA: value.typeName, typeB: nil)
             }
@@ -47,25 +48,28 @@ extension Evaluator {
         if case .tuple = right { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         
         if op.rawValue == "in" {
-            guard case .unitValue(let sourceValue) = left else {
+            // This operator logic remains unchanged as it's for real-valued unit conversions.
+            guard case .unitValue(var sourceValue) = left else {
                 throw MathError.typeMismatch(expected: "Value with units", found: left.typeName)
             }
             guard case .unitValue(let targetUnit) = right else {
                 throw MathError.typeMismatch(expected: "A target unit (e.g., .cm)", found: right.typeName)
             }
-
-            guard let targetSymbol = targetUnit.preferredDisplayUnit, let targetDef = UnitStore.units[targetSymbol] else {
-                throw MathError.unknownConstant(name: "target unit for conversion")
-            }
             
+            // This logic to find the symbol is a bit simplistic, might need enhancement
+            let targetSymbol = targetUnit.preferredDisplayUnit ?? ""
+            guard let targetDef = UnitStore.units[targetSymbol] else {
+                 throw MathError.unknownConstant(name: "target unit for conversion")
+            }
+
             guard sourceValue.dimensions == targetDef.dimensions else {
                 throw MathError.dimensionMismatch(reason: "Cannot convert between incompatible units.")
             }
             
             let convertedValue = sourceValue.value / targetDef.conversionFactor
-            var result = UnitValue(value: convertedValue, dimensions: sourceValue.dimensions)
-            result.preferredDisplayUnit = targetSymbol
-            return .unitValue(result)
+            sourceValue.value = convertedValue
+            sourceValue.preferredDisplayUnit = targetSymbol
+            return .unitValue(sourceValue)
         }
         
         switch (left, right) {
@@ -75,18 +79,29 @@ extension Evaluator {
         case (.dimensionless(let l), .unitValue(let r)): return .unitValue(try performUnitUnitOp(op.rawValue, .dimensionless(l), r))
         case (.dimensionless(let l), .dimensionless(let r)): return .dimensionless(try performDimensionlessOp(op.rawValue, l, r))
 
-        // --- MODIFIED: Uncertainty propagation rules now handle units ---
+        // --- Uncertainty propagation rules now handle units ---
         case (.uncertain(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, r))
         case (.uncertain(let l), .dimensionless(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r, randomUncertainty: 0, systematicUncertainty: 0, dimensions: [:])))
         case (.dimensionless(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l, randomUncertainty: 0, systematicUncertainty: 0, dimensions: [:]), r))
         case (.uncertain(let l), .unitValue(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, l, UncertainValue(value: r.value, randomUncertainty: 0, systematicUncertainty: 0, dimensions: r.dimensions)))
         case (.unitValue(let l), .uncertain(let r)): return .uncertain(try performUncertainUncertainOp(op.rawValue, UncertainValue(value: l.value, randomUncertainty: 0, systematicUncertainty: 0, dimensions: l.dimensions), r))
             
-        // --- Complex Number Operations ---
+        // --- Complex Number Operations (Dimensionless) ---
         case (.complex(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, r))
         case (.complex(let l), .dimensionless(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
         case (.dimensionless(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
         
+        // --- NEW: Complex Unit Value Operations & Promotions ---
+        case (.complexUnitValue(let l), .complexUnitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, l, r))
+        case (.complexUnitValue(let l), .unitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, l, ComplexUnitValue(value: Complex(real: r.value, imaginary: 0), dimensions: r.dimensions)))
+        case (.unitValue(let l), .complexUnitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, ComplexUnitValue(value: Complex(real: l.value, imaginary: 0), dimensions: l.dimensions), r))
+        case (.complexUnitValue(let l), .dimensionless(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, l, ComplexUnitValue(value: Complex(real: r, imaginary: 0), dimensions: [:])))
+        case (.dimensionless(let l), .complexUnitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, ComplexUnitValue(value: Complex(real: l, imaginary: 0), dimensions: [:]), r))
+        case (.complexUnitValue(let l), .complex(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, l, ComplexUnitValue(value: r, dimensions: [:])))
+        case (.complex(let l), .complexUnitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, ComplexUnitValue(value: l, dimensions: [:]), r))
+        case (.complex(let l), .unitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, ComplexUnitValue(value: l, dimensions: [:]), ComplexUnitValue(value: Complex(real: r.value, imaginary: 0), dimensions: r.dimensions)))
+        case (.unitValue(let l), .complex(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, ComplexUnitValue(value: Complex(real: l.value, imaginary: 0), dimensions: l.dimensions), ComplexUnitValue(value: r, dimensions: [:])))
+
         // --- Vector Operations ---
         case (.vector(let v), .dimensionless(let s)): return .vector(try performVectorScalarOp(op.rawValue, v, s))
         case (.dimensionless(let s), .vector(let v)): return .vector(try performVectorScalarOp(op.rawValue, v, s, reversed: true))
@@ -192,6 +207,28 @@ extension Evaluator {
         default: throw MathError.typeMismatch(expected: "Vector or ComplexVector", found: target.typeName)
         }
         return (result, indexUsedAngle || scalarUsedAngle)
+    }
+
+    // --- NEW: Operator logic for ComplexUnitValue ---
+    private func performComplexUnitOp(_ op: String, _ l: ComplexUnitValue, _ r: ComplexUnitValue) throws -> ComplexUnitValue {
+        switch op {
+        case "+": return try l + r
+        case "-": return try l - r
+        case "*": return l * r
+        case "/": return try l / r
+        case "^":
+            guard r.dimensions.isEmpty else {
+                throw MathError.typeMismatch(expected: "Dimensionless exponent", found: "Value with units")
+            }
+            guard r.value.imaginary == 0 else {
+                throw MathError.unsupportedOperation(op: "^", typeA: "Complex Unit Value", typeB: "Complex Exponent")
+            }
+            let exponent = r.value.real
+            let complexExp = try l.value.pow(Complex(real: exponent, imaginary: 0))
+            let newDims = l.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
+            return ComplexUnitValue(value: complexExp, dimensions: newDims)
+        default: throw MathError.unknownOperator(op: op)
+        }
     }
 
     private func performUncertainUncertainOp(_ op: String, _ l: UncertainValue, _ r: UncertainValue) throws -> UncertainValue {
@@ -383,3 +420,4 @@ extension Evaluator {
         }
     }
 }
+

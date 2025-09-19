@@ -339,4 +339,3 @@ class Lexer {
         return char
     }
 }
-
