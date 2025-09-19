@@ -225,7 +225,7 @@ struct AutocompletePillView: View {
     }
 }
 
-// --- FIX: Replaced TimelineView with a controlled Timer to save power ---
+// --- FIX: Decoupled initial animation from view appearance to prevent it affecting other views. ---
 struct ShimmerView: View {
     @Environment(\.controlActiveState) private var controlActiveState
     @State private var phase: CGFloat = -2.0
@@ -249,29 +249,36 @@ struct ShimmerView: View {
                 )
         }
         .drawingGroup()
-        .onAppear(perform: startTimer)
+        .onAppear(perform: startAnimations)
         .onDisappear(perform: stopTimer)
         .onChange(of: controlActiveState) { oldState, newState in
             if newState == .active {
-                startTimer()
+                startAnimations()
             } else {
                 stopTimer()
             }
         }
     }
 
-    private func startTimer() {
-        guard timer == nil else { return }
+    private func startAnimations() {
+        stopTimer() // Prevent duplicate timers
         
-        // This timer triggers a quick 1.5-second animation every 10 seconds.
+        // This performs the first animation immediately, but on the next run loop,
+        // which prevents it from interfering with the initial layout of other views.
+        DispatchQueue.main.async {
+            phase = -2.0
+            withAnimation(.linear(duration: 1.5)) {
+                phase = 2.0
+            }
+        }
+        
+        // This timer handles all subsequent animations, firing every 10 seconds.
         timer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
             phase = -2.0 // Reset to the start
             withAnimation(.linear(duration: 1.5)) {
                 phase = 2.0 // Animate to the end
             }
         }
-        // Fire the timer immediately for the first animation cycle.
-        timer?.fire()
     }
 
     private func stopTimer() {
