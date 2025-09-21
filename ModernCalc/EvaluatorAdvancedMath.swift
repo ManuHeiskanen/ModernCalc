@@ -160,10 +160,17 @@ extension Evaluator {
         }
 
         if canBeVectors {
-            let vectorsToPlot = evaluatedArgs.compactMap {
-                if case .vector(let v) = $0, v.dimension == 2 { return v }
+            let vectorsToPlot = evaluatedArgs.compactMap { value -> Vector? in
+                if case .vector(let v) = value, v.dimension == 2 {
+                    return v
+                }
+                if case .matrix(let m) = value, (m.rows == 2 && m.columns == 1) || (m.rows == 1 && m.columns == 2) {
+                    // A 2x1 or 1x2 matrix can be treated as a 2D vector for plotting.
+                    return Vector(values: m.values, dimensions: m.dimensions)
+                }
                 return nil
             }
+
             if vectorsToPlot.count == evaluatedArgs.count && !evaluatedArgs.isEmpty {
                 var allSeries: [PlotSeries] = []
                 for vector in vectorsToPlot { allSeries.append(PlotSeries(name: "v = [\(vector[0]); \(vector[1])]", dataPoints: [DataPoint(x: vector[0], y: vector[1])])) }
@@ -762,3 +769,4 @@ extension MathValue {
         }
     }
 }
+
