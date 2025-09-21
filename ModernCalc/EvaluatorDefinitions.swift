@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Accelerate // FIX: Added import for Accelerate to resolve FFTDirection and related constants.
 
 /// This extension contains all the built-in constant and function definitions,
 /// as well as the logic for handling function calls.
@@ -788,6 +789,13 @@ extension Evaluator {
     func evaluateFunctionCall(_ node: FunctionCallNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
         var usedAngle = false
         if node.name == "grad" { return try evaluateGradFunction(node, variables: &variables, functions: &functions, angleMode: angleMode) }
+        
+        if node.name == "fft" {
+            return try evaluateDSPFunction(node, variables: &variables, functions: &functions, angleMode: angleMode, direction: FFTDirection(kFFTDirection_Forward))
+        }
+        if node.name == "ifft" {
+            return try evaluateDSPFunction(node, variables: &variables, functions: &functions, angleMode: angleMode, direction: FFTDirection(kFFTDirection_Inverse))
+        }
         
         if let angleFunc = Evaluator.angleAwareFunctions[node.name] {
             var args: [MathValue] = []

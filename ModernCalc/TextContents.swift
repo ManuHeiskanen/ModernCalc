@@ -41,6 +41,7 @@ struct TextContents {
         .init(name: "eye", signature: "eye(n)", description: "Creates an n x n identity matrix."),
         .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),
         .init(name: "factor", signature: "factor(integer)", description: "Returns a vector containing the prime factors of an integer."),
+        .init(name: "fft", signature: "fft(vector)", description: "Calculates the Fast Fourier Transform of a real or complex vector. The vector size must be a power of 2."),
         .init(name: "find", signature: "find(data, value)", description: "Returns a vector of 1-based indices for all occurrences of a value."),
         .init(name: "floor", signature: "floor(number)", description: "Rounds a number down to the nearest integer."),
         .init(name: "gcd", signature: "gcd(a, b)", description: "Finds the greatest common divisor of two integers."),
@@ -51,6 +52,7 @@ struct TextContents {
         .init(name: "harmean", signature: "harmean(a, b, ...)", description: "Calculates the harmonic mean of a list of non-zero numbers or a vector/matrix."),
         .init(name: "hypot", signature: "hypot(sideA, sideB)", description: "Calculates the hypotenuse of a right triangle."),
         .init(name: "if", signature: "if(condition, true_val, false_val)", description: "Returns true_val if condition is non-zero, otherwise returns false_val. Works also when plotting. The types and units of true_val and false_val must be compatible. **Example:** `if(1 > 0, 10.m, 20.m)`"),
+        .init(name: "ifft", signature: "ifft(vector)", description: "Calculates the Inverse Fast Fourier Transform of a complex vector. The vector size must be a power of 2."),
         .init(name: "imag", signature: "imag(complex)", description: "Extracts the imaginary part of a complex number."),
         .init(name: "impedance", signature: "impedance(f, component)", description: "Calculates impedance Z for a component (R, L, or C) at a given frequency f. Component type is inferred from its unit (Ω, H, F). Returns a complex value."),
         .init(name: "importcsv", signature: "importcsv()", description: "Opens a file dialog to import data from a CSV file."),
@@ -290,3 +292,4 @@ struct TextContents {
         .init(symbol: "ω", name: "Omega"), .init(symbol: "Ω", name: "Omega")
     ]
 }
+
