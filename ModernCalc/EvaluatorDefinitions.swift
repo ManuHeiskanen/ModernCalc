@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Accelerate // FIX: Added import for Accelerate to resolve FFTDirection and related constants.
+import Accelerate
 
 /// This extension contains all the built-in constant and function definitions,
 /// as well as the logic for handling function calls.
@@ -248,6 +248,44 @@ extension Evaluator {
                 throw MathError.incorrectArgumentCount(function: "ones", expected: "1 or 2", found: args.count)
             }
         },
+        "powerspectrum": { args in
+            guard args.count == 2 else { throw MathError.incorrectArgumentCount(function: "powerspectrum", expected: "2 (data, sampling_rate)", found: args.count) }
+            
+            let data = args[0]
+            let samplingRateValue = try args[1].asScalar()
+            
+            guard samplingRateValue > 0 else { throw MathError.unsupportedOperation(op: "powerspectrum", typeA: "Sampling rate must be positive.", typeB: nil) }
+
+            let inputVector: ComplexVector
+            switch data {
+            case .vector(let v):
+                inputVector = ComplexVector(from: v)
+            case .matrix(let m) where m.rows == 1 || m.columns == 1:
+                let complexValues = m.values.map { Complex(real: $0, imaginary: 0) }
+                inputVector = ComplexVector(values: complexValues, dimensions: m.dimensions)
+            default:
+                throw MathError.typeMismatch(expected: "Vector or Matrix for data", found: data.typeName)
+            }
+            
+            // Call the static helper function to perform the FFT
+            let fftResult = try Evaluator.performFFT(inputVector: inputVector, direction: FFTDirection(kFFTDirection_Forward))
+            
+            let n = fftResult.dimension
+            
+            // Calculate magnitudes. For real inputs, the spectrum is symmetric, so we only need the first half.
+            let magnitudes = fftResult.values.prefix(n / 2).map { $0.abs() }
+            
+            // Create the corresponding frequency axis using the sampling rate
+            let frequencyStep = samplingRateValue / Double(n)
+            let frequencies = (0..<n/2).map { Double($0) * frequencyStep }
+            
+            let dataPoints = zip(frequencies, magnitudes).map { DataPoint(x: $0, y: $1) }
+            
+            let series = PlotSeries(name: "Power Spectrum", dataPoints: dataPoints)
+            let plotData = PlotData(expression: "powerspectrum(...)", series: [series], plotType: .line, explicitYRange: nil, generationTime: 0, xAxisLabel: "Frequency (Hz)", yAxisLabel: "Magnitude")
+            
+            return .plot(plotData)
+        },
     ]
     
     static let singleArgumentFunctions: [String: (MathValue) throws -> MathValue] = [
@@ -373,8 +411,24 @@ extension Evaluator {
     
     static let angleAwareFunctions: [String: ([MathValue], AngleMode) throws -> MathValue] = [
         "sin": { args, mode in
-            guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
-            if case .uncertain(let u) = args[0] {
+            guard args.count == 1 else { throw MathError.incorrectArgumentCount(function: "sin", expected: "1", found: args.count) }
+            let arg = args[0]
+            
+            // FIX: Add element-wise operation for vectors and matrices
+            switch arg {
+            case .vector(let v):
+                let newValues = v.values.map {
+                    let valRad = mode == .degrees ? $0 * .pi / 180 : $0
+                    return sin(valRad)
+                }
+                return .vector(Vector(values: newValues)) // Result is dimensionless
+            case .matrix(let m) where m.rows == 1 || m.columns == 1:
+                let newValues = m.values.map {
+                    let valRad = mode == .degrees ? $0 * .pi / 180 : $0
+                    return sin(valRad)
+                }
+                return .vector(Vector(values: newValues))
+            case .uncertain(let u):
                 guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for sin", found: "Uncertain value with units") }
                 
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
@@ -388,12 +442,29 @@ extension Evaluator {
                                                  randomUncertainty: propagated.randomUncertainty,
                                                  systematicUncertainty: propagated.systematicUncertainty,
                                                  dimensions: [:]))
+            default:
+                 let s = try arg.asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(sin(valRad))
             }
-            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(sin(valRad))
         },
         "cos": { args, mode in
-            guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
-            if case .uncertain(let u) = args[0] {
+            guard args.count == 1 else { throw MathError.incorrectArgumentCount(function: "cos", expected: "1", found: args.count) }
+            let arg = args[0]
+            
+            // FIX: Add element-wise operation for vectors and matrices
+            switch arg {
+            case .vector(let v):
+                let newValues = v.values.map {
+                    let valRad = mode == .degrees ? $0 * .pi / 180 : $0
+                    return cos(valRad)
+                }
+                return .vector(Vector(values: newValues))
+            case .matrix(let m) where m.rows == 1 || m.columns == 1:
+                let newValues = m.values.map {
+                    let valRad = mode == .degrees ? $0 * .pi / 180 : $0
+                    return cos(valRad)
+                }
+                return .vector(Vector(values: newValues))
+            case .uncertain(let u):
                 guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for cos", found: "Uncertain value with units") }
 
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
@@ -407,12 +478,29 @@ extension Evaluator {
                                                  randomUncertainty: propagated.randomUncertainty,
                                                  systematicUncertainty: propagated.systematicUncertainty,
                                                  dimensions: [:]))
+            default:
+                let s = try arg.asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(cos(valRad))
             }
-            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(cos(valRad))
         },
         "tan": { args, mode in
-            guard args.count == 1 else { throw MathError.typeMismatch(expected: "Scalar or UncertainValue", found: "multiple arguments") }
-            if case .uncertain(let u) = args[0] {
+            guard args.count == 1 else { throw MathError.incorrectArgumentCount(function: "tan", expected: "1", found: args.count) }
+            let arg = args[0]
+
+            // FIX: Add element-wise operation for vectors and matrices
+            switch arg {
+            case .vector(let v):
+                let newValues = v.values.map {
+                    let valRad = mode == .degrees ? $0 * .pi / 180 : $0
+                    return tan(valRad)
+                }
+                return .vector(Vector(values: newValues))
+            case .matrix(let m) where m.rows == 1 || m.columns == 1:
+                let newValues = m.values.map {
+                    let valRad = mode == .degrees ? $0 * .pi / 180 : $0
+                    return tan(valRad)
+                }
+                return .vector(Vector(values: newValues))
+            case .uncertain(let u):
                 guard u.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless value for tan", found: "Uncertain value with units") }
                 
                 let valRad = mode == .degrees ? u.value * .pi / 180 : u.value
@@ -426,8 +514,9 @@ extension Evaluator {
                                                  randomUncertainty: propagated.randomUncertainty,
                                                  systematicUncertainty: propagated.systematicUncertainty,
                                                  dimensions: [:]))
+            default:
+                let s = try arg.asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(tan(valRad))
             }
-            let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(tan(valRad))
         },
         "sec": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / cos(valRad)) },
         "csc": { args, mode in let s = try args[0].asScalar(); let valRad = mode == .degrees ? s * .pi / 180 : s; return .dimensionless(1.0 / sin(valRad)) },
@@ -1152,3 +1241,4 @@ fileprivate func performPercentile(values: [Double], p: Double) -> Double {
         return lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue)
     }
 }
+

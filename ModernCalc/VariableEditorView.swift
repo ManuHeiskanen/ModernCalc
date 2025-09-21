@@ -125,7 +125,7 @@ struct VariableEditorView: View {
             "Calculus": ["derivative", "grad", "integral"],
             "Complex Numbers": ["abs", "arg", "conj", "imag", "polar", "real"],
             "Data Generation & IO": ["importcsv", "linspace", "random", "randm", "randv", "range"],
-            "Electrical Engineering": ["impedance", "fft"],
+            "Electrical Engineering": ["impedance", "fft", "ifft", "powerspectrum"],
             "Geometry": ["angle", "area_circle", "area_rect", "area_tri", "circum_circle", "hypot", "side", "unit", "vol_cone", "vol_cube", "vol_cylinder", "vol_sphere"],
             "Number Theory": ["fact", "factor", "find", "gcd", "isprime", "lcm", "mod", "nCr", "nPr"],
             "Plotting": ["autoplot", "plot", "scatterplot"],

@@ -84,6 +84,7 @@ struct TextContents {
         .init(name: "plot", signature: "plot(expr, var, x_min, x_max, [y_min, y_max])", description: "Plots expressions over a specified range with optional y-axis limits."),
         .init(name: "polar", signature: "polar(complex)", description: "Converts a complex number to its polar form (R ∠ θ)."),
         .init(name: "polyfit", signature: "polyfit(x_vec, y_vec, degree)", description: "Fits a polynomial of the given degree to the data points and returns the unit-aware coefficients. **Example:** `polyfit(x_data, y_data, 2)` -> returns quadratic fit coefficients."),
+        .init(name: "powerspectrum", signature: "powerspectrum(data, Fs)", description: "Calculates and plots the power spectrum of a signal. `data` is the time-domain vector and `Fs` is the sampling rate in Hz."),
         .init(name: "quartile", signature: "quartile(data, q)", description: "Calculates the q-th quartile (1, 2, or 3) of a dataset."),
         .init(name: "random", signature: "random([max], [min, max], [min, max, count])", description: "Generates random numbers or a vector of random integers."),
         .init(name: "randm", signature: "randm(rows, cols)", description: "Creates a matrix with the specified dimensions, filled with random numbers between 0 and 1."),
