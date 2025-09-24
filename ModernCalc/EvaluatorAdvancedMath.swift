@@ -180,7 +180,12 @@ extension Evaluator {
             }
         }
 
-        let numPoints = 200; let defaultRange = -10.0...10.0
+        let numPoints = 200
+        let defaultRange = -10.0...10.0
+        // FIX: Widen the calculation range for autoplot to provide a buffer for panning.
+        let span = defaultRange.upperBound - defaultRange.lowerBound
+        let renderRange = (defaultRange.lowerBound - span)...(defaultRange.upperBound + span)
+
         var isParametric = false
         if node.expressions.count == 2 { if node.expressions.contains(where: { $0.description.range(of: #"\bt\b"#, options: .regularExpression) != nil }) { isParametric = true } }
         
@@ -198,11 +203,11 @@ extension Evaluator {
             let yAxisDimension: UnitDimension = dryRunY.dimensionsIfUnitOrDimensionless
 
             var results = Array<DataPoint?>(repeating: nil, count: numPoints)
-            let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+            let step = (renderRange.upperBound - renderRange.lowerBound) / Double(numPoints - 1)
             let capturedVariables = variables; let capturedFunctions = functions
 
             DispatchQueue.concurrentPerform(iterations: numPoints) { i in
-                let t = defaultRange.lowerBound + Double(i) * step
+                let t = renderRange.lowerBound + Double(i) * step
                 var localVars = capturedVariables; var localFuncs = capturedFunctions
                 do {
                     let (xValue, _) = try evaluateWithTempVar(node: xBody, varName: varName, varValue: .dimensionless(t), variables: &localVars, functions: &localFuncs, angleMode: .radians)
@@ -264,11 +269,11 @@ extension Evaluator {
                 }
 
                 var results = Array<DataPoint?>(repeating: nil, count: numPoints)
-                let step = (defaultRange.upperBound - defaultRange.lowerBound) / Double(numPoints - 1)
+                let step = (renderRange.upperBound - renderRange.lowerBound) / Double(numPoints - 1)
                 let capturedVariables = variables; let capturedFunctions = functions
 
                 DispatchQueue.concurrentPerform(iterations: numPoints) { i in
-                    let x = defaultRange.lowerBound + Double(i) * step
+                    let x = renderRange.lowerBound + Double(i) * step
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
                         let (yValue, _) = try evaluateWithTempVar(node: body, varName: varName, varValue: .dimensionless(x), variables: &localVars, functions: &localFuncs, angleMode: .radians)
@@ -416,7 +421,12 @@ extension Evaluator {
         
         let xAxisDimension = xMin.dimensions
         guard xMin.value < xMax.value else { throw MathError.plotError(reason: "Plot range min must be less than max.") }
-        
+
+        // FIX: Widen the calculation range to provide a buffer for panning.
+        let span = xMax.value - xMin.value
+        let renderMin = UnitValue(value: xMin.value - span, dimensions: xAxisDimension)
+        let renderMax = UnitValue(value: xMax.value + span, dimensions: xAxisDimension)
+
         var explicitYRange: (min: Double, max: Double)? = nil
         if let yRangeNodes = node.yRange {
              let (yMinVal, _) = try _evaluateSingle(node: yRangeNodes.0, variables: &variables, functions: &functions, angleMode: .radians)
@@ -442,11 +452,11 @@ extension Evaluator {
             let parametricYAxisDimension = dryRunY.dimensionsIfUnitOrDimensionless
 
             var results = Array<DataPoint?>(repeating: nil, count: numPoints)
-            let step = (xMax.value - xMin.value) / Double(numPoints - 1)
+            let step = (renderMax.value - renderMin.value) / Double(numPoints - 1)
             let capturedVariables = variables; let capturedFunctions = functions
             
             DispatchQueue.concurrentPerform(iterations: numPoints) { i in
-                let t_si = xMin.value + Double(i) * step
+                let t_si = renderMin.value + Double(i) * step
                 let tVar = MathValue.unitValue(UnitValue(value: t_si, dimensions: xAxisDimension))
                 var localVars = capturedVariables; var localFuncs = capturedFunctions
                 do {
@@ -483,11 +493,11 @@ extension Evaluator {
             var allSeries: [PlotSeries] = []
             for body in node.expressions {
                 var results = Array<DataPoint?>(repeating: nil, count: numPoints)
-                let step = (xMax.value - xMin.value) / Double(numPoints - 1)
+                let step = (renderMax.value - renderMin.value) / Double(numPoints - 1)
                 let capturedVariables = variables; let capturedFunctions = functions
 
                 DispatchQueue.concurrentPerform(iterations: numPoints) { i in
-                    let x_si = xMin.value + Double(i) * step
+                    let x_si = renderMin.value + Double(i) * step
                     let xVar = MathValue.unitValue(UnitValue(value: x_si, dimensions: xAxisDimension))
                     var localVars = capturedVariables; var localFuncs = capturedFunctions
                     do {
@@ -769,4 +779,3 @@ extension MathValue {
         }
     }
 }
-

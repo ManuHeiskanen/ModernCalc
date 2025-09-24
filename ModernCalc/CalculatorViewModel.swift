@@ -265,10 +265,77 @@ class CalculatorViewModel {
     func triggerCSVImport() {
         _ = openCSVFile()
     }
+
+    private func evaluateExpression(_ expression: String, vars: [String: MathValue], funcs: [String: FunctionDefinitionNode], angleMode: AngleMode, settings: UserSettings) async throws -> MathValue {
+        var tempVars = vars
+        var tempFuncs = funcs
+        let lexer = Lexer(input: expression, decimalSeparator: settings.decimalSeparator)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens: tokens)
+        let node = try parser.parse()
+        let (value, _) = try evaluator.evaluate(node: node, variables: &tempVars, functions: &tempFuncs, angleMode: angleMode)
+        return value
+    }
     
     func addPlotViewModel(for plotData: PlotData) {
         if !plotViewModels.contains(where: { $0.plotData.id == plotData.id }) {
-            let newPlotViewModel = PlotViewModel(plotData: plotData)
+            
+            let expression = plotData.expression
+            let capturedVars = self.variables
+            let capturedFuncs = self.functions
+            let capturedSettings = self.settings
+            let capturedAngleMode = self.angleMode
+
+            let handler = { (newDomain: ClosedRange<Double>) -> Task<[PlotSeries]?, Never> in
+                Task {
+                    do {
+                        var expressionToEvaluate = expression
+                        let trimmedExpression = expression.trimmingCharacters(in: .whitespaces)
+                        
+                        // FIX: Calculate a wider render domain to pre-load data for panning.
+                        let span = newDomain.upperBound - newDomain.lowerBound
+                        let renderDomain = (newDomain.lowerBound - span)...(newDomain.upperBound + span)
+
+                        if trimmedExpression.starts(with: "autoplot") {
+                            let pattern = #"autoplot\s*\((.*)\)"#
+                            if let regex = try? NSRegularExpression(pattern: pattern),
+                               let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
+                               let range = Range(match.range(at: 1), in: expression) {
+                                let innerExpression = String(expression[range])
+                                // FIX: Use the new, wider renderDomain for evaluation.
+                                expressionToEvaluate = "plot(\(innerExpression), x=(\(renderDomain.lowerBound), \(renderDomain.upperBound)))"
+                            }
+                        } else if trimmedExpression.starts(with: "plot") {
+                            let pattern = #"plot\s*\(([^,]+).*\)"#
+                            if let regex = try? NSRegularExpression(pattern: pattern),
+                               let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
+                               let range = Range(match.range(at: 1), in: expression) {
+                                let functionExpression = String(expression[range])
+                                // FIX: Use the new, wider renderDomain for evaluation.
+                                expressionToEvaluate = "plot(\(functionExpression), x=(\(renderDomain.lowerBound), \(renderDomain.upperBound)))"
+                            }
+                        }
+                                        
+                        let resultValue = try await self.evaluateExpression(
+                            expressionToEvaluate,
+                            vars: capturedVars,
+                            funcs: capturedFuncs,
+                            angleMode: capturedAngleMode,
+                            settings: capturedSettings
+                        )
+                                            
+                        if case .plot(let newPlotData) = resultValue {
+                            return newPlotData.series
+                        }
+                        return nil
+                    } catch {
+                        print("Regeneration failed: \(error)")
+                        return nil
+                    }
+                }
+            }
+            
+            let newPlotViewModel = PlotViewModel(plotData: plotData, regenerationHandler: handler)
             Task {
                 plotViewModels.append(newPlotViewModel)
             }
