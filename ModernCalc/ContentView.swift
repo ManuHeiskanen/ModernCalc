@@ -110,37 +110,30 @@ struct ModernToolbarView: ToolbarContent {
     @State private var isHoveringOnCSVButton = false
     
     var body: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
-            Button(action: { isShowingSheet = true }) {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 20))
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-            .padding(4)
-            .background(isHoveringOnMenuButton ? Color.primary.opacity(0.1) : Color.clear, in: Circle())
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isHoveringOnMenuButton = hovering
-                }
-            }
-        }
-        
         ToolbarItemGroup(placement: .primaryAction) {
             HStack(spacing: 12) {
-                Button(action: { viewModel.triggerCSVImport() }) {
-                    Text(".csv")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                Button(action: { isShowingSheet = true }) {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 20))
                         .foregroundColor(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                        )
                 }
                 .buttonStyle(.plain)
-                .background(isHoveringOnCSVButton ? Color.primary.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(4)
+                .background(isHoveringOnMenuButton ? Color.primary.opacity(0.1) : Color.clear, in: Circle())
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringOnMenuButton = hovering
+                    }
+                }
+                
+                Button(action: { viewModel.triggerCSVImport() }) {
+                    Image(systemName: "doc")
+                        .font(.system(size: 20))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(4)
+                .background(isHoveringOnCSVButton ? Color.primary.opacity(0.1) : Color.clear, in: Circle())
                 .onHover { hovering in
                     withAnimation(.easeInOut(duration: 0.15)) {
                         isHoveringOnCSVButton = hovering
@@ -160,7 +153,7 @@ struct ModernToolbarView: ToolbarContent {
                         .background {
                             if viewModel.angleMode == mode {
                                 let color = mode == .degrees ? Color.orange : Color.purple
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                Capsule()
                                     .fill(color)
                                     .matchedGeometryEffect(id: "angleSelector", in: angleSelectorAnimation)
                             }
@@ -168,7 +161,7 @@ struct ModernToolbarView: ToolbarContent {
                     }
                 }
                 .buttonStyle(.plain)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background(.ultraThinMaterial, in: Capsule())
             }
         }
     }
