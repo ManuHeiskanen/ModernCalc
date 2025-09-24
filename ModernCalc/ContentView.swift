@@ -160,7 +160,7 @@ struct ModernToolbarView: ToolbarContent {
                         }
                     }
                 }
-                .padding(.horizontal, 6) // Make the pill wider
+                .padding(.horizontal, 6)
                 .buttonStyle(.plain)
                 .background(.ultraThinMaterial, in: Capsule())
             }
@@ -236,6 +236,7 @@ struct ActionShelfView: View {
 
 struct AutocompletePillView: View {
     @Bindable var viewModel: CalculatorViewModel
+    @State private var hoveredSuggestionId: UUID?
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -249,28 +250,42 @@ struct AutocompletePillView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .foregroundColor(.primary)
-                            .background(
-                                .ultraThinMaterial,
-                                in: Capsule()
-                            )
+                            .background(.ultraThinMaterial, in: Capsule())
+                            .background(pillBackgroundColor(for: suggestion.type, isHovered: hoveredSuggestionId == suggestion.id), in: Capsule())
                             .overlay(
                                 Capsule().stroke(pillBorderColor(for: suggestion.type), lineWidth: 1)
                             )
                     }
                     .buttonStyle(.plain)
+                    .onHover { isHovering in
+                        withAnimation(.easeInOut(duration: 0.1)) {
+                            hoveredSuggestionId = isHovering ? suggestion.id : nil
+                        }
+                    }
                 }
             }
             .padding(.horizontal)
         }
     }
     
+    private func pillBackgroundColor(for type: String, isHovered: Bool) -> Color {
+        guard isHovered else { return .clear }
+        switch type {
+        case "function": return .indigo.opacity(0.2)
+        case "user_function": return .purple.opacity(0.2)
+        case "variable": return .teal.opacity(0.2)
+        case "constant": return .yellow.opacity(0.2)
+        default: return Color.primary.opacity(0.1)
+        }
+    }
+    
     private func pillBorderColor(for type: String) -> Color {
         switch type {
-        case "function": return .indigo.opacity(0.4)
-        case "user_function": return .purple.opacity(0.4)
-        case "variable": return .teal.opacity(0.4)
-        case "constant": return .yellow.opacity(0.4)
-        default: return Color.primary.opacity(0.2)
+        case "function": return .indigo.opacity(0.8)
+        case "user_function": return .purple.opacity(0.8)
+        case "variable": return .teal.opacity(0.8)
+        case "constant": return .yellow.opacity(0.8)
+        default: return Color.primary.opacity(0.4)
         }
     }
 }
@@ -711,5 +726,4 @@ extension AngleMode {
         }
     }
 }
-
 
