@@ -11,8 +11,9 @@ import SwiftUI
 /// styled with the "LiquidGlass" aesthetic.
 struct CSVView: View {
     @Bindable var viewModel: CSVViewModel
-    
     @Environment(\.dismiss) private var dismiss
+    
+    private let cellMinWidth: CGFloat = 120
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,12 +22,26 @@ struct CSVView: View {
                 .fontWeight(.medium)
                 .padding(.top)
 
-            // The main content area with header, grid, and controls.
-            CSVHeaderView(viewModel: viewModel)
+            // Define the grid columns once to be shared by header and data grid.
+            let columns = Array(repeating: GridItem(.flexible(minimum: cellMinWidth)), count: viewModel.headers.count)
             
-            Divider()
-            
-            CSVGridView(viewModel: viewModel)
+            // **FIXED:** A single ScrollView now wraps both the header and the data grid
+            // to ensure their column widths are calculated identically and they scroll in sync.
+            if !columns.isEmpty {
+                ScrollView([.horizontal, .vertical]) {
+                    VStack(spacing: 0) {
+                        CSVHeaderView(viewModel: viewModel, columns: columns)
+                        Divider()
+                        CSVGridView(viewModel: viewModel, columns: columns)
+                    }
+                }
+            } else {
+                // Display a message if there's no data to form columns.
+                Spacer()
+                Text("No data to display. Try changing the column separator.")
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
             
             Divider()
 
@@ -39,27 +54,23 @@ struct CSVView: View {
 
 // MARK: - Subviews for better organization
 
-/// The header view that displays column titles and selection toggles.
+/// The header view, now using LazyVGrid to perfectly align with the data grid.
 private struct CSVHeaderView: View {
     @Bindable var viewModel: CSVViewModel
-    private let cellMinWidth: CGFloat = 120
+    let columns: [GridItem]
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 0) {
-                ForEach(0..<viewModel.headers.count, id: \.self) { index in
-                    HeaderCellView(
-                        title: viewModel.headers[index],
-                        isSelected: safeColumnBinding(for: index)
-                    )
-                    .frame(minWidth: cellMinWidth)
-                }
+        LazyVGrid(columns: columns, spacing: 0) {
+            ForEach(0..<viewModel.headers.count, id: \.self) { index in
+                HeaderCellView(
+                    title: viewModel.headers[index],
+                    isSelected: safeColumnBinding(for: index)
+                )
             }
         }
         .frame(height: 60)
     }
     
-    /// Creates a binding for the column selection toggle that is safe from out-of-bounds crashes.
     private func safeColumnBinding(for index: Int) -> Binding<Bool> {
         Binding(
             get: {
@@ -108,50 +119,35 @@ private struct HeaderCellView: View {
 }
 
 
-/// The scrollable grid that displays the CSV data.
+/// The scrollable grid that displays the CSV data, now without its own ScrollView.
 private struct CSVGridView: View {
     @Bindable var viewModel: CSVViewModel
-    private let cellMinWidth: CGFloat = 120
+    let columns: [GridItem]
     private let cellPadding: CGFloat = 8
 
     var body: some View {
-        ScrollView([.horizontal, .vertical]) {
-            let columnCount = viewModel.headers.count
+        LazyVGrid(columns: columns, spacing: 0) {
+            let grid = viewModel.displayGrid
+            let rowCount = grid.count
+            let columnCount = columns.count
             
-            if columnCount > 0 {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: cellMinWidth)), count: columnCount), spacing: 0) {
-                    let grid = viewModel.displayGrid
-                    let rowCount = grid.count
-                    
-                    // A single ForEach is more robust for LazyVGrid than nested loops.
-                    // This iterates through each cell index and calculates its row and column.
-                    ForEach(0..<(rowCount * columnCount), id: \.self) { index in
-                        let rowIndex = index / columnCount
-                        let colIndex = index % columnCount
-                        
-                        // Safety check for jagged data (rows with different numbers of columns)
-                        if colIndex < grid[rowIndex].count {
-                            Text(grid[rowIndex][colIndex])
-                                .font(.system(.body, design: .monospaced))
-                                .padding(cellPadding)
-                                .frame(minWidth: cellMinWidth, alignment: .leading)
-                                .background(rowIndex % 2 != 0 ? Color.clear : Color.primary.opacity(0.04))
-                        } else {
-                            // Render an empty cell to maintain grid alignment
-                            Text("")
-                                .padding(cellPadding)
-                                .frame(minWidth: cellMinWidth, alignment: .leading)
-                        }
-                    }
+            ForEach(0..<(rowCount * columnCount), id: \.self) { index in
+                let rowIndex = index / columnCount
+                let colIndex = index % columnCount
+                
+                if colIndex < grid[rowIndex].count {
+                    Text(grid[rowIndex][colIndex])
+                        .font(.system(.body, design: .monospaced))
+                        .padding(cellPadding)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .background(rowIndex % 2 != 0 ? Color.clear : Color.primary.opacity(0.04))
+                } else {
+                    Text("")
+                        .padding(cellPadding)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
-            } else {
-                Text("No data to display. Try changing the column separator.")
-                    .foregroundColor(.secondary)
-                    .padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        // This modifier tells SwiftUI to animate any changes to this view when the row count changes.
         .animation(.easeInOut(duration: 0.25), value: viewModel.displayGrid.count)
     }
 }
@@ -164,7 +160,6 @@ private struct CSVControlPanelView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            // First row of controls: Separator, Decimals, Header Toggle
             HStack(spacing: 20) {
                 CustomPicker(title: "Separator", selection: $viewModel.columnSeparator) { option in
                     String(option.rawValue.split(separator: " ").first ?? "")
@@ -176,7 +171,6 @@ private struct CSVControlPanelView: View {
                     .toggleStyle(.switch)
             }
             
-            // Second row of controls: Info, Row Selection, Matrix Name, Actions
             HStack(spacing: 12) {
                 Text(viewModel.infoMessage)
                     .font(.callout)
@@ -188,7 +182,7 @@ private struct CSVControlPanelView: View {
                 StyledTextField(placeholder: "Start", text: $viewModel.startRowString)
                 Text("to")
                 StyledTextField(placeholder: "End", text: $viewModel.endRowString)
-                
+
                 Divider().frame(height: 20)
                 
                 Text("Assign Matrix Name:")
@@ -221,7 +215,6 @@ private struct CSVControlPanelView: View {
 
 // MARK: - Custom Reusable Components
 
-/// A custom picker styled to look like a segmented control, now with a label closure for flexibility.
 private struct CustomPicker<T: CaseIterable & Hashable>: View {
     let title: String
     @Binding var selection: T
@@ -257,8 +250,6 @@ private struct CustomPicker<T: CaseIterable & Hashable>: View {
     }
 }
 
-
-/// A custom TextField with a material background.
 private struct StyledTextField: View {
     let placeholder: String
     @Binding var text: String

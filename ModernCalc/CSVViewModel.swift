@@ -72,6 +72,7 @@ class CSVViewModel {
     var endRow: Int = 0 {
         didSet {
             if endRow < startRow { endRow = oldValue }
+            if endRow > totalRowCount { endRow = totalRowCount }
         }
     }
     
@@ -134,7 +135,13 @@ class CSVViewModel {
         let validEnd = min(fullGrid.count, endRow)
         
         let rowsToImport = max(0, (validEnd - validStart) + 1)
-        return "Will import \(rowsToImport) rows."
+        return "Importing \(rowsToImport)/\(totalRowCount) rows"
+    }
+    
+    /// A computed property that always returns the total number of available rows.
+    var totalRowCount: Int {
+        let headerAsDataRow = (useFirstRowAsHeader == false && !parsedHeaders.isEmpty) ? 1 : 0
+        return parsedGrid.count + headerAsDataRow
     }
     
     // MARK: - Intents
@@ -197,10 +204,8 @@ class CSVViewModel {
         self.errorMessage = nil
     }
     
-    /// **FIXED:** Correctly calculates the total number of rows when the header is treated as data.
     private func updateRowCounts() {
-        let headerAsDataRow = (useFirstRowAsHeader == false && !parsedHeaders.isEmpty) ? 1 : 0
-        let totalRows = parsedGrid.count + headerAsDataRow
+        let totalRows = self.totalRowCount
         self.startRow = totalRows > 0 ? 1 : 0
         self.endRow = totalRows
     }
@@ -236,3 +241,5 @@ class CSVViewModel {
         return formattedString
     }
 }
+
+
