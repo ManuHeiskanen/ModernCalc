@@ -111,60 +111,65 @@ struct ModernToolbarView: ToolbarContent {
     
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
-            HStack(spacing: 12) {
-                Button(action: { isShowingSheet = true }) {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.title2)
-                        .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                }
-                .buttonStyle(.plain)
-                .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHoveringOnMenuButton = hovering
-                    }
-                }
-                
-                Button(action: { viewModel.triggerCSVImport() }) {
-                    Text("Import CSV")
-                        .font(.system(size: 12, weight: .medium, design: .default))
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .scaleEffect(isHoveringOnCSVButton ? 1.05 : 1.0)
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHoveringOnCSVButton = hovering
-                    }
+            Button(action: { isShowingSheet = true }) {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 20))
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(4)
+            .background(isHoveringOnMenuButton ? Color.primary.opacity(0.1) : Color.clear, in: Circle())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHoveringOnMenuButton = hovering
                 }
             }
         }
         
         ToolbarItemGroup(placement: .primaryAction) {
-            HStack(spacing: 4) {
-                ForEach([AngleMode.degrees, AngleMode.radians], id: \.self) { mode in
-                    Button(mode.shortName) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            viewModel.angleMode = mode
-                        }
+            HStack(spacing: 12) {
+                Button(action: { viewModel.triggerCSVImport() }) {
+                    Text(".csv")
+                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .background(isHoveringOnCSVButton ? Color.primary.opacity(0.1) : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringOnCSVButton = hovering
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .foregroundColor(viewModel.angleMode == mode ? .primary : .secondary)
-                    .background {
-                        if viewModel.angleMode == mode {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(.primary.opacity(0.15))
-                                .matchedGeometryEffect(id: "angleSelector", in: angleSelectorAnimation)
+                }
+
+                HStack(spacing: 4) {
+                    ForEach([AngleMode.degrees, AngleMode.radians], id: \.self) { mode in
+                        Button(mode.shortName) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                viewModel.angleMode = mode
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .foregroundColor(viewModel.angleMode == mode ? .white : .primary)
+                        .background {
+                            if viewModel.angleMode == mode {
+                                let color = mode == .degrees ? Color.orange : Color.purple
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(color)
+                                    .matchedGeometryEffect(id: "angleSelector", in: angleSelectorAnimation)
+                            }
                         }
                     }
                 }
+                .buttonStyle(.plain)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.plain)
-            .background(.ultraThinMaterial, in: Capsule())
         }
     }
 }
