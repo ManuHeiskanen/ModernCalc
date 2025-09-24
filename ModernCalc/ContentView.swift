@@ -118,7 +118,7 @@ struct ModernToolbarView: ToolbarContent {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
-                .padding(4)
+                .padding(.horizontal, 6)
                 .background(isHoveringOnMenuButton ? Color.primary.opacity(0.1) : Color.clear, in: Circle())
                 .onHover { hovering in
                     withAnimation(.easeInOut(duration: 0.15)) {
@@ -160,6 +160,7 @@ struct ModernToolbarView: ToolbarContent {
                         }
                     }
                 }
+                .padding(.horizontal, 6) // Make the pill wider
                 .buttonStyle(.plain)
                 .background(.ultraThinMaterial, in: Capsule())
             }
@@ -424,7 +425,7 @@ struct HistoryRowView: View {
                              // --- "Glass Orb" Angle Indicator ---
                             Circle()
                                 .fill(.regularMaterial)
-                                .overlay(Circle().fill(calculation.angleMode == .degrees ? .orange.opacity(0.5) : .purple.opacity(0.5)))
+                                .overlay(Circle().fill(calculation.angleMode == .degrees ? .orange.opacity(0.8) : .purple.opacity(0.8)))
                                 .frame(width: 8, height: 8)
                                 .offset(y: -4)
                         }
@@ -710,4 +711,5 @@ extension AngleMode {
         }
     }
 }
+
 
