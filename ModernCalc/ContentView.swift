@@ -15,8 +15,8 @@ struct ContentView: View {
     @State private var isShowingSheet = false
     @Environment(\.openWindow) private var openWindow
     
-    @State private var isHoveringOnMenuButton = false
-    @State private var isHoveringOnCSVButton = false
+    // Namespace for the animated DEG/RAD selector
+    @Namespace private var angleSelectorAnimation
     
     init(settings: UserSettings, viewModel: CalculatorViewModel) {
         self.settings = settings
@@ -25,6 +25,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // --- The history view now scrolls freely ---
             HistoryView(
                 viewModel: viewModel,
                 history: viewModel.history,
@@ -32,8 +33,8 @@ struct ContentView: View {
                 selectedHistoryId: viewModel.selectedHistoryId,
                 selectedHistoryPart: viewModel.selectedHistoryPart
             )
-            Divider()
             
+            // --- The live preview sits above the input area ---
             FormattedExpressionWithButtonsView(
                 viewModel: viewModel,
                 latexPreview: viewModel.liveLaTeXPreview,
@@ -44,14 +45,8 @@ struct ContentView: View {
             .frame(height: viewModel.livePreviewHeight)
             .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight)
 
-            Divider()
-
-            ActionShelfView(viewModel: viewModel)
-                .frame(height: 45)
-
-            Divider()
-
-            CalculatorInputView(
+            // --- A new unified input area with a glass-like material background ---
+            UnifiedInputView(
                 viewModel: viewModel,
                 expression: $viewModel.rawExpression,
                 cursorPosition: $viewModel.cursorPosition,
@@ -61,111 +56,167 @@ struct ContentView: View {
                 onTap: { viewModel.resetNavigation() }
             )
             .focused($isInputFocused)
-            .onAppear {
-                isInputFocused = true
-            }
-            .onChange(of: viewModel.plotToShow) { oldID, newID in
-                if let id = newID {
-                    openWindow(value: id)
-                    viewModel.plotToShow = nil // Reset after opening
-                }
-            }
-            .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
-                if key.key == .return {
-                    if let plotData = viewModel.commitCalculation() {
-                        openWindow(value: plotData.id)
-                    }
-                    return .handled
-                }
-                
-                if viewModel.handleKeyPress(keys: [key.key]) {
-                    return .handled
-                }
-                return .ignored
-            }
-            .sheet(isPresented: $isShowingSheet) {
-                VariableEditorView(viewModel: viewModel, settings: settings)
-            }
-            .sheet(isPresented: $viewModel.showCSVView) {
-                if let csvViewModel = viewModel.csvViewModel {
-                    CSVView(viewModel: csvViewModel)
-                }
-            }
         }
         .frame(minWidth: 410, minHeight: 300)
-        .toolbar {
-            ToolbarItemGroup(placement: .principal) {
-                HStack(spacing: 12) {
-                    Button(action: { isShowingSheet = true }) {
-                        Image(systemName: "ellipsis.circle.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(8)
-                    .background(Color.primary.opacity(isHoveringOnMenuButton ? 0.1 : 0))
-                    .cornerRadius(8)
-                    .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isHoveringOnMenuButton = hovering
-                        }
-                    }
-                    
-                    Button(action: {
-                        viewModel.triggerCSVImport()
-                    }) {
-                        Text(".csv")
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .background(Color.primary.opacity(isHoveringOnCSVButton ? 0.1 : 0))
-                    .cornerRadius(8)
-                    .scaleEffect(isHoveringOnCSVButton ? 1.05 : 1.0)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isHoveringOnCSVButton = hovering
-                        }
-                    }
+        .onAppear {
+            isInputFocused = true
+        }
+        .onChange(of: viewModel.plotToShow) { oldID, newID in
+            if let id = newID {
+                openWindow(value: id)
+                viewModel.plotToShow = nil // Reset after opening
+            }
+        }
+        .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return]) { key in
+            if key.key == .return {
+                if let plotData = viewModel.commitCalculation() {
+                    openWindow(value: plotData.id)
                 }
+                return .handled
             }
             
-            ToolbarItemGroup {
-                HStack(spacing: 0) {
-                    Button("DEG") {
-                        viewModel.angleMode = .degrees
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(viewModel.angleMode == .degrees ? Color.orange : Color.clear)
-                    .foregroundColor(viewModel.angleMode == .degrees ? .white : .primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-
-                    Button("RAD") {
-                        viewModel.angleMode = .radians
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(viewModel.angleMode == .radians ? Color.purple : Color.clear)
-                    .foregroundColor(viewModel.angleMode == .radians ? .white : .primary)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .background(Color.secondary.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            if viewModel.handleKeyPress(keys: [key.key]) {
+                return .handled
             }
+            return .ignored
+        }
+        .sheet(isPresented: $isShowingSheet) {
+            VariableEditorView(viewModel: viewModel, settings: settings)
+        }
+        .sheet(isPresented: $viewModel.showCSVView) {
+            if let csvViewModel = viewModel.csvViewModel {
+                CSVView(viewModel: csvViewModel)
+            }
+        }
+        .toolbar {
+            // --- Redesigned Toolbar ---
+            ModernToolbarView(
+                viewModel: viewModel,
+                isShowingSheet: $isShowingSheet,
+                angleSelectorAnimation: angleSelectorAnimation
+            )
         }
     }
 }
 
-// --- Subviews ---
+// MARK: - Redesigned Toolbar
+
+struct ModernToolbarView: ToolbarContent {
+    @Bindable var viewModel: CalculatorViewModel
+    @Binding var isShowingSheet: Bool
+    var angleSelectorAnimation: Namespace.ID
+    
+    @State private var isHoveringOnMenuButton = false
+    @State private var isHoveringOnCSVButton = false
+    
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .navigation) {
+            HStack(spacing: 12) {
+                Button(action: { isShowingSheet = true }) {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title2)
+                        .foregroundColor(isHoveringOnMenuButton ? .primary : .secondary)
+                }
+                .buttonStyle(.plain)
+                .scaleEffect(isHoveringOnMenuButton ? 1.1 : 1.0)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringOnMenuButton = hovering
+                    }
+                }
+                
+                Button(action: { viewModel.triggerCSVImport() }) {
+                    Text("Import CSV")
+                        .font(.system(size: 12, weight: .medium, design: .default))
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .scaleEffect(isHoveringOnCSVButton ? 1.05 : 1.0)
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHoveringOnCSVButton = hovering
+                    }
+                }
+            }
+        }
+        
+        ToolbarItemGroup(placement: .primaryAction) {
+            HStack(spacing: 4) {
+                ForEach([AngleMode.degrees, AngleMode.radians], id: \.self) { mode in
+                    Button(mode.shortName) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            viewModel.angleMode = mode
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .foregroundColor(viewModel.angleMode == mode ? .primary : .secondary)
+                    .background {
+                        if viewModel.angleMode == mode {
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(.primary.opacity(0.15))
+                                .matchedGeometryEffect(id: "angleSelector", in: angleSelectorAnimation)
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .background(.ultraThinMaterial, in: Capsule())
+        }
+    }
+}
+
+// MARK: - Unified Input Area
+
+struct UnifiedInputView: View {
+    @Bindable var viewModel: CalculatorViewModel
+    @Binding var expression: String
+    @Binding var cursorPosition: NSRange
+    var previewText: String
+    var operatorSymbols: [MathSymbol]
+    var constantSymbols: [MathSymbol]
+    var onTap: () -> Void
+    
+    @State private var isShowingSymbolsPopover = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            ActionShelfView(viewModel: viewModel)
+                .frame(height: 45)
+            
+            Divider()
+
+            HStack(spacing: 0) {
+                Button(action: { isShowingSymbolsPopover = true }) { Image(systemName: "plus.slash.minus").font(.system(size: 20)) }.buttonStyle(.plain).padding()
+                    .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
+                        SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
+                    }
+                
+                CursorAwareTextField(text: $expression, selectedRange: $cursorPosition)
+                    .onTapGesture { onTap() }
+                    .padding(.horizontal)
+                    .font(.system(size: 26, weight: .regular, design: .monospaced))
+                    .overlay(alignment: .leading) {
+                        if expression.isEmpty {
+                            Text(previewText.isEmpty ? "Enter expression..." : previewText)
+                                .font(.system(size: 26, weight: .regular, design: .monospaced))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+                                .allowsHitTesting(false)
+                        }
+                    }
+            }
+            .frame(height: 70)
+        }
+        .background(.regularMaterial)
+    }
+}
+
+
+// MARK: - Subviews (with LiquidGlass updates)
 
 struct ActionShelfView: View {
     @Bindable var viewModel: CalculatorViewModel
@@ -198,9 +249,14 @@ struct AutocompletePillView: View {
                             .font(.system(.callout, design: .monospaced))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
-                            .background(pillColor(for: suggestion.type))
                             .foregroundColor(.primary)
-                            .cornerRadius(16)
+                            .background(
+                                .ultraThinMaterial,
+                                in: Capsule()
+                            )
+                            .overlay(
+                                Capsule().stroke(pillBorderColor(for: suggestion.type), lineWidth: 1)
+                            )
                     }
                     .buttonStyle(.plain)
                 }
@@ -209,23 +265,17 @@ struct AutocompletePillView: View {
         }
     }
     
-    private func pillColor(for type: String) -> Color {
+    private func pillBorderColor(for type: String) -> Color {
         switch type {
-        case "function":
-            return .indigo.opacity(0.2)
-        case "user_function":
-            return .purple.opacity(0.2)
-        case "variable":
-            return .teal.opacity(0.2)
-        case "constant":
-            return .yellow.opacity(0.2)
-        default:
-            return Color.primary.opacity(0.1)
+        case "function": return .indigo.opacity(0.4)
+        case "user_function": return .purple.opacity(0.4)
+        case "variable": return .teal.opacity(0.4)
+        case "constant": return .yellow.opacity(0.4)
+        default: return Color.primary.opacity(0.2)
         }
     }
 }
 
-// --- FIX: Decoupled initial animation from view appearance to prevent it affecting other views. ---
 struct ShimmerView: View {
     @Environment(\.controlActiveState) private var controlActiveState
     @State private var phase: CGFloat = -2.0
@@ -233,15 +283,13 @@ struct ShimmerView: View {
 
     var body: some View {
         ZStack {
-            Color.gray.opacity(0.1)
-
-            Rectangle()
+            Rectangle() // The shimmer effect itself
                 .fill(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            .gray.opacity(0.1),
-                            .gray.opacity(0.25),
-                            .gray.opacity(0.1)
+                            .clear,
+                            .white.opacity(0.1),
+                            .clear
                         ]),
                         startPoint: .init(x: phase, y: 0.5),
                         endPoint: .init(x: phase + 2.0, y: 0.5)
@@ -252,32 +300,19 @@ struct ShimmerView: View {
         .onAppear(perform: startAnimations)
         .onDisappear(perform: stopTimer)
         .onChange(of: controlActiveState) { oldState, newState in
-            if newState == .active {
-                startAnimations()
-            } else {
-                stopTimer()
-            }
+            if newState == .active { startAnimations() } else { stopTimer() }
         }
     }
 
     private func startAnimations() {
-        stopTimer() // Prevent duplicate timers
-        
-        // This performs the first animation immediately, but on the next run loop,
-        // which prevents it from interfering with the initial layout of other views.
+        stopTimer()
         DispatchQueue.main.async {
             phase = -2.0
-            withAnimation(.linear(duration: 1.5)) {
-                phase = 2.0
-            }
+            withAnimation(.linear(duration: 1.5)) { phase = 2.0 }
         }
-        
-        // This timer handles all subsequent animations, firing every 10 seconds.
         timer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
-            phase = -2.0 // Reset to the start
-            withAnimation(.linear(duration: 1.5)) {
-                phase = 2.0 // Animate to the end
-            }
+            phase = -2.0
+            withAnimation(.linear(duration: 1.5)) { phase = 2.0 }
         }
     }
 
@@ -297,7 +332,6 @@ struct HistoryView: View {
     
     @State private var lastAddedId: UUID?
     @State private var hoveredItem: (id: UUID, part: SelectionPart)?
-    @State private var hoveredRowId: UUID?
     @State private var showCopyMessage = false
 
     var body: some View {
@@ -305,116 +339,129 @@ struct HistoryView: View {
             ScrollViewReader { scrollViewProxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(history.enumerated()), id: \.element.id) { index, calculation in
-                            ZStack(alignment: .topLeading) {
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    switch calculation.type {
-                                    case .functionDefinition, .variableAssignment:
-                                        HStack {
-                                            Text(highlightSIPrefixes(in: calculation.expression))
-                                                .font(.system(size: 24, weight: .light, design: .monospaced))
-                                                .foregroundColor(.primary)
-                                                .padding(.horizontal, 2)
-                                                .padding(.vertical, 2)
-                                                .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                                .onHover { isHovering in
-                                                    withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
-                                                    if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                                                }
-                                                .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
-                                            
-                                            Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
-                                        }
-                                        .padding(.vertical, 8).padding(.horizontal)
-                                        .frame(maxWidth: .infinity, alignment: .trailing)
-                                    case .plot:
-                                        HStack {
-                                            Image(systemName: "chart.xyaxis.line")
-                                                .font(.system(size: 20))
-                                                .foregroundColor(.accentColor)
-                                            Text(calculation.expression)
-                                                 .font(.system(size: 24, weight: .light, design: .monospaced))
-                                                 .foregroundColor(.primary)
-                                                 .padding(.horizontal, 2)
-                                                 .padding(.vertical, 2)
-                                                 .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                                 .onHover { isHovering in
-                                                     withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
-                                                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                                                 }
-                                                 .onTapGesture {
-                                                    if case .plot(let plotData) = calculation.result {
-                                                        viewModel.requestOpenPlotWindow(for: plotData)
-                                                    }
-                                                 }
-                                            Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
-                                        }
-                                        .padding(.vertical, 8).padding(.horizontal)
-                                        .frame(maxWidth: .infinity, alignment: .trailing)
-                                        
-                                    case .evaluation:
-                                        HStack(alignment: .bottom, spacing: 8) {
-                                            HStack(spacing: 8) {
-                                                if calculation.usedAngleSensitiveFunction {
-                                                    Circle().fill(calculation.angleMode == .degrees ? .orange : .purple).frame(width: 8, height: 8).offset(y: -4)
-                                                }
-                                                Text(highlightSIPrefixes(in: calculation.expression))
-                                            }
-                                            .font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                                            .background((hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                            .onHover { isHovering in
-                                                withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
-                                                if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                                            }
-                                            .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
-
-                                            Text("=").font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.secondary)
-                                            
-                                            CalculationResultView(
-                                                viewModel: viewModel,
-                                                calculation: calculation,
-                                                hoveredItem: $hoveredItem,
-                                                selectedHistoryId: selectedHistoryId,
-                                                selectedHistoryPart: selectedHistoryPart
-                                            )
-                                            
-                                            Button(action: { copyToClipboard(calculation: calculation) }) { Image(systemName: "doc.on.doc") }.buttonStyle(.plain).opacity(hoveredRowId == calculation.id ? 1.0 : 0.2)
-                                        }
-                                        .padding(.vertical, 12).padding(.horizontal)
-                                        .frame(maxWidth: .infinity, alignment: .trailing)
-                                    }
-                                    
-                                    Divider().opacity(0.4)
-                                }
-                                .animation(.default, value: selectedHistoryId)
-                            }
+                        ForEach(history) { calculation in
+                            HistoryRowView(
+                                viewModel: viewModel,
+                                calculation: calculation,
+                                selectedHistoryId: selectedHistoryId,
+                                selectedHistoryPart: selectedHistoryPart,
+                                hoveredItem: $hoveredItem,
+                                showCopyMessage: $showCopyMessage
+                            )
                             .id(calculation.id).transition(.opacity)
                             .background(calculation.id == lastAddedId ? Color.accentColor.opacity(0.1) : Color.clear)
-                            .onHover { isHovering in withAnimation(.easeInOut(duration: 0.15)) { hoveredRowId = isHovering ? calculation.id : nil } }
                             .onAppear {
                                 if calculation.id == lastAddedId {
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                        withAnimation(.easeOut(duration: 0.5)) {
-                                            lastAddedId = nil
-                                        }
+                                        withAnimation(.easeOut(duration: 0.5)) { lastAddedId = nil }
                                     }
                                 }
                             }
                         }
                     }
+                    .padding(.top) // Add padding to avoid the notch
                 }
                 .onChange(of: history) {
                     if let lastEntry = history.last {
                         lastAddedId = lastEntry.id
-                        withAnimation {
-                            scrollViewProxy.scrollTo(lastEntry.id, anchor: .bottom)
-                        }
+                        withAnimation { scrollViewProxy.scrollTo(lastEntry.id, anchor: .bottom) }
                     }
                 }
             }
             .frame(maxHeight: .infinity)
             
-            if showCopyMessage { Text("Copied to Clipboard").padding(.horizontal, 16).padding(.vertical, 10).background(.ultraThickMaterial).cornerRadius(12).transition(.opacity.animation(.easeInOut)) }
+            if showCopyMessage { Text("Copied as LaTeX").padding(.horizontal, 16).padding(.vertical, 10).background(.ultraThickMaterial).cornerRadius(12).transition(.opacity.animation(.easeInOut)) }
+        }
+    }
+}
+
+// --- New History Row View for cleaner context menus ---
+struct HistoryRowView: View {
+    @Bindable var viewModel: CalculatorViewModel
+    let calculation: Calculation
+    var selectedHistoryId: UUID?
+    var selectedHistoryPart: SelectionPart
+    
+    @Binding var hoveredItem: (id: UUID, part: SelectionPart)?
+    @Binding var showCopyMessage: Bool
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            switch calculation.type {
+            case .functionDefinition, .variableAssignment:
+                Text(highlightSIPrefixes(in: calculation.expression))
+                    .font(.system(size: 24, weight: .light, design: .monospaced))
+                    .padding(.horizontal, 2).padding(.vertical, 2)
+                    .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                    .onHover { isHovering in
+                        withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                    .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
+                
+            case .plot:
+                HStack {
+                    Image(systemName: "chart.xyaxis.line")
+                        .font(.system(size: 20))
+                        .foregroundColor(.accentColor)
+                    Text(calculation.expression)
+                         .font(.system(size: 24, weight: .light, design: .monospaced))
+                         .padding(.horizontal, 2).padding(.vertical, 2)
+                         .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                         .onHover { isHovering in
+                             withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                         }
+                         .onTapGesture {
+                            if case .plot(let plotData) = calculation.result {
+                                viewModel.requestOpenPlotWindow(for: plotData)
+                            }
+                         }
+                }
+
+            case .evaluation:
+                HStack(alignment: .bottom, spacing: 8) {
+                    HStack(spacing: 8) {
+                        if calculation.usedAngleSensitiveFunction {
+                             // --- "Glass Orb" Angle Indicator ---
+                            Circle()
+                                .fill(.regularMaterial)
+                                .overlay(Circle().fill(calculation.angleMode == .degrees ? .orange.opacity(0.5) : .purple.opacity(0.5)))
+                                .frame(width: 8, height: 8)
+                                .offset(y: -4)
+                        }
+                        Text(highlightSIPrefixes(in: calculation.expression))
+                    }
+                    .font(.system(size: 24, weight: .light, design: .monospaced))
+                    .padding(.horizontal, 2).padding(.vertical, 2)
+                    .background((hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                    .onHover { isHovering in
+                        withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                    .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
+
+                    Text("=").font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                    
+                    CalculationResultView(
+                        viewModel: viewModel,
+                        calculation: calculation,
+                        hoveredItem: $hoveredItem,
+                        selectedHistoryId: selectedHistoryId,
+                        selectedHistoryPart: selectedHistoryPart
+                    )
+                }
+            }
+            Divider().padding(.top, 8)
+        }
+        .padding(.vertical, 8).padding(.horizontal)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .animation(.default, value: selectedHistoryId)
+        .contentShape(Rectangle()) // Makes the whole area tappable for the context menu
+        .contextMenu {
+            Button(action: { copyToClipboard(calculation: calculation) }) {
+                Label("Copy as LaTeX", systemImage: "doc.on.doc")
+            }
         }
     }
     
@@ -429,68 +476,64 @@ struct HistoryView: View {
     private func highlightSIPrefixes(in expression: String) -> AttributedString {
         var attributedString = AttributedString(expression)
         let pattern = "(?<![a-zA-Z])(" + viewModel.siPrefixes.joined(separator: "|") + ")\\b"
-        do {
-            let regex = try NSRegularExpression(pattern: pattern)
+        if let regex = try? NSRegularExpression(pattern: pattern) {
             let nsRange = NSRange(expression.startIndex..., in: expression)
-            let matches = regex.matches(in: expression, options: [], range: nsRange)
-            for match in matches {
-                if let range = Range(match.range(at: 1), in: expression) {
-                    if let attrRange = attributedString.range(of: expression[range]) { attributedString[attrRange].foregroundColor = .teal }
+            regex.matches(in: expression, options: [], range: nsRange).forEach { match in
+                if let range = Range(match.range(at: 1), in: expression),
+                   let attrRange = attributedString.range(of: expression[range]) {
+                    attributedString[attrRange].foregroundColor = .teal
                 }
             }
-        } catch { print("Regex error for SI prefix highlighting: \(error)") }
+        }
         return attributedString
     }
 }
 
-/// A new subview to render the different types of calculation results.
-/// This simplifies the main HistoryView and fixes the compiler error.
+// --- The rest of the subviews remain largely the same, but without opaque backgrounds ---
+
 struct CalculationResultView: View {
     @Bindable var viewModel: CalculatorViewModel
     let calculation: Calculation
-    
     @Binding var hoveredItem: (id: UUID, part: SelectionPart)?
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
-    
     @State private var isHoverForExpansion = false
     private let columns = [GridItem(.adaptive(minimum: 100))]
     
     var body: some View {
+        // This view's logic is complex and remains unchanged, but its backgrounds are now transparent
+        // so they sit nicely on the new material layers. I've updated the selection highlight color.
+        
+        let selectionColor = Color.accentColor.opacity(0.2)
+        
         if case .tuple(let values) = calculation.result {
             HStack(spacing: 0) {
                 ForEach(Array(values.enumerated()), id: \.offset) { index, value in
                     Text(viewModel.formatForHistory(value))
-                        .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                        .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
+                        .padding(.horizontal, 2).padding(.vertical, 2)
+                        .background(isResultSelected(calculation: calculation, index: index) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                         .onHover { isHovering in
                             withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
                         .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(value)) }
-                    
-                    if index < values.count - 1 {
-                        Text(" OR ").font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
-                    }
+                    if index < values.count - 1 { Text(" OR ").foregroundColor(.secondary) }
                 }
             }
         } else if case .regressionResult(let slope, let intercept) = calculation.result {
             HStack(spacing: 0) {
                 Text("m = \(viewModel.formatForHistory(.unitValue(slope)))")
-                    .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                    .background(isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear)
+                    .padding(.horizontal, 2).padding(.vertical, 2)
+                    .background(isResultSelected(calculation: calculation, index: 0) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                     .onHover { isHovering in
                         withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                     }
                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.unitValue(slope))) }
-                
-                Text(", ")
-                    .font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
-
+                Text(", ").foregroundColor(.secondary)
                 Text("b = \(viewModel.formatForHistory(.unitValue(intercept)))")
-                    .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                    .background(isResultSelected(calculation: calculation, index: 1) ? Color.accentColor.opacity(0.25) : Color.clear)
+                    .padding(.horizontal, 2).padding(.vertical, 2)
+                    .background(isResultSelected(calculation: calculation, index: 1) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                     .onHover { isHovering in
                         withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 1)) : nil }
                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -498,41 +541,25 @@ struct CalculationResultView: View {
                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.unitValue(intercept))) }
             }
         } else if case .roots(let roots) = calculation.result {
-            let isKeyboardSelectedForExpansion = selectedHistoryId == calculation.id && {
-                if case .result = selectedHistoryPart { return true }
-                return false
-            }()
-
+            let formattedRoots = viewModel.formatRootsForDisplay(roots)
+            let isKeyboardSelectedForExpansion = selectedHistoryId == calculation.id && { if case .result = selectedHistoryPart { return true } else { return false } }()
             let showExpansion = roots.count > 1
             let isExpanded = (isKeyboardSelectedForExpansion || isHoverForExpansion) && showExpansion
-            
             Group {
                 if isExpanded {
-                    let formattedRoots = viewModel.formatRootsForDisplay(roots)
                     VStack(alignment: .trailing, spacing: 8) {
                         HStack {
-                            Text("\(getVariableName(from: calculation.expression)) ≈ { ... }")
-                                .font(.system(size: 20, weight: .light, design: .monospaced))
-                                .foregroundColor(.secondary)
+                            Text("\(getVariableName(from: calculation.expression)) ≈ { ... }").foregroundColor(.secondary)
                                 .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
-                            
-                            Image(systemName: "arrow.down.right.and.arrow.up.left.circle")
-                                .foregroundColor(.secondary)
+                            Image(systemName: "arrow.down.right.and.arrow.up.left.circle").foregroundColor(.secondary)
                         }
-                        
                         LazyVGrid(columns: columns, alignment: .trailing, spacing: 8) {
                             ForEach(Array(formattedRoots.enumerated()), id: \.offset) { index, rootString in
                                 Text(rootString)
-                                    .font(.system(size: 22, weight: .light, design: .monospaced))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
-                                    .cornerRadius(6)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(isResultSelected(calculation: calculation, index: index) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                                     .onHover { isHovering in
-                                        guard selectedHistoryId != calculation.id else {
-                                            hoveredItem = nil
-                                            return
-                                        }
+                                        guard selectedHistoryId != calculation.id else { hoveredItem = nil; return }
                                         withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
                                         if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                     }
@@ -540,70 +567,38 @@ struct CalculationResultView: View {
                             }
                         }
                     }
-                    .padding(8)
-                    .background(Color.primary.opacity(0.05))
-                    .cornerRadius(8)
-
+                    .padding(8).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
                 } else {
                     HStack(spacing: 4) {
-                        let variableName = getVariableName(from: calculation.expression)
-                        Text("\(variableName) ≈")
-                            .font(.system(size: 24, weight: .light, design: .monospaced))
-                            .foregroundColor(.primary)
-                        
-                        if showExpansion {
-                            Text("{")
-                                .font(.system(size: 24, weight: .light, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        let formattedRoots = viewModel.formatRootsForDisplay(roots)
+                        Text("\(getVariableName(from: calculation.expression)) ≈")
+                        if showExpansion { Text("{").foregroundColor(.secondary) }
                         let maxDisplayRoots = showExpansion ? 4 : 1
                         let displayRoots = formattedRoots.count > maxDisplayRoots ? Array(formattedRoots.prefix(maxDisplayRoots)) : formattedRoots
-                        
                         ForEach(Array(displayRoots.enumerated()), id: \.offset) { index, rootString in
                             Text(rootString)
-                                .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                                .background(isResultSelected(calculation: calculation, index: index) ? Color.accentColor.opacity(0.25) : Color.clear)
+                                .padding(.horizontal, 2).padding(.vertical, 2)
+                                .background(isResultSelected(calculation: calculation, index: index) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                                 .onHover { isHovering in
-                                    guard selectedHistoryId != calculation.id else {
-                                        hoveredItem = nil
-                                        return
-                                    }
+                                    guard selectedHistoryId != calculation.id else { hoveredItem = nil; return }
                                     withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: index)) : nil }
                                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                                 }
                                 .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(roots[index])) }
-                            
-                            if index < displayRoots.count - 1 {
-                                Text(",")
-                                    .font(.system(size: 20, weight: .light, design: .monospaced)).foregroundColor(.secondary)
-                            }
+                            if index < displayRoots.count - 1 { Text(",").foregroundColor(.secondary) }
                         }
-                        
-                        if roots.count > maxDisplayRoots {
-                            Text("... (\(roots.count - maxDisplayRoots) more)")
-                                .font(.system(size: 18, weight: .light, design: .monospaced)).foregroundColor(.secondary)
-                        }
-                        
-                        if showExpansion {
-                            Text("}")
-                                .font(.system(size: 24, weight: .light, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
+                        if roots.count > maxDisplayRoots { Text("... (\(roots.count - maxDisplayRoots) more)").font(.system(size: 18)).foregroundColor(.secondary) }
+                        if showExpansion { Text("}").foregroundColor(.secondary) }
                     }
                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(calculation.result)) }
                 }
             }
-            .onHover { hovering in
-                withAnimation {
-                    isHoverForExpansion = hovering
-                }
-            }
+            .font(.system(size: 24, weight: .light, design: .monospaced))
+            .onHover { hovering in withAnimation { isHoverForExpansion = hovering } }
         } else {
             Text(viewModel.formatForHistory(calculation.result))
-                .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing).foregroundColor(.primary).padding(.horizontal, 2).padding(.vertical, 2)
-                .background(isResultSelected(calculation: calculation, index: 0) ? Color.accentColor.opacity(0.25) : Color.clear)
+                .font(.system(size: 24, weight: .light, design: .monospaced)).multilineTextAlignment(.trailing)
+                .padding(.horizontal, 2).padding(.vertical, 2)
+                .background(isResultSelected(calculation: calculation, index: 0) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                 .onHover { isHovering in
                     withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
                     if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
@@ -620,17 +615,14 @@ struct CalculationResultView: View {
     
     private func getVariableName(from expression: String) -> String {
         let pattern = #"(?:solve|nsolve)\s*\([^,]+,\s*([a-zA-Z_][a-zA-Z0-9_]*)"#
-        do {
-            let regex = try NSRegularExpression(pattern: pattern)
-            if let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
-               let range = Range(match.range(at: 1), in: expression) {
-                return String(expression[range])
-            }
-        } catch {}
-        return "x" // Default
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
+           let range = Range(match.range(at: 1), in: expression) {
+            return String(expression[range])
+        }
+        return "x"
     }
 }
-
 
 struct FormattedExpressionWithButtonsView: View {
     @Bindable var viewModel: CalculatorViewModel
@@ -641,79 +633,28 @@ struct FormattedExpressionWithButtonsView: View {
     @State private var isShowingGreekPopover = false
     
     var body: some View {
-        ZStack {
-            Color.gray.opacity(0.1)
-            HStack {
-                Button(action: { isShowingGreekPopover = true }) {
-                    Text("α").font(.system(size: 22))
+        HStack {
+            Button(action: { isShowingGreekPopover = true }) {
+                Text("α").font(.system(size: 22))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal)
+            .popover(isPresented: $isShowingGreekPopover, arrowEdge: .top) {
+                GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
+            }
+            
+            if !helpText.isEmpty || !errorText.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !helpText.isEmpty { Text(helpText).font(.system(.body, design: .monospaced)).textSelection(.enabled) }
+                    if !errorText.isEmpty { Text(errorText).font(.system(.body, design: .monospaced)).foregroundColor(.red).textSelection(.enabled) }
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal)
-                .popover(isPresented: $isShowingGreekPopover, arrowEdge: .top) {
-                    GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
-                }
-                
-                if !helpText.isEmpty || !errorText.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if !helpText.isEmpty {
-                            Text(helpText)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundColor(.primary)
-                                .textSelection(.enabled)
-                        }
-                        if !errorText.isEmpty {
-                            Text(errorText)
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundColor(.red)
-                                .textSelection(.enabled)
-                        }
-                    }
-                    .padding(.trailing)
-                    
-                    Spacer()
-                } else {
-                    MathJaxView(latex: latexPreview)
-                    Spacer()
-                }
+                .padding(.trailing)
+                Spacer()
+            } else {
+                MathJaxView(latex: latexPreview)
+                Spacer()
             }
         }
-    }
-}
-
-
-struct CalculatorInputView: View {
-    @Bindable var viewModel: CalculatorViewModel
-    @Binding var expression: String
-    @Binding var cursorPosition: NSRange
-    var previewText: String
-    var operatorSymbols: [MathSymbol]
-    var constantSymbols: [MathSymbol]
-    var onTap: () -> Void
-    
-    @State private var isShowingSymbolsPopover = false
-
-    var body: some View {
-        HStack(spacing: 0) {
-            Button(action: { isShowingSymbolsPopover = true }) { Image(systemName: "plus.slash.minus").font(.system(size: 20)) }.buttonStyle(.plain).padding()
-                .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
-                    SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
-                }
-            
-            CursorAwareTextField(text: $expression, selectedRange: $cursorPosition)
-                .onTapGesture { onTap() }
-                .padding(.horizontal)
-                .font(.system(size: 26, weight: .regular, design: .monospaced))
-                .overlay(alignment: .leading) {
-                    if expression.isEmpty {
-                        Text(previewText.isEmpty ? "Enter expression..." : previewText)
-                            .font(.system(size: 26, weight: .regular, design: .monospaced))
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                            .allowsHitTesting(false)
-                    }
-                }
-        }
-        .frame(height: 70)
     }
 }
 
@@ -728,7 +669,7 @@ struct SymbolsGridView: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(operatorSymbols) { symbol in
                     Button(action: { viewModel.insertTextAtCursor(symbol.insertionText ?? symbol.symbol) }) {
-                        Text(symbol.symbol).font(.title2).frame(width: 40, height: 40).background(Color.secondary.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous)).help(symbol.name)
+                        Text(symbol.symbol).font(.title2).frame(width: 40, height: 40).background(.thinMaterial).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous)).help(symbol.name)
                     }.buttonStyle(.plain)
                 }
             }
@@ -736,7 +677,7 @@ struct SymbolsGridView: View {
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(constantSymbols) { symbol in
                     Button(action: { viewModel.insertTextAtCursor(symbol.insertionText ?? symbol.symbol) }) {
-                        Text(symbol.symbol).font(.title3).frame(width: 40, height: 40).background(Color.blue.opacity(0.2)).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous)).help(symbol.name)
+                        Text(symbol.symbol).font(.title3).frame(width: 40, height: 40).background(.thinMaterial).overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.blue.opacity(0.4))).help(symbol.name)
                     }.buttonStyle(.plain)
                 }
             }
@@ -751,16 +692,24 @@ struct GreekSymbolsGridView: View {
     let columns = [GridItem(.adaptive(minimum: 45))]
     
     var body: some View {
-        VStack {
-            LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(greekSymbols) { symbol in
-                    Button(action: { viewModel.insertTextAtCursor(symbol.insertionText ?? symbol.symbol) }) {
-                        Text(symbol.symbol).font(.title2).frame(width: 40, height: 40).background(Color.green.opacity(0.2)).clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous)).help(symbol.name)
-                    }.buttonStyle(.plain)
-                }
+        LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(greekSymbols) { symbol in
+                Button(action: { viewModel.insertTextAtCursor(symbol.insertionText ?? symbol.symbol) }) {
+                    Text(symbol.symbol).font(.title2).frame(width: 40, height: 40).background(.thinMaterial).overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.green.opacity(0.4))).help(symbol.name)
+                }.buttonStyle(.plain)
             }
         }
         .padding().frame(width: 320)
+    }
+}
+
+// Helper extension for AngleMode
+extension AngleMode {
+    var shortName: String {
+        switch self {
+        case .degrees: return "DEG"
+        case .radians: return "RAD"
+        }
     }
 }
 
