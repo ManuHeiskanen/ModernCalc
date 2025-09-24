@@ -35,12 +35,10 @@ struct ContentView: View {
             )
             
             // --- The live preview sits above the input area ---
-            FormattedExpressionWithButtonsView(
-                viewModel: viewModel,
+            FormattedExpressionView(
                 latexPreview: viewModel.liveLaTeXPreview,
                 helpText: viewModel.liveHelpText,
-                errorText: viewModel.liveErrorText,
-                greekSymbols: viewModel.greekSymbols
+                errorText: viewModel.liveErrorText
             )
             .frame(height: viewModel.livePreviewHeight)
             .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight)
@@ -53,6 +51,7 @@ struct ContentView: View {
                 previewText: viewModel.previewText,
                 operatorSymbols: viewModel.operatorSymbols,
                 constantSymbols: viewModel.constantSymbols,
+                greekSymbols: viewModel.greekSymbols,
                 onTap: { viewModel.resetNavigation() }
             )
             .focused($isInputFocused)
@@ -177,13 +176,14 @@ struct UnifiedInputView: View {
     var previewText: String
     var operatorSymbols: [MathSymbol]
     var constantSymbols: [MathSymbol]
+    var greekSymbols: [MathSymbol]
     var onTap: () -> Void
     
     @State private var isShowingSymbolsPopover = false
     
     var body: some View {
         VStack(spacing: 0) {
-            ActionShelfView(viewModel: viewModel)
+            ActionShelfView(viewModel: viewModel, greekSymbols: greekSymbols)
                 .frame(height: 45)
             
             Divider()
@@ -219,18 +219,48 @@ struct UnifiedInputView: View {
 
 struct ActionShelfView: View {
     @Bindable var viewModel: CalculatorViewModel
+    var greekSymbols: [MathSymbol]
+    @State private var isShowingGreekPopover = false
+
+    @ViewBuilder
+    private var greekButton: some View {
+        Button(action: { isShowingGreekPopover = true }) {
+            Text("α")
+                .font(.system(size: 22))
+                .frame(width: 38, height: 38)
+        }
+        .buttonStyle(.plain)
+        .background(.ultraThinMaterial, in: Circle())
+        .popover(isPresented: $isShowingGreekPopover, arrowEdge: .bottom) {
+            GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
+        }
+    }
 
     var body: some View {
-        ZStack {
-            if viewModel.showAutocomplete && !viewModel.autocompleteSuggestions.isEmpty {
+        if viewModel.showAutocomplete && !viewModel.autocompleteSuggestions.isEmpty {
+            // Layout WITH suggestions: Button and pills side-by-side
+            HStack(spacing: 12) {
+                greekButton
+                
                 AutocompletePillView(viewModel: viewModel)
                     .transition(.opacity.animation(.easeInOut(duration: 0.2)))
-            } else {
+            }
+            .padding(.leading)
+            .clipped()
+        } else {
+            // Layout WITHOUT suggestions: Shimmer is in the background
+            ZStack {
                 ShimmerView()
                     .transition(.opacity.animation(.easeInOut(duration: 0.2)))
+                
+                HStack {
+                    greekButton
+                    Spacer()
+                }
+                .padding(.leading)
             }
+            .clipped()
         }
-        .clipped()
     }
 }
 
@@ -264,7 +294,7 @@ struct AutocompletePillView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.trailing) // Swapped from .horizontal to just .trailing
         }
     }
     
@@ -638,31 +668,19 @@ struct CalculationResultView: View {
     }
 }
 
-struct FormattedExpressionWithButtonsView: View {
-    @Bindable var viewModel: CalculatorViewModel
+struct FormattedExpressionView: View {
     var latexPreview: String
     var helpText: String
     var errorText: String
-    var greekSymbols: [MathSymbol]
-    @State private var isShowingGreekPopover = false
     
     var body: some View {
         HStack {
-            Button(action: { isShowingGreekPopover = true }) {
-                Text("α").font(.system(size: 22))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal)
-            .popover(isPresented: $isShowingGreekPopover, arrowEdge: .top) {
-                GreekSymbolsGridView(viewModel: viewModel, greekSymbols: greekSymbols)
-            }
-            
             if !helpText.isEmpty || !errorText.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
                     if !helpText.isEmpty { Text(helpText).font(.system(.body, design: .monospaced)).textSelection(.enabled) }
                     if !errorText.isEmpty { Text(errorText).font(.system(.body, design: .monospaced)).foregroundColor(.red).textSelection(.enabled) }
                 }
-                .padding(.trailing)
+                .padding()
                 Spacer()
             } else {
                 MathJaxView(latex: latexPreview)
