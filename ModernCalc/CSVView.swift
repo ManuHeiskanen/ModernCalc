@@ -151,6 +151,8 @@ private struct CSVGridView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // This modifier tells SwiftUI to animate any changes to this view when the row count changes.
+        .animation(.easeInOut(duration: 0.25), value: viewModel.displayGrid.count)
     }
 }
 
