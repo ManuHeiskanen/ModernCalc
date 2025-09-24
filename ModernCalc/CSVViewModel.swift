@@ -25,16 +25,6 @@ enum ColumnSeparator: String, CaseIterable, Identifiable {
     }
 }
 
-/// Defines the decimal conversion options available in the UI.
-enum DecimalConversionOption: String, CaseIterable, Identifiable {
-    case none = "None"
-    case periodToComma = "Convert . to ,"
-    case commaToPeriod = "Convert , to ."
-    
-    var id: String { self.rawValue }
-}
-
-
 @Observable
 @MainActor
 class CSVViewModel {
@@ -49,14 +39,13 @@ class CSVViewModel {
     // A weak reference to the main view model to assign variables back to it.
     private weak var mainViewModel: CalculatorViewModel?
     
-    // --- NEW UI State Properties ---
+    // --- UI State Properties ---
     var columnSeparator: ColumnSeparator = .comma {
         didSet {
             // Re-parse data whenever the separator is changed.
             reparseData()
         }
     }
-    var decimalConversion: DecimalConversionOption = .none
     
     // --- Properties to hold the currently parsed data ---
     private var parsedHeaders: [String] = []
@@ -130,7 +119,8 @@ class CSVViewModel {
         
         return slicedGrid.map { row in
             row.map { cell in
-                let convertedCell = applyDecimalConversion(to: cell)
+                // Apply automatic decimal conversion and then format the cell.
+                let convertedCell = applyAutomaticDecimalConversion(to: cell)
                 return formatCell(convertedCell)
             }
         }
@@ -181,8 +171,8 @@ class CSVViewModel {
         for row in slicedRows {
             for (colIndex, cell) in row.enumerated() {
                 if colIndex < selectedColumns.count && selectedColumns[colIndex] {
-                    let convertedCell = applyDecimalConversion(to: cell)
-                    let standardizedCell = convertedCell.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+                    // Use the automatic conversion for the final assignment as well.
+                    let standardizedCell = applyAutomaticDecimalConversion(to: cell).trimmingCharacters(in: .whitespaces)
                     matrixValues.append(Double(standardizedCell) ?? 0.0)
                 }
             }
@@ -215,25 +205,30 @@ class CSVViewModel {
         self.endRow = totalRows
     }
     
-    private func applyDecimalConversion(to cell: String) -> String {
-        switch decimalConversion {
-        case .none:
-            return cell
-        case .periodToComma:
-            return cell.replacingOccurrences(of: ".", with: ",")
-        case .commaToPeriod:
+    /// **UPDATED:** This function now automatically converts CSV decimal separators to match the app's settings.
+    /// It makes the import process seamless without requiring manual user intervention.
+    private func applyAutomaticDecimalConversion(to cell: String) -> String {
+        // If the app's preferred separator is a period, any commas in the CSV are treated as decimal separators and converted.
+        if settings.decimalSeparator == .period {
             return cell.replacingOccurrences(of: ",", with: ".")
+        }
+        // If the app's preferred separator is a comma, any periods in the CSV are treated as decimal separators and converted.
+        else {
+            return cell.replacingOccurrences(of: ".", with: ",")
         }
     }
     
     private func formatCell(_ value: String) -> String {
-        guard settings.enableCSVRounding,
-              let number = Double(value.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")) else {
+        // First, standardize the string to use a period for Double conversion, regardless of display format.
+        let standardValue = value.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+        
+        guard settings.enableCSVRounding, let number = Double(standardValue) else {
             return value
         }
         
         let formattedString = String(format: "%.\(settings.csvDecimalPlaces)f", number)
         
+        // After formatting, apply the user's preferred decimal separator for display.
         if settings.decimalSeparator == .comma {
             return formattedString.replacingOccurrences(of: ".", with: ",")
         }

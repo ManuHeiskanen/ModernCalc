@@ -154,6 +154,7 @@ struct UnitStore {
         unitMap["yd"] = UnitDefinition(symbol: "yd", dimensions: [.meter: 1], conversionFactor: 0.9144) // Yard
         unitMap["mi"] = UnitDefinition(symbol: "mi", dimensions: [.meter: 1], conversionFactor: 1609.344) // Mile
         unitMap["nmi"] = UnitDefinition(symbol: "nmi", dimensions: [.meter: 1], conversionFactor: 1852) // Nautical Mile
+        unitMap["poronkusema"] = UnitDefinition(symbol: "poronkusema", dimensions: [.meter: 1], conversionFactor: 7500) // Poronkusema :D
         
         
         // Area
