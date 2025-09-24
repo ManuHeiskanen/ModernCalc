@@ -393,11 +393,11 @@ struct HistoryView: View {
                                 calculation: calculation,
                                 selectedHistoryId: selectedHistoryId,
                                 selectedHistoryPart: selectedHistoryPart,
+                                lastAddedId: lastAddedId,
                                 hoveredItem: $hoveredItem,
                                 showCopyMessage: $showCopyMessage
                             )
                             .id(calculation.id).transition(.opacity)
-                            .background(calculation.id == lastAddedId ? Color.accentColor.opacity(0.1) : Color.clear)
                             .onAppear {
                                 if calculation.id == lastAddedId {
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -429,81 +429,92 @@ struct HistoryRowView: View {
     let calculation: Calculation
     var selectedHistoryId: UUID?
     var selectedHistoryPart: SelectionPart
+    var lastAddedId: UUID?
     
     @Binding var hoveredItem: (id: UUID, part: SelectionPart)?
     @Binding var showCopyMessage: Bool
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            switch calculation.type {
-            case .functionDefinition, .variableAssignment:
-                Text(highlightSIPrefixes(in: calculation.expression))
-                    .font(.system(size: 24, weight: .light, design: .monospaced))
-                    .padding(.horizontal, 2).padding(.vertical, 2)
-                    .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                    .onHover { isHovering in
-                        withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
-                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
-                    .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
-                
-            case .plot:
-                HStack {
-                    Image(systemName: "chart.xyaxis.line")
-                        .font(.system(size: 20))
-                        .foregroundColor(.accentColor)
-                    Text(calculation.expression)
-                         .font(.system(size: 24, weight: .light, design: .monospaced))
-                         .padding(.horizontal, 2).padding(.vertical, 2)
-                         .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                         .onHover { isHovering in
-                             withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
-                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                         }
-                         .onTapGesture {
-                            if case .plot(let plotData) = calculation.result {
-                                viewModel.requestOpenPlotWindow(for: plotData)
-                            }
-                         }
-                }
-
-            case .evaluation:
-                HStack(alignment: .bottom, spacing: 8) {
-                    HStack(spacing: 8) {
-                        if calculation.usedAngleSensitiveFunction {
-                             // --- "Glass Orb" Angle Indicator ---
-                            Circle()
-                                .fill(.regularMaterial)
-                                .overlay(Circle().fill(calculation.angleMode == .degrees ? .orange.opacity(0.8) : .purple.opacity(0.8)))
-                                .frame(width: 8, height: 8)
-                                .offset(y: -4)
+        VStack(alignment: .trailing, spacing: 0) {
+            VStack(alignment: .trailing, spacing: 4) {
+                switch calculation.type {
+                case .functionDefinition, .variableAssignment:
+                    Text(highlightSIPrefixes(in: calculation.expression))
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                        .padding(.horizontal, 2).padding(.vertical, 2)
+                        .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                        .onHover { isHovering in
+                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
-                        Text(highlightSIPrefixes(in: calculation.expression))
-                    }
-                    .font(.system(size: 24, weight: .light, design: .monospaced))
-                    .padding(.horizontal, 2).padding(.vertical, 2)
-                    .background((hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                    .onHover { isHovering in
-                        withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
-                        if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
-                    .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
-
-                    Text("=").font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                        .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
                     
-                    CalculationResultView(
-                        viewModel: viewModel,
-                        calculation: calculation,
-                        hoveredItem: $hoveredItem,
-                        selectedHistoryId: selectedHistoryId,
-                        selectedHistoryPart: selectedHistoryPart
-                    )
+                case .plot:
+                    HStack {
+                        Image(systemName: "chart.xyaxis.line")
+                            .font(.system(size: 20))
+                            .foregroundColor(.accentColor)
+                        Text(calculation.expression)
+                             .font(.system(size: 24, weight: .light, design: .monospaced))
+                             .padding(.horizontal, 2).padding(.vertical, 2)
+                             .background((hoveredItem?.id == calculation.id || selectedHistoryId == calculation.id) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                             .onHover { isHovering in
+                                 withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                                 if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                             }
+                             .onTapGesture {
+                                if case .plot(let plotData) = calculation.result {
+                                    viewModel.requestOpenPlotWindow(for: plotData)
+                                }
+                             }
+                    }
+
+                case .evaluation:
+                    HStack(alignment: .bottom, spacing: 8) {
+                        HStack(spacing: 8) {
+                            if calculation.usedAngleSensitiveFunction {
+                                 // --- "Glass Orb" Angle Indicator ---
+                                Circle()
+                                    .fill(.regularMaterial)
+                                    .overlay(Circle().fill(calculation.angleMode == .degrees ? .orange.opacity(0.8) : .purple.opacity(0.8)))
+                                    .frame(width: 8, height: 8)
+                                    .offset(y: -4)
+                            }
+                            Text(highlightSIPrefixes(in: calculation.expression))
+                        }
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                        .padding(.horizontal, 2).padding(.vertical, 2)
+                        .background((hoveredItem?.id == calculation.id && hoveredItem?.part == .equation) || (selectedHistoryId == calculation.id && selectedHistoryPart == .equation) ? Color.accentColor.opacity(0.2) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                        .onHover { isHovering in
+                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .equation) : nil }
+                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                        .onTapGesture { viewModel.insertTextAtCursor(calculation.expression) }
+
+                        Text("=").font(.system(size: 24, weight: .light, design: .monospaced)).foregroundColor(.secondary)
+                        
+                        CalculationResultView(
+                            viewModel: viewModel,
+                            calculation: calculation,
+                            hoveredItem: $hoveredItem,
+                            selectedHistoryId: selectedHistoryId,
+                            selectedHistoryPart: selectedHistoryPart
+                        )
+                    }
                 }
             }
-            Divider().padding(.top, 8)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(calculation.id == lastAddedId ? Color.accentColor.opacity(0.1) : Color.clear)
+            )
+            .padding(.bottom, 8)
+
+            Divider()
         }
-        .padding(.vertical, 8).padding(.horizontal)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.horizontal)
+        .padding(.bottom, 8)
         .animation(.default, value: selectedHistoryId)
         .contentShape(Rectangle()) // Makes the whole area tappable for the context menu
         .contextMenu {
