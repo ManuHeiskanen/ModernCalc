@@ -188,26 +188,30 @@ struct UnifiedInputView: View {
             
             Divider()
 
-            HStack(spacing: 0) {
-                Button(action: { isShowingSymbolsPopover = true }) { Image(systemName: "plus.slash.minus").font(.system(size: 20)) }.buttonStyle(.plain).padding()
-                    .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
-                        SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
-                    }
+            HStack(spacing: 12) {
+                Button(action: { isShowingSymbolsPopover = true }) {
+                    Image(systemName: "plus.slash.minus")
+                        .font(.system(size: 20))
+                        .frame(width: 38, height: 38) // Align with greekButton
+                }
+                .buttonStyle(.plain)
+                .popover(isPresented: $isShowingSymbolsPopover, arrowEdge: .bottom) {
+                    SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
+                }
                 
                 CursorAwareTextField(text: $expression, selectedRange: $cursorPosition)
                     .onTapGesture { onTap() }
-                    .padding(.horizontal)
                     .font(.system(size: 26, weight: .regular, design: .monospaced))
                     .overlay(alignment: .leading) {
                         if expression.isEmpty {
                             Text(previewText.isEmpty ? "Enter expression..." : previewText)
                                 .font(.system(size: 26, weight: .regular, design: .monospaced))
                                 .foregroundColor(.secondary)
-                                .padding(.horizontal)
                                 .allowsHitTesting(false)
                         }
                     }
             }
+            .padding(.horizontal)
             .frame(height: 70)
         }
         .background(.regularMaterial)
@@ -294,7 +298,7 @@ struct AutocompletePillView: View {
                     }
                 }
             }
-            .padding(.trailing) // Swapped from .horizontal to just .trailing
+            .padding(.trailing)
         }
     }
     
