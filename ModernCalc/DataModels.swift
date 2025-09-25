@@ -60,6 +60,7 @@ struct PlotData: Identifiable, Hashable {
     var series: [PlotSeries]
     let plotType: PlotType
     let explicitYRange: (min: Double, max: Double)?
+    let initialXRange: (min: Double, max: Double)?
     let generationTime: TimeInterval?
 
     // --- NEW PROPERTIES ---
@@ -69,11 +70,12 @@ struct PlotData: Identifiable, Hashable {
     let xAxisDimension: UnitDimension?
     let yAxisDimension: UnitDimension?
 
-    init(expression: String, series: [PlotSeries], plotType: PlotType, explicitYRange: (min: Double, max: Double)?, generationTime: TimeInterval? = nil, xAxisLabel: String = "X", yAxisLabel: String = "Y", xAxisDimension: UnitDimension? = nil, yAxisDimension: UnitDimension? = nil) {
+    init(expression: String, series: [PlotSeries], plotType: PlotType, explicitYRange: (min: Double, max: Double)?, initialXRange: (min: Double, max: Double)? = nil, generationTime: TimeInterval? = nil, xAxisLabel: String = "X", yAxisLabel: String = "Y", xAxisDimension: UnitDimension? = nil, yAxisDimension: UnitDimension? = nil) {
         self.expression = expression
         self.series = series
         self.plotType = plotType
         self.explicitYRange = explicitYRange
+        self.initialXRange = initialXRange
         self.generationTime = generationTime
         self.xAxisLabel = xAxisLabel
         self.yAxisLabel = yAxisLabel

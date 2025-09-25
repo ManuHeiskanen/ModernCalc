@@ -103,8 +103,7 @@ struct PlotView: View {
                         }
                         .onEnded { _ in
                             initialDragDomains = nil
-                            // FIX: Request new data when the user finishes dragging.
-                            viewModel.requestDataRegeneration()
+                            // viewModel.requestDataRegeneration()
                         }
                 )
                 .simultaneousGesture(
@@ -116,8 +115,7 @@ struct PlotView: View {
                         }
                         .onEnded { value in
                             cumulativeZoom = 1.0
-                            // FIX: Request new data when the user finishes zooming.
-                            viewModel.requestDataRegeneration()
+                            //viewModel.requestDataRegeneration()
                         }
                 )
                 .onContinuousHover { phase in

@@ -62,11 +62,17 @@ class PlotViewModel {
                     calculatedDomainX = (midX - maxSpan / 2)...(midX + maxSpan / 2)
                     calculatedDomainY = (midY - maxSpan / 2)...(midY + maxSpan / 2)
                 } else {
-                    var minX = allPoints.map { $0.x }.min()!, maxX = allPoints.map { $0.x }.max()!
-                    if minX == maxX { minX -= 1; maxX += 1 }
-                    if abs(minX + maxX) < (maxX - minX) * 0.1 { let mag = max(abs(minX), abs(maxX)); minX = -mag; maxX = mag }
-                    let xPadding = (maxX - minX) * 0.05
-                    calculatedDomainX = (minX - max(xPadding, 0.5))...(maxX + max(xPadding, 0.5))
+                    // --- Smarter X-Axis Initialization ---
+                    if let xRange = plotData.initialXRange {
+                        calculatedDomainX = xRange.min...xRange.max
+                    } else {
+                        // Fallback to old logic if initial range isn't provided
+                        var minX = allPoints.map { $0.x }.min()!, maxX = allPoints.map { $0.x }.max()!
+                        if minX == maxX { minX -= 1; maxX += 1 }
+                        if abs(minX + maxX) < (maxX - minX) * 0.1 { let mag = max(abs(minX), abs(maxX)); minX = -mag; maxX = mag }
+                        let xPadding = (maxX - minX) * 0.05
+                        calculatedDomainX = (minX - max(xPadding, 0.5))...(maxX + max(xPadding, 0.5))
+                    }
                     
                     if let yRange = plotData.explicitYRange {
                         calculatedDomainY = yRange.min...yRange.max
@@ -76,6 +82,21 @@ class PlotViewModel {
                         if abs(minY + maxY) < (maxY - minY) * 0.1 { let mag = max(abs(minY), abs(maxY)); minY = -mag; maxY = mag }
                         let yPadding = (maxY - minY) * 0.1
                         calculatedDomainY = (minY - max(yPadding, 1.0))...(maxY + max(yPadding, 1.0))
+                    }
+                    
+                    // --- Smarter Axis Scaling Logic ---
+                    let xSpan = calculatedDomainX.upperBound - calculatedDomainX.lowerBound
+                    let ySpan = calculatedDomainY.upperBound - calculatedDomainY.lowerBound
+
+                    if ySpan > 1e-9 { // Avoid division by zero for flat lines
+                        let targetAspectRatio = 4.0 // Aim for X-span to be no more than 4x the Y-span
+                        let currentAspectRatio = xSpan / ySpan
+                        
+                        if currentAspectRatio > targetAspectRatio {
+                            let yCenter = (calculatedDomainY.lowerBound + calculatedDomainY.upperBound) / 2
+                            let newYSpan = xSpan / targetAspectRatio
+                            calculatedDomainY = (yCenter - newYSpan / 2)...(yCenter + newYSpan / 2)
+                        }
                     }
                 }
             }

@@ -181,8 +181,20 @@ extension Evaluator {
         }
 
         let numPoints = 200
-        let defaultRange = -10.0...10.0
-        // FIX: Widen the calculation range for autoplot to provide a buffer for panning.
+        var defaultRange = -10.0...10.0
+        
+        // --- Smarter Range for Periodic Functions ---
+        if node.expressions.count == 1 {
+            let desc = node.expressions[0].description.lowercased()
+            if desc.contains("sin(") || desc.contains("cos(") || desc.contains("tan(") {
+                // Show 3 full waves total
+                let totalWaves = 3.0
+                let range = totalWaves * 2 * Double.pi
+                defaultRange = (-range / 2)...(range / 2)
+            }
+        }
+        
+        // Widen the calculation range to provide a buffer for panning.
         let span = defaultRange.upperBound - defaultRange.lowerBound
         let renderRange = (defaultRange.lowerBound - span)...(defaultRange.upperBound + span)
 
@@ -246,7 +258,7 @@ extension Evaluator {
             let xAxisLabel = formatDimensionsForAxis(xAxisDimension, defaultLabel: "x(t)")
             let yAxisLabel = formatDimensionsForAxis(yAxisDimension, defaultLabel: "y(t)")
             
-            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: xAxisDimension, yAxisDimension: yAxisDimension)
+            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: nil, initialXRange: (defaultRange.lowerBound, defaultRange.upperBound), generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: xAxisDimension, yAxisDimension: yAxisDimension)
         } else {
             let declaredVariables = Set(variables.keys); let declaredFunctions = Set(functions.keys); var undeclaredVars = Set<String>()
             for expr in node.expressions { undeclaredVars.formUnion(findUndeclaredVariables(in: expr, declaredVariables: declaredVariables, declaredFunctions: declaredFunctions)) }
@@ -307,7 +319,7 @@ extension Evaluator {
             let xAxisLabel = varName
             let yAxisLabel = formatDimensionsForAxis(yAxisDimension ?? [:], defaultLabel: "f(\(varName))")
             
-            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: [:], yAxisDimension: yAxisDimension)
+            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: nil, initialXRange: (defaultRange.lowerBound, defaultRange.upperBound), generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: [:], yAxisDimension: yAxisDimension)
         }
         return .plot(plotData)
     }
@@ -422,7 +434,7 @@ extension Evaluator {
         let xAxisDimension = xMin.dimensions
         guard xMin.value < xMax.value else { throw MathError.plotError(reason: "Plot range min must be less than max.") }
 
-        // FIX: Widen the calculation range to provide a buffer for panning.
+        // Widen the calculation range to provide a buffer for panning.
         let span = xMax.value - xMin.value
         let renderMin = UnitValue(value: xMin.value - span, dimensions: xAxisDimension)
         let renderMax = UnitValue(value: xMax.value + span, dimensions: xAxisDimension)
@@ -482,7 +494,7 @@ extension Evaluator {
             let xAxisLabel = formatDimensionsForAxis(parametricXAxisDimension, defaultLabel: "x(\(varName))")
             let yAxisLabel = formatDimensionsForAxis(parametricYAxisDimension, defaultLabel: "y(\(varName))")
             
-            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: explicitYRange, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: parametricXAxisDimension, yAxisDimension: parametricYAxisDimension)
+            plotData = PlotData(expression: node.description, series: [plotSeries], plotType: .parametric, explicitYRange: explicitYRange, initialXRange: (xMin.value, xMax.value), generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: parametricXAxisDimension, yAxisDimension: parametricYAxisDimension)
         } else {
             let dryRunX = MathValue.unitValue(xMin)
             var tempVarsDryRun = variables
@@ -521,7 +533,7 @@ extension Evaluator {
             let xAxisLabel = formatDimensionsForAxis(xAxisDimension, defaultLabel: varName)
             let yAxisLabel = formatDimensionsForAxis(yAxisDimension, defaultLabel: "f(\(varName))")
 
-            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: explicitYRange, generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: xAxisDimension, yAxisDimension: yAxisDimension)
+            plotData = PlotData(expression: node.description, series: allSeries, plotType: .line, explicitYRange: explicitYRange, initialXRange: (xMin.value, xMax.value), generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: xAxisDimension, yAxisDimension: yAxisDimension)
         }
         return .plot(plotData)
     }
