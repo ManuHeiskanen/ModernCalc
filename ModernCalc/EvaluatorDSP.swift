@@ -15,15 +15,30 @@ extension Evaluator {
     /// A static helper containing the core FFT logic. It is called by both the `fft()`
     /// function and the new `powerspectrum()` function.
     static func performFFT(inputVector: ComplexVector, direction: FFTDirection) throws -> ComplexVector {
-        let n = inputVector.dimension
-        let log2n = vDSP_Length(log2(Double(n)))
-
+        let n_original = inputVector.dimension
         let opName = direction == kFFTDirection_Forward ? "fft" : "ifft"
         
-        // FFT works most efficiently with powers of 2.
-        guard n > 0 && (n & (n - 1)) == 0 else {
-            throw MathError.unsupportedOperation(op: opName, typeA: "Input vector size must be a power of 2.", typeB: nil)
+        guard n_original > 0 else {
+            // FFT of an empty vector is an empty vector.
+            return ComplexVector(values: [], dimensions: inputVector.dimensions)
         }
+
+        var paddedVector = inputVector
+        let isPowerOfTwo = (n_original > 0) && (n_original & (n_original - 1) == 0)
+
+        if !isPowerOfTwo {
+            // Calculate the next power of two and pad the input vector with zeros.
+            let nextPowerOfTwo = Int(pow(2, ceil(log2(Double(n_original)))))
+            let zerosToPad = nextPowerOfTwo - n_original
+            if zerosToPad > 0 {
+                let padding = [Complex](repeating: .zero, count: zerosToPad)
+                paddedVector = ComplexVector(values: inputVector.values + padding, dimensions: inputVector.dimensions)
+            }
+        }
+        
+        // Continue FFT calculation with the (potentially padded) vector.
+        let n = paddedVector.dimension
+        let log2n = vDSP_Length(log2(Double(n)))
 
         // 1. Create the double-precision FFT setup object.
         guard let fftSetup = vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2)) else {
@@ -34,10 +49,11 @@ extension Evaluator {
             vDSP_destroy_fftsetupD(fftSetup)
         }
 
-        // 3. Prepare the input data arrays.
-        var realp = inputVector.values.map { $0.real }
-        var imagp = inputVector.values.map { $0.imaginary }
+        // 3. Prepare the input data arrays from the padded vector.
+        var realp = paddedVector.values.map { $0.real }
+        var imagp = paddedVector.values.map { $0.imaginary }
 
+        // 4. Perform the FFT in-place.
         realp.withUnsafeMutableBufferPointer { realpBuffer in
             imagp.withUnsafeMutableBufferPointer { imagpBuffer in
                 var splitComplexInput = DSPDoubleSplitComplex(
@@ -48,7 +64,7 @@ extension Evaluator {
             }
         }
 
-        // 5. Pack the results back into our Complex type, scaling if necessary.
+        // 5. Pack the results back into our Complex type, scaling if necessary for IFFT.
         if direction == kFFTDirection_Inverse {
             var scale = 1.0 / Double(n)
             vDSP_vsmulD(realp, 1, &scale, &realp, 1, vDSP_Length(n))
@@ -94,4 +110,3 @@ extension Evaluator {
         return (.complexVector(resultVector), usedAngle)
     }
 }
-
