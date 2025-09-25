@@ -42,7 +42,7 @@ extension Evaluator {
 
         // 1. Create the double-precision FFT setup object.
         guard let fftSetup = vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2)) else {
-            throw MathError.unsupportedOperation(op: opName, typeA: "Failed to create FFT setup.", typeB: nil)
+            throw MathError.unsupportedOperation(op: opName, typeA: "Failed to create FFT setup", typeB: nil)
         }
         defer {
             // 2. Clean up the setup object when we're done.

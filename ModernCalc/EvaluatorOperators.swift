@@ -63,7 +63,7 @@ extension Evaluator {
             }
 
             guard sourceValue.dimensions == targetDef.dimensions else {
-                throw MathError.dimensionMismatch(reason: "Cannot convert between incompatible units.")
+                throw MathError.dimensionMismatch(reason: "Cannot convert between incompatible units")
             }
             
             let convertedValue = sourceValue.value / targetDef.conversionFactor
@@ -271,7 +271,7 @@ extension Evaluator {
         // Comparison Operators
         case ">", "<", ">=", "<=", "==", "!=":
             guard l.dimensions == r.dimensions else {
-                throw MathError.dimensionMismatch(reason: "Cannot compare quantities with different units.")
+                throw MathError.dimensionMismatch(reason: "Cannot compare quantities with different units")
             }
             let result: Bool
             switch op {

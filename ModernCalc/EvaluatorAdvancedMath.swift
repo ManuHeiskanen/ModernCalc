@@ -49,7 +49,7 @@ extension Evaluator {
 
         let (pointValue, pointUsedAngle) = try _evaluateSingle(node: node.arguments[1], variables: &variables, functions: &functions, angleMode: angleMode)
         guard case .vector(let pointVector) = pointValue else { throw MathError.typeMismatch(expected: "Vector for gradient point", found: pointValue.typeName) }
-        guard pointVector.dimension == varNames.count else { throw MathError.dimensionMismatch(reason: "Point dimension (\(pointVector.dimension)) must match number of function variables (\(varNames.count)).") }
+        guard pointVector.dimension == varNames.count else { throw MathError.dimensionMismatch(reason: "Point dimension (\(pointVector.dimension)) must match number of function variables (\(varNames.count))") }
 
         let capturedVariables = variables
         let capturedFunctions = functions
@@ -249,7 +249,7 @@ extension Evaluator {
                 } catch { }
             }
             let dataPoints = results.compactMap { $0 }
-            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions")}
             
             let seriesName = "(\(DisplayFormatter.formatNodeForLegend(node: xBody)), \(DisplayFormatter.formatNodeForLegend(node: yBody)))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
             let duration = CFAbsoluteTimeGetCurrent() - startTime
@@ -267,7 +267,7 @@ extension Evaluator {
             let varName: String
             if undeclaredVars.count == 1 { varName = undeclaredVars.first! }
             else if undeclaredVars.isEmpty { varName = "x" }
-            else { throw MathError.plotError(reason: "Multiple unknown variables found: [\(undeclaredVars.joined(separator: ", "))].") }
+            else { throw MathError.plotError(reason: "Multiple unknown variables found: [\(undeclaredVars.joined(separator: ", "))]") }
 
             var allSeries: [PlotSeries] = []
             var yAxisDimension: UnitDimension? = nil
@@ -312,7 +312,7 @@ extension Evaluator {
                 let dataPoints = results.compactMap { $0 }
                 if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: DisplayFormatter.formatNodeForLegend(node: body), dataPoints: dataPoints)) }
             }
-            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
+            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s)")}
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Autoplot (function) generation time: \(duration * 1000) ms")
 
@@ -336,8 +336,8 @@ extension Evaluator {
         switch evaluatedArgs.count {
         case 1:
             guard case .matrix(let matrix) = evaluatedArgs[0] else { throw MathError.typeMismatch(expected: "Matrix", found: evaluatedArgs[0].typeName) }
-            guard matrix.columns == 2 else { throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns.") }
-            guard matrix.rows > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix.") }
+            guard matrix.columns == 2 else { throw MathError.dimensionMismatch(reason: "Scatterplot matrix must have exactly 2 columns") }
+            guard matrix.rows > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from an empty matrix") }
             let xCol = try matrix.getcolumn(index: 1)
             let yCol = try matrix.getcolumn(index: 2)
             xVector = Vector(values: xCol.values, dimensions: xCol.dimensions)
@@ -356,8 +356,8 @@ extension Evaluator {
             throw MathError.incorrectArgumentCount(function: "scatterplot", expected: "1 (Matrix), 2 (Vectors), or 3 (Vectors, Degree)", found: evaluatedArgs.count)
         }
         
-        guard xVector.dimension == yVector.dimension else { throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension.") }
-        guard xVector.dimension > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors.") }
+        guard xVector.dimension == yVector.dimension else { throw MathError.dimensionMismatch(reason: "Vectors for scatterplot must have the same dimension") }
+        guard xVector.dimension > 0 else { throw MathError.plotError(reason: "Cannot create a scatterplot from empty vectors") }
 
         let dataPoints = zip(xVector.values, yVector.values).map { DataPoint(x: $0, y: $1) }
         var allSeries = [PlotSeries(name: "Data Points", dataPoints: dataPoints)]
@@ -367,7 +367,7 @@ extension Evaluator {
             let coeffs = try performPolynomialFit(x: xVector, y: yVector, degree: degree)
             
             guard let minX = xVector.values.min(), let maxX = xVector.values.max() else {
-                throw MathError.plotError(reason: "Cannot generate fit for empty data.")
+                throw MathError.plotError(reason: "Cannot generate fit for empty data")
             }
             
             let numFitPoints = 100
@@ -417,22 +417,22 @@ extension Evaluator {
         let xMax: UnitValue
         switch (xMinVal, xMaxVal) {
             case (.unitValue(let u1), .unitValue(let u2)):
-                guard u1.dimensions == u2.dimensions else { throw MathError.plotError(reason: "Plot range units must be compatible.") }
+                guard u1.dimensions == u2.dimensions else { throw MathError.plotError(reason: "Plot range units must be compatible") }
                 xMin = u1; xMax = u2
             case (.dimensionless(let d1), .dimensionless(let d2)):
                 xMin = .dimensionless(d1); xMax = .dimensionless(d2)
             case (.unitValue(let u1), .dimensionless(let d2)):
-                guard u1.dimensions.isEmpty else { throw MathError.plotError(reason: "Plot range units must be compatible.") }
+                guard u1.dimensions.isEmpty else { throw MathError.plotError(reason: "Plot range units must be compatible") }
                 xMin = u1; xMax = .dimensionless(d2)
             case (.dimensionless(let d1), .unitValue(let u2)):
-                guard u2.dimensions.isEmpty else { throw MathError.plotError(reason: "Plot range units must be compatible.") }
+                guard u2.dimensions.isEmpty else { throw MathError.plotError(reason: "Plot range units must be compatible") }
                 xMin = .dimensionless(d1); xMax = u2
             default:
-                throw MathError.plotError(reason: "Incompatible plot range types.")
+                throw MathError.plotError(reason: "Incompatible plot range types")
         }
         
         let xAxisDimension = xMin.dimensions
-        guard xMin.value < xMax.value else { throw MathError.plotError(reason: "Plot range min must be less than max.") }
+        guard xMin.value < xMax.value else { throw MathError.plotError(reason: "Plot range min must be less than max") }
 
         // Widen the calculation range to provide a buffer for panning.
         let span = xMax.value - xMin.value
@@ -445,7 +445,7 @@ extension Evaluator {
              let (yMaxVal, _) = try _evaluateSingle(node: yRangeNodes.1, variables: &variables, functions: &functions, angleMode: .radians)
              let yMin = try yMinVal.asScalar()
              let yMax = try yMaxVal.asScalar()
-             guard yMin < yMax else { throw MathError.plotError(reason: "Y-axis range min must be less than max.") }
+             guard yMin < yMax else { throw MathError.plotError(reason: "Y-axis range min must be less than max") }
             explicitYRange = (yMin, yMax)
         }
 
@@ -486,7 +486,7 @@ extension Evaluator {
             }
             
             let dataPoints = results.compactMap { $0 }
-            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions.")}
+            if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the parametric expressions")}
             let seriesName = "(\(DisplayFormatter.formatNodeForLegend(node: xBody)), \(DisplayFormatter.formatNodeForLegend(node: yBody)))"; let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints)
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Plot (parametric) generation time: \(duration * 1000) ms")
@@ -526,7 +526,7 @@ extension Evaluator {
                 let dataPoints = results.compactMap { $0 }
                 if !dataPoints.isEmpty { allSeries.append(PlotSeries(name: DisplayFormatter.formatNodeForLegend(node: body), dataPoints: dataPoints)) }
             }
-            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s).")}
+            if allSeries.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the expression(s)")}
             let duration = CFAbsoluteTimeGetCurrent() - startTime
             print("[BENCHMARK] Plot (function) generation time: \(duration * 1000) ms")
 
@@ -593,7 +593,7 @@ extension Evaluator {
             
             // Allow dimensionless or unit-based equations to resolve to zero
             guard let resultScalar = result.asUnitValue()?.value else {
-                throw MathError.dimensionMismatch(reason: "Solver expression must resolve to a dimensioned or dimensionless value.")
+                throw MathError.dimensionMismatch(reason: "Solver expression must resolve to a dimensioned or dimensionless value")
             }
             return resultScalar
         }
@@ -687,9 +687,9 @@ extension Evaluator {
 
 /// Solves a system of linear equations Ax = b using Gaussian elimination with partial pivoting.
 func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
-    guard A.rows == A.columns else { throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve.") }
+    guard A.rows == A.columns else { throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve") }
     let n = A.rows
-    guard b.dimension == n else { throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A.") }
+    guard b.dimension == n else { throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A") }
 
     var augmentedMatrix: [[Double]] = (0..<n).map { i in (0..<n).map { A[i, $0] } + [b[i]] }
 
@@ -699,7 +699,7 @@ func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
         augmentedMatrix.swapAt(i, maxRow)
 
         guard abs(augmentedMatrix[i][i]) > 1e-12 else {
-            throw MathError.unsupportedOperation(op: "linsolve", typeA: "Matrix is singular or nearly singular.", typeB: nil)
+            throw MathError.unsupportedOperation(op: "linsolve", typeA: "Matrix is singular or nearly singular", typeB: nil)
         }
 
         for k in (i + 1)..<n {
@@ -728,7 +728,7 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Polyno
         throw MathError.unsupportedOperation(op: "polyfit", typeA: "degree must be an integer >= 1", typeB: nil)
     }
     guard x.dimension == y.dimension else {
-        throw MathError.dimensionMismatch(reason: "x and y vectors must have the same number of elements.")
+        throw MathError.dimensionMismatch(reason: "x and y vectors must have the same number of elements")
     }
     let numPoints = x.dimension
     let degreeInt = Int(degree)

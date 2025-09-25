@@ -202,7 +202,7 @@ struct Evaluator {
                     scalarArg = d // Allow dimensionless uncertainty, assume same units as nominal value
                 case .unitValue(let u):
                     if u.dimensions != dimensions { // If units ARE provided, they must match
-                        throw MathError.dimensionMismatch(reason: "Uncertainty component must have same units as the value.")
+                        throw MathError.dimensionMismatch(reason: "Uncertainty component must have same units as the value")
                     }
                     scalarArg = u.value
                 default:
@@ -352,7 +352,7 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "Scalar values for integral bounds", found: "\(lowerValue.typeName) or \(upperValue.typeName)")
             }
             guard a.dimensions == b.dimensions else {
-                throw MathError.dimensionMismatch(reason: "Integral bounds must have the same units.")
+                throw MathError.dimensionMismatch(reason: "Integral bounds must have the same units")
             }
 
             var bodyUsedAngle = false
@@ -466,9 +466,9 @@ private func extractValuesAndDimension(from elements: [MathValue]) throws -> (va
                  values.append(u.value)
             } else if finalDimension.isEmpty {
                 // This occurs if the first element had units, but a later one is dimensionless
-                throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units.")
+                throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units")
             } else {
-                 throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units.")
+                 throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units")
             }
         default:
             throw MathError.typeMismatch(expected: "Numeric value (with or without units)", found: element.typeName)
@@ -517,9 +517,9 @@ private func extractComplexValuesAndDimension(from elements: [MathValue]) throws
         if currentDimension == finalDimension || currentDimension.isEmpty {
             values.append(currentValue)
         } else if finalDimension.isEmpty {
-            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units.")
+            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units")
         } else {
-            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units.")
+            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units")
         }
     }
     

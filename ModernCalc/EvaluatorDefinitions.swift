@@ -76,7 +76,7 @@ extension Evaluator {
         "geomean": { args in
             let values = try extractDoublesFromVariadicArgs(args)
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "geomean") }
-            guard values.allSatisfy({ $0 >= 0 }) else { throw MathError.unsupportedOperation(op: "geomean", typeA: "All values must be non-negative.", typeB: nil) }
+            guard values.allSatisfy({ $0 >= 0 }) else { throw MathError.unsupportedOperation(op: "geomean", typeA: "All values must be non-negative", typeB: nil) }
             if values.contains(0) { return .dimensionless(0) }
             let product = values.reduce(1, *)
             return .dimensionless(pow(product, 1.0 / Double(values.count)))
@@ -84,7 +84,7 @@ extension Evaluator {
         "harmean": { args in
             let values = try extractDoublesFromVariadicArgs(args)
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "harmean") }
-            guard !values.contains(0) else { throw MathError.unsupportedOperation(op: "harmean", typeA: "Values cannot be zero.", typeB: nil) }
+            guard !values.contains(0) else { throw MathError.unsupportedOperation(op: "harmean", typeA: "Values cannot be zero", typeB: nil) }
             let sumOfReciprocals = values.map { 1.0 / $0 }.reduce(0, +)
             guard sumOfReciprocals != 0 else { throw MathError.divisionByZero }
             return .dimensionless(Double(values.count) / sumOfReciprocals)
@@ -129,9 +129,9 @@ extension Evaluator {
             // Compare the signatures. If they don't match, throw a detailed error.
             if trueSignature != falseSignature {
                 if trueSignature.0 != falseSignature.0 { // E.g., comparing a number to a vector
-                    throw MathError.dimensionMismatch(reason: "The 'true' and 'false' results of an if statement must be the same type (e.g., both numbers, or both vectors). Found \(trueSignature.0) and \(falseSignature.0).")
+                    throw MathError.dimensionMismatch(reason: "The 'true' and 'false' results of an if statement must be the same type (e.g., both numbers, or both vectors). Found \(trueSignature.0) and \(falseSignature.0)")
                 } else { // E.g., comparing meters to seconds
-                     throw MathError.dimensionMismatch(reason: "The 'true' and 'false' results of an if statement must have compatible units.")
+                     throw MathError.dimensionMismatch(reason: "The 'true' and 'false' results of an if statement must have compatible units")
                 }
             }
             
@@ -254,7 +254,7 @@ extension Evaluator {
             let data = args[0]
             let samplingRateValue = try args[1].asScalar()
             
-            guard samplingRateValue > 0 else { throw MathError.unsupportedOperation(op: "powerspectrum", typeA: "Sampling rate must be positive.", typeB: nil) }
+            guard samplingRateValue > 0 else { throw MathError.unsupportedOperation(op: "powerspectrum", typeA: "Sampling rate must be positive", typeB: nil) }
 
             let inputVector: ComplexVector
             switch data {
@@ -603,8 +603,8 @@ extension Evaluator {
         "rmse": { a, b in
             let v1 = try a.asVector(for: "rmse")
             let v2 = try b.asVector(for: "rmse")
-            guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSE.") }
-            guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSE.") }
+            guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSE") }
+            guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSE") }
             guard v1.dimension > 0 else { return .dimensionless(0) }
             let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
             let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
@@ -614,8 +614,8 @@ extension Evaluator {
         "rmsd": { a, b in // alias for rmse
             let v1 = try a.asVector(for: "rmsd")
             let v2 = try b.asVector(for: "rmsd")
-            guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSD.") }
-            guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSD.") }
+            guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for RMSD") }
+            guard v1.dimensions == v2.dimensions else { throw MathError.dimensionMismatch(reason: "Vectors must have the same units for RMSD") }
             guard v1.dimension > 0 else { return .dimensionless(0) }
             let squaredErrors = zip(v1.values, v2.values).map { pow($0 - $1, 2) }
             let meanSquaredError = squaredErrors.reduce(0, +) / Double(v1.dimension)
@@ -625,13 +625,13 @@ extension Evaluator {
         "log": { a, b in
             let base = try a.asScalar()
             let number = try b.asScalar()
-            guard base > 0, base != 1, number > 0 else { throw MathError.unsupportedOperation(op: "log", typeA: "Logarithm base must be > 0 and != 1, and the number must be > 0.", typeB: nil) }
+            guard base > 0, base != 1, number > 0 else { throw MathError.unsupportedOperation(op: "log", typeA: "Logarithm base must be > 0 and != 1, and the number must be > 0", typeB: nil) }
             return .dimensionless(Foundation.log(number) / Foundation.log(base))
         },
         "cov": { a, b in
             let xVec = try a.asVector(for: "cov")
             let yVec = try b.asVector(for: "cov")
-            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for covariance.") }
+            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for covariance") }
             
             let n = Double(xVec.dimension)
             let meanX = xVec.average().value
@@ -646,7 +646,7 @@ extension Evaluator {
         "corr": { a, b in
             let xVec = try a.asVector(for: "corr")
             let yVec = try b.asVector(for: "corr")
-            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for correlation.") }
+            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for correlation") }
             let n = Double(xVec.dimension)
             let sumX = xVec.sum().value
             let sumY = yVec.sum().value
@@ -657,7 +657,7 @@ extension Evaluator {
             let numerator = n * sumXY - sumX * sumY
             let denominator = sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY))
             
-            guard denominator != 0 else { throw MathError.unsupportedOperation(op: "corr", typeA: "Cannot calculate correlation, denominator is zero.", typeB: nil) }
+            guard denominator != 0 else { throw MathError.unsupportedOperation(op: "corr", typeA: "Cannot calculate correlation, denominator is zero", typeB: nil) }
             return .dimensionless(numerator / denominator)
         },
         "count": { data, value in
@@ -684,7 +684,7 @@ extension Evaluator {
         "linreg": { a, b in
             let xVec = try a.asVector(for: "linreg")
             let yVec = try b.asVector(for: "linreg")
-            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for linear regression.") }
+            guard xVec.dimension == yVec.dimension, xVec.dimension >= 2 else { throw MathError.dimensionMismatch(reason: "Vectors must have the same number of elements (at least 2) for linear regression") }
             let n = Double(xVec.dimension)
             let sumX = xVec.sum().value
             let sumY = yVec.sum().value
@@ -833,7 +833,7 @@ extension Evaluator {
             case .unitValue(let u):
                 // Frequency is 1/s
                 guard u.dimensions == [.second: -1] else {
-                    throw MathError.dimensionMismatch(reason: "First argument for impedance() must be a frequency (e.g., in Hz).")
+                    throw MathError.dimensionMismatch(reason: "First argument for impedance() must be a frequency (e.g., in Hz)")
                 }
                 f = u.value // value is already in base SI units (Hz)
             default:
@@ -844,8 +844,7 @@ extension Evaluator {
             
             switch comp_val {
             case .dimensionless(let r):
-                // Assume dimensionless is resistance in Ohms.
-                return .complex(Complex(real: r, imaginary: 0))
+                throw MathError.dimensionMismatch(reason: "Second argument for impedance() must have a unit (e.g., Ohm)")
             case .unitValue(let u):
                 // Resistance dimensions: kg*m^2*s^-3*A^-2 (Ohm)
                 let resistanceDim: UnitDimension = [.kilogram: 1, .meter: 2, .second: -3, .ampere: -2]
@@ -865,7 +864,7 @@ extension Evaluator {
                     guard omega * u.value != 0 else { throw MathError.divisionByZero }
                     return .complex(Complex(real: 0, imaginary: -1 / (omega * u.value)))
                 } else {
-                    throw MathError.dimensionMismatch(reason: "Second argument for impedance() must be resistance (Ω), inductance (H), or capacitance (F).")
+                    throw MathError.dimensionMismatch(reason: "Second argument for impedance() must be resistance (Ω), inductance (H), or capacitance (F)")
                 }
             default:
                 throw MathError.typeMismatch(expected: "Resistance, Inductance, or Capacitance value", found: comp_val.typeName)
@@ -1058,19 +1057,19 @@ fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (
         switch val {
         case .dimensionless(let d):
             if commonDimension == nil { commonDimension = [:] }
-            if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers.") }
+            if commonDimension != [:] { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless numbers") }
             allValues.append(d)
         case .unitValue(let u):
             if commonDimension == nil { commonDimension = u.dimensions }
-            if commonDimension != u.dimensions { throw MathError.dimensionMismatch(reason: "All values must have the same units.") }
+            if commonDimension != u.dimensions { throw MathError.dimensionMismatch(reason: "All values must have the same units") }
             allValues.append(u.value)
         case .vector(let v):
             if commonDimension == nil { commonDimension = v.dimensions }
-            if commonDimension != v.dimensions { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless vectors.") }
+            if commonDimension != v.dimensions { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless vectors") }
             allValues.append(contentsOf: v.values)
         case .matrix(let m):
             if commonDimension == nil { commonDimension = m.dimensions }
-            if commonDimension != m.dimensions { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless matrices.") }
+            if commonDimension != m.dimensions { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless matrices") }
             allValues.append(contentsOf: m.values)
         default:
             throw MathError.typeMismatch(expected: "Numeric value", found: val.typeName)
@@ -1149,7 +1148,7 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
         return .vector(Vector(values: results))
         
     case (.vector(let v1), .vector(let v2)):
-        guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for element-wise \(opName).") }
+        guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for element-wise \(opName)") }
         let results = try zip(v1.values, v2.values).map { operation(try checkInt($0), try checkInt($1)) }
         return .vector(Vector(values: results))
 
