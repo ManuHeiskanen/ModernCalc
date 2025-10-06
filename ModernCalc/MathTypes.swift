@@ -841,6 +841,8 @@ enum MathValue: Codable, Equatable {
     case triggerCSVImport
     case uncertain(UncertainValue)
     case roots([MathValue])
+    // --- NEW: A dedicated type to hold the results of eigenvalue decomposition ---
+    case eigenDecomposition(eigenvectors: Matrix, eigenvalues: Matrix)
 
     var typeName: String {
         switch self {
@@ -862,6 +864,7 @@ enum MathValue: Codable, Equatable {
         case .constant: return "Constant"
         case .uncertain: return "UncertainValue"
         case .roots: return "Roots"
+        case .eigenDecomposition: return "EigenDecomposition"
         }
     }
     
@@ -909,7 +912,8 @@ enum MathValue: Codable, Equatable {
         }
     }
     
-    enum CodingKeys: String, CodingKey { case type, value, slope, intercept, coefficients, plotData }
+    // --- NEW: Add coding keys for the new result type ---
+    enum CodingKeys: String, CodingKey { case type, value, slope, intercept, coefficients, plotData, eigenvectors, eigenvalues }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -935,6 +939,10 @@ enum MathValue: Codable, Equatable {
             try container.encode("uncertain", forKey: .type); try container.encode(u, forKey: .value)
         case .roots(let r):
             try container.encode("roots", forKey: .type); try container.encode(r, forKey: .value)
+        case .eigenDecomposition(let eigenvectors, let eigenvalues):
+            try container.encode("eigenDecomposition", forKey: .type)
+            try container.encode(eigenvectors, forKey: .eigenvectors)
+            try container.encode(eigenvalues, forKey: .eigenvalues)
         case .plot:
             try container.encode("plot", forKey: .type)
         case .triggerCSVImport:
@@ -969,6 +977,10 @@ enum MathValue: Codable, Equatable {
         case "roots":
             if let doubleRoots = try? container.decode([Double].self, forKey: .value) { self = .roots(doubleRoots.map { .dimensionless($0) }) }
             else { self = .roots(try container.decode([MathValue].self, forKey: .value)) }
+        case "eigenDecomposition":
+            let eigenvectors = try container.decode(Matrix.self, forKey: .eigenvectors)
+            let eigenvalues = try container.decode(Matrix.self, forKey: .eigenvalues)
+            self = .eigenDecomposition(eigenvectors: eigenvectors, eigenvalues: eigenvalues)
         case "plot": self = .plot(PlotData(expression: "Empty", series: [], plotType: .line, explicitYRange: nil))
         default: throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Invalid MathValue type '\(type)'")
         }
@@ -994,6 +1006,7 @@ enum MathValue: Codable, Equatable {
         case (.constant(let a), .constant(let b)): return a == b
         case (.uncertain(let a), .uncertain(let b)): return a == b
         case (.roots(let a), .roots(let b)): return a == b
+        case (.eigenDecomposition(let v1, let d1), .eigenDecomposition(let v2, let d2)): return v1 == d1 && v2 == d2
         default: return false
         }
     }
@@ -1006,4 +1019,3 @@ extension Array {
         }
     }
 }
-

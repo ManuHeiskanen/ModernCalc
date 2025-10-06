@@ -344,6 +344,13 @@ extension Evaluator {
             default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, Matrix or UncertainValue", found: arg.typeName)
             }
         },
+        "eig": { arg in
+            guard case .matrix(let m) = arg else {
+                throw MathError.typeMismatch(expected: "Matrix", found: arg.typeName)
+            }
+            let (vectors, values) = try Evaluator().performEigenvalueDecomposition(matrix: m)
+            return .eigenDecomposition(eigenvectors: vectors, eigenvalues: values)
+        },
         "norm": { arg in
              switch arg {
              case .vector(let v): return .unitValue(v.magnitude())

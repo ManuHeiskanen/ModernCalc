@@ -247,6 +247,10 @@ struct DisplayFormatter {
         case .complexMatrix(let cm):
             let unitStr = formatDimensionsForHistory(cm.dimensions)
             return formatComplexMatrixForDisplay(cm, with: settings, unitString: unitStr.isEmpty ? nil : unitStr)
+        case .eigenDecomposition(let eigenvectors, let eigenvalues):
+            let vecStr = formatMatrixForDisplay(eigenvectors, with: settings, unitString: nil)
+            let valStr = formatMatrixForDisplay(eigenvalues, with: settings, unitString: nil)
+            return "Eigenvectors (V):\n\(vecStr)\n\nEigenvalues (D):\n\(valStr)"
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForDisplay(p, with: settings, angleMode: angleMode)
         case .regressionResult(let slope, let intercept):
@@ -345,6 +349,8 @@ struct DisplayFormatter {
             let content = "cmatrix(\((0..<cm.rows).map { r in (0..<cm.columns).map { c in formatForParsing(.complex(cm[r, c]), with: settings) }.joined(separator: argumentSeparator) }.joined(separator: ";")))"
             let unitStr = formatDimensionsForParsing(cm.dimensions)
             return unitStr.isEmpty ? content : "(\(content)) * \(unitStr)"
+        case .eigenDecomposition:
+            return "" // Result cannot be directly parsed. Re-run eig().
         case .functionDefinition: return ""
         case .polar(let p): return formatPolarForParsing(p, with: settings)
         case .regressionResult: return ""

@@ -409,6 +409,11 @@ struct LaTeXEngine {
             } else {
                 return "\(variableName) \\approx \(rootsString)"
             }
+        // --- NEW: Add LaTeX formatting for the eigenvalue decomposition result ---
+        case .eigenDecomposition(let eigenvectors, let eigenvalues):
+            let vMatrix = formatMathValue(.matrix(eigenvectors), angleMode: angleMode, settings: settings, expression: nil)
+            let dMatrix = formatMathValue(.matrix(eigenvalues), angleMode: angleMode, settings: settings, expression: nil)
+            return "\\begin{cases} \\mathbf{V} = \(vMatrix) \\\\ \\mathbf{D} = \(dMatrix) \\end{cases}"
         default:
             return ""
         }
@@ -627,4 +632,3 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
-

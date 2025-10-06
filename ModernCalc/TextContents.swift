@@ -39,6 +39,7 @@ struct TextContents {
         .init(name: "det", signature: "det(matrix)", description: "Calculates the determinant of a square matrix."),
         .init(name: "diag", signature: "diag(matrix or vector or a, b, ...)", description: "If given a single vector, creates a diagonal matrix. If given a single matrix, extracts its main diagonal. If given multiple scalars, creates a diagonal matrix from them."),
         .init(name: "dot", signature: "dot(vectorA, vectorB)", description: "Calculates the dot product of two vectors (real or complex). **Example:** `dot(vector(1;2;3), vector(4;5;6))`"),
+        .init(name: "eig", signature: "eig(matrix)", description: "Calculates the eigenvalues and eigenvectors of a square matrix. Returns the eigenvector matrix (V) and a diagonal matrix of eigenvalues (D)."),
         .init(name: "eye", signature: "eye(n)", description: "Creates an n x n identity matrix."),
         .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),
         .init(name: "factor", signature: "factor(integer)", description: "Returns a vector containing the prime factors of an integer."),
