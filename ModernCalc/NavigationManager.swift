@@ -45,12 +45,14 @@ class NavigationManager: ObservableObject {
             }
             
         } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), selectedItem.type != .functionDefinition {
-            // MODIFIED: This logic now also recognizes regression results as having 2 parts.
+            // MODIFIED: This logic now also recognizes eigenvalue and regression results as having 2 parts.
             let resultCount: Int
             if case .tuple(let values) = selectedItem.result {
                 resultCount = values.count
             } else if case .regressionResult = selectedItem.result {
                 resultCount = 2 // m and b
+            } else if case .eigenDecomposition = selectedItem.result {
+                resultCount = 2 // V and D
             } else if case .roots(let values) = selectedItem.result {
                 resultCount = values.count
             } else if case .polynomialFit = selectedItem.result {
@@ -88,12 +90,15 @@ class NavigationManager: ObservableObject {
                 return "Press enter to open plot for \(selectedItem.expression)..."
             }
             
-            // Return the specific result from the tuple/regression based on the selected index.
+            // Return the specific result from the tuple/regression/eigen based on the selected index.
             if case .result(let index) = selectedPart {
                 if case .tuple(let values) = selectedItem.result {
                     if index < values.count {
                         return viewModel.formatForParsing(values[index])
                     }
+                } else if case .eigenDecomposition(let eigenvectors, let eigenvalues) = selectedItem.result {
+                    let valueToParse = (index == 0) ? MathValue.matrix(eigenvectors) : MathValue.matrix(eigenvalues)
+                    return viewModel.formatForParsing(valueToParse)
                 } else if case .regressionResult(let slope, let intercept) = selectedItem.result {
                     // FIX: Use .unitValue to correctly wrap the UnitValue types for slope and intercept.
                     let valueToParse = (index == 0) ? MathValue.unitValue(slope) : MathValue.unitValue(intercept)
@@ -123,4 +128,3 @@ class NavigationManager: ObservableObject {
         selectedPart = .result(index: 0)
     }
 }
-

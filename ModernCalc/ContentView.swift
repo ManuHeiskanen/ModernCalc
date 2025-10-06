@@ -599,6 +599,39 @@ struct CalculationResultView: View {
                     }
                     .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.unitValue(intercept))) }
             }
+        } else if case .eigenDecomposition(let eigenvectors, let eigenvalues) = calculation.result {
+            VStack(alignment: .trailing, spacing: 8) {
+                HStack {
+                    Text("V =")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                    Text(viewModel.formatForHistory(.matrix(eigenvectors)))
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, 2).padding(.vertical, 2)
+                        .background(isResultSelected(calculation: calculation, index: 0) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                        .onHover { isHovering in
+                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
+                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.matrix(eigenvectors))) }
+                }
+                HStack {
+                    Text("D =")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                    Text(viewModel.formatForHistory(.matrix(eigenvalues)))
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, 2).padding(.vertical, 2)
+                        .background(isResultSelected(calculation: calculation, index: 1) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                        .onHover { isHovering in
+                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 1)) : nil }
+                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.matrix(eigenvalues))) }
+                }
+            }
         } else if case .roots(let roots) = calculation.result {
             let formattedRoots = viewModel.formatRootsForDisplay(roots)
             let isKeyboardSelectedForExpansion = selectedHistoryId == calculation.id && { if case .result = selectedHistoryPart { return true } else { return false } }()
