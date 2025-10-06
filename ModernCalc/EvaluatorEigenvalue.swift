@@ -94,7 +94,7 @@ extension Evaluator {
             }
 
             // Find the norm of the resulting vector v: r_jj = ||v||
-            var r_jj = sqrt(v.map { $0 * $0 }.reduce(0, +))
+            let r_jj = sqrt(v.map { $0 * $0 }.reduce(0, +))
             rValues[j * n + j] = r_jj
 
             // Normalize v to get the next orthogonal vector q_j

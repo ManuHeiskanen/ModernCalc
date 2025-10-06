@@ -725,6 +725,7 @@ struct FormattedExpressionView: View {
         HStack {
             if !helpText.isEmpty || !errorText.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
+                    Spacer()
                     if !errorText.isEmpty { Text(errorText).font(.system(.body, design: .monospaced)).foregroundColor(.red).textSelection(.enabled) }
                     if !helpText.isEmpty { Text(helpText).font(.system(.body, design: .monospaced)).textSelection(.enabled) }
                 }
