@@ -152,7 +152,11 @@ class CalculatorViewModel {
         }
         
         if expression == self.lastCalculatedExpression && angle == self.lastCalculatedAngleMode {
-            self.liveHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
+            let newHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
+            if newHelpText != self.liveHelpText {
+                // Recalculate height and update view properties when only help text changes.
+                updateLivePreview(latex: self.liveLaTeXPreview, helpText: newHelpText, errorText: self.liveErrorText)
+            }
             return
         }
         
@@ -400,7 +404,7 @@ class CalculatorViewModel {
         
         var finalLiveHelpText: String = ""
         var finalLiveErrorText: String = ""
-        let finalLiveLaTeXPreview: String
+        var finalLiveLaTeXPreview: String
         
         do {
             let lexer = Lexer(input: expression, decimalSeparator: settings.decimalSeparator)
@@ -466,50 +470,42 @@ class CalculatorViewModel {
             finalLiveLaTeXPreview = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
         }
         
-        // --- REVISED HEIGHT CALCULATION LOGIC ---
+        updateLivePreview(latex: finalLiveLaTeXPreview, helpText: finalLiveHelpText, errorText: finalLiveErrorText)
+    }
+    
+    private func updateLivePreview(latex: String, helpText: String, errorText: String) {
+        // --- HEIGHT CALCULATION LOGIC ---
         var verticalityScore = 0
 
-        if !finalLiveErrorText.isEmpty || !finalLiveHelpText.isEmpty {
-            // Calculate required lines for help and error text separately to get a total.
+        // First, check for help/error text. This always takes precedence for height calculation.
+        if !errorText.isEmpty || !helpText.isEmpty {
             var totalLines = 0
             let charsPerLine = 55 // Approximate characters per line in the view.
 
-            if !finalLiveHelpText.isEmpty {
+            if !helpText.isEmpty {
                 // A multi-line help string might have explicit newlines.
-                let explicitHelpNewlines = finalLiveHelpText.components(separatedBy: "\n").count
+                let explicitHelpNewlines = helpText.components(separatedBy: "\n").count
                 // Also estimate lines if a single line is very long and would wrap.
-                let wrappedHelpLines = Int(ceil(Double(finalLiveHelpText.count) / Double(charsPerLine)))
+                let wrappedHelpLines = Int(ceil(Double(helpText.count) / Double(charsPerLine)))
                 totalLines += max(explicitHelpNewlines, wrappedHelpLines)
             }
 
-            if !finalLiveErrorText.isEmpty {
-                let explicitErrorNewlines = finalLiveErrorText.components(separatedBy: "\n").count
-                let wrappedErrorLines = Int(ceil(Double(finalLiveErrorText.count) / Double(charsPerLine)))
+            if !errorText.isEmpty {
+                let explicitErrorNewlines = errorText.components(separatedBy: "\n").count
+                let wrappedErrorLines = Int(ceil(Double(errorText.count) / Double(charsPerLine)))
                 totalLines += max(explicitErrorNewlines, wrappedErrorLines)
             }
             
             // The score is based on extra lines beyond the first one (which is covered by baseHeight).
-            // A minimum of 1 line is always assumed.
             verticalityScore = totalLines > 1 ? totalLines - 1 : 0
             
-        } else if let value = self.lastSuccessfulValue {
-            // For successful LaTeX previews, calculate height based on content structure.
-            var rowCount = 0
-            switch value {
-            case .vector(let v): rowCount = v.dimension
-            case .matrix(let m): rowCount = m.rows
-            case .complexVector(let cv): rowCount = cv.dimension
-            case .complexMatrix(let cm): rowCount = cm.rows
-            default: break
-            }
+        } else {
+            // ONLY if there's no help/error text, calculate height based on the visual structure of the LaTeX.
+            // This is more reliable as it directly reflects what is being rendered.
+            let latexNewlines = latex.components(separatedBy: "\\\\").count - 1
+            let fractionCount = latex.components(separatedBy: "\\frac").count - 1
             
-            let latexNewlines = finalLiveLaTeXPreview.components(separatedBy: "\\\\").count - 1
-            
-            // Use the maximum of parsed LaTeX newlines or actual matrix rows for robustness.
-            let effectiveNewlines = max(latexNewlines, rowCount > 1 ? rowCount - 1 : 0)
-            let fractionCount = finalLiveLaTeXPreview.components(separatedBy: "\\frac").count - 1
-            
-            verticalityScore = effectiveNewlines + fractionCount
+            verticalityScore = max(0, latexNewlines) + fractionCount
         }
 
         // Define sizing parameters.
@@ -520,16 +516,15 @@ class CalculatorViewModel {
         var calculatedHeight = baseHeight + (CGFloat(verticalityScore) * heightPerUnit)
 
         // A fallback for long, single-line LaTeX that doesn't have vertical operators.
-        // This should only trigger when there is no help or error text.
-        if verticalityScore == 0 && finalLiveLaTeXPreview.count > 80 && finalLiveErrorText.isEmpty && finalLiveHelpText.isEmpty {
+        if verticalityScore == 0 && latex.count > 80 && errorText.isEmpty && helpText.isEmpty {
             calculatedHeight = 100.0
         }
 
         Task {
             self.livePreviewHeight = min(calculatedHeight, maxHeight)
-            self.liveHelpText = finalLiveHelpText
-            self.liveErrorText = finalLiveErrorText
-            self.liveLaTeXPreview = finalLiveLaTeXPreview
+            self.liveHelpText = helpText
+            self.liveErrorText = errorText
+            self.liveLaTeXPreview = latex
         }
     }
     
@@ -738,3 +733,4 @@ class CalculatorViewModel {
         return DisplayFormatter.formatScalarForDisplay(value, with: self.settings)
     }
 }
+
