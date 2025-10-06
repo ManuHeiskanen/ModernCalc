@@ -292,13 +292,19 @@ extension Evaluator {
     }
     private func performVectorScalarOp(_ op: String, _ v: Vector, _ s: Double, reversed: Bool = false) throws -> Vector {
         if reversed {
-            switch op { case "+": return s + v; case "*": return s * v; case "-": return s - v
-            case "/": guard !v.values.contains(0) else { throw MathError.divisionByZero }; return s / v
+            switch op {
+            case "+": return s + v
+            case "*", ".*": return s * v
+            case "-": return s - v
+            case "/", "./": guard !v.values.contains(0) else { throw MathError.divisionByZero }; return s / v
             default: throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Vector")
             }
         } else {
-            switch op { case "+": return v + s; case "*": return v * s; case "-": return v - s
-            case "/": guard s != 0 else { throw MathError.divisionByZero }; return v / s
+            switch op {
+            case "+": return v + s
+            case "*", ".*": return v * s
+            case "-": return v - s
+            case "/", "./": guard s != 0 else { throw MathError.divisionByZero }; return v / s
             case "^": return Vector(values: v.values.map { pow($0, s) })
             default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Scalar")
             }
@@ -309,7 +315,7 @@ extension Evaluator {
         let d = u.dimensions
         if reversed {
             switch op {
-            case "*":
+            case "*", ".*":
                 let newValues = v.values.map { s * $0 }
                 let newDims = d.merging(v.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
                 return Vector(values: newValues, dimensions: newDims)
@@ -317,11 +323,11 @@ extension Evaluator {
             }
         } else {
             switch op {
-            case "*":
+            case "*", ".*":
                 let newValues = v.values.map { $0 * s }
                 let newDims = v.dimensions.merging(d, uniquingKeysWith: +).filter { $0.value != 0 }
                 return Vector(values: newValues, dimensions: newDims)
-            case "/":
+            case "/", "./":
                 guard s != 0 else { throw MathError.divisionByZero }
                 let newValues = v.values.map { $0 / s }
                 let newDims = v.dimensions.merging(d.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
@@ -337,10 +343,15 @@ extension Evaluator {
         }
     }
     private func performMatrixScalarOp(_ op: String, _ m: Matrix, _ s: Double, reversed: Bool = false) throws -> Matrix {
-        let newValues: [Double]; switch op {
-        case "+": newValues = m.values.map { $0 + s }; case "*": newValues = m.values.map { $0 * s }
+        let newValues: [Double];
+        switch op {
+        case "+": newValues = m.values.map { $0 + s }
+        case "*", ".*": newValues = m.values.map { $0 * s }
         case "-": newValues = reversed ? m.values.map { s - $0 } : m.values.map { $0 - s }
-        case "/": if reversed { throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix") }; guard s != 0 else { throw MathError.divisionByZero }; newValues = m.values.map { $0 / s }
+        case "/", "./":
+            if reversed { throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix") }
+            guard s != 0 else { throw MathError.divisionByZero }
+            newValues = m.values.map { $0 / s }
         default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Scalar")
         }
         return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
@@ -350,7 +361,7 @@ extension Evaluator {
         let d = u.dimensions
         if reversed {
             switch op {
-            case "*":
+            case "*", ".*":
                 let newValues = m.values.map { s * $0 }
                 let newDims = d.merging(m.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
                 return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: newDims)
@@ -358,11 +369,11 @@ extension Evaluator {
             }
         } else {
             switch op {
-            case "*":
+            case "*", ".*":
                 let newValues = m.values.map { $0 * s }
                 let newDims = m.dimensions.merging(d, uniquingKeysWith: +).filter { $0.value != 0 }
                 return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: newDims)
-            case "/":
+            case "/", "./":
                 guard s != 0 else { throw MathError.divisionByZero }
                 let newValues = m.values.map { $0 / s }
                 let newDims = m.dimensions.merging(d.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
@@ -420,4 +431,3 @@ extension Evaluator {
         }
     }
 }
-
