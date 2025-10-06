@@ -160,14 +160,14 @@ class Lexer {
                     currentToken = Token(type: .unknown(advance()!), rawValue: ",")
                 }
             case ".":
-                 // FIX: Check if the character AFTER the dot is a letter. If not, it's not a unit.
+                 // CORRECTED LOGIC: A dot introduces a unit *only if* it's followed by a letter.
+                 // Otherwise, it must be a dot-operator or a separator.
                 if let nextChar = peek(offset: 1), nextChar.isLetter {
                     let (unitSymbol, charsConsumed) = peekAheadForUnit()
                     if !unitSymbol.isEmpty {
                         for _ in 0..<charsConsumed { advance() }
                         currentToken = Token(type: .unit(unitSymbol), rawValue: ".\(unitSymbol)")
                     } else {
-                         // This case might not be reachable with the new check but is safe to keep.
                         currentToken = lexDotOperatorOrUnknown()
                     }
                 } else {
@@ -204,10 +204,14 @@ class Lexer {
     }
     
     private func lexDotOperatorOrUnknown() -> Token {
-        if let separatorChar = (decimalSeparator == .period ? Character(".") : nil), separatorChar == "." {
+        // The dot character '.' is used as an argument separator ONLY when the
+        // decimal separator is set to a comma.
+        if decimalSeparator == .comma && peek() == "." {
             advance()
             return Token(type: .separator("."), rawValue: ".")
         }
+        // In all other cases (when the decimal separator is a period, or it's not a separator),
+        // the dot must be part of a dot-operator (like .*, ./, or .=@).
         return lexDotOperator()
     }
 
@@ -234,7 +238,7 @@ class Lexer {
             advance(); advance()
             return Token(type: .op("./"), rawValue: "./")
         } else {
-            // Treat a lone dot that isn't a separator as an unknown token.
+            // A lone dot (when not a decimal separator for numbers or a separator for commas) is treated as unknown.
             return Token(type: .unknown(advance()!), rawValue: ".")
         }
     }
