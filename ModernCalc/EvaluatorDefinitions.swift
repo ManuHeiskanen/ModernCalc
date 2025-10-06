@@ -295,8 +295,16 @@ extension Evaluator {
             case .unitValue(let u): return .unitValue(UnitValue(value: abs(u.value), dimensions: u.dimensions))
             case .complex(let c): return .dimensionless(c.abs())
             case .vector(let v): return .unitValue(v.magnitude())
+            case .matrix(let m):
+                // For square matrices, abs() is the determinant, as is common notation.
+                if m.rows == m.columns {
+                    return .unitValue(try m.determinant())
+                } else {
+                    // For non-square matrices (including vectors), abs() is the magnitude/norm.
+                    return .unitValue(m.frobeniusNorm())
+                }
             case .uncertain(let u): return .uncertain(UncertainValue(value: abs(u.value), randomUncertainty: u.randomUncertainty, systematicUncertainty: u.systematicUncertainty, dimensions: u.dimensions))
-            default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, or UncertainValue", found: arg.typeName)
+            default: throw MathError.typeMismatch(expected: "Scalar, Complex, Vector, Matrix or UncertainValue", found: arg.typeName)
             }
         },
         "norm": { arg in
