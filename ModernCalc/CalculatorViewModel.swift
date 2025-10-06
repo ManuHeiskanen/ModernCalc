@@ -466,27 +466,62 @@ class CalculatorViewModel {
             finalLiveLaTeXPreview = LaTeXEngine.formatExpression(expression, evaluator: self.evaluator, settings: self.settings)
         }
         
-        let contentForHeightCheck: String
-        if !finalLiveErrorText.isEmpty {
-            contentForHeightCheck = finalLiveErrorText
-        } else if !finalLiveHelpText.isEmpty {
-            contentForHeightCheck = finalLiveHelpText
-        } else {
-            contentForHeightCheck = finalLiveLaTeXPreview
+        // --- REVISED HEIGHT CALCULATION LOGIC ---
+        var verticalityScore = 0
+
+        if !finalLiveErrorText.isEmpty || !finalLiveHelpText.isEmpty {
+            // Calculate required lines for help and error text separately to get a total.
+            var totalLines = 0
+            let charsPerLine = 55 // Approximate characters per line in the view.
+
+            if !finalLiveHelpText.isEmpty {
+                // A multi-line help string might have explicit newlines.
+                let explicitHelpNewlines = finalLiveHelpText.components(separatedBy: "\n").count
+                // Also estimate lines if a single line is very long and would wrap.
+                let wrappedHelpLines = Int(ceil(Double(finalLiveHelpText.count) / Double(charsPerLine)))
+                totalLines += max(explicitHelpNewlines, wrappedHelpLines)
+            }
+
+            if !finalLiveErrorText.isEmpty {
+                let explicitErrorNewlines = finalLiveErrorText.components(separatedBy: "\n").count
+                let wrappedErrorLines = Int(ceil(Double(finalLiveErrorText.count) / Double(charsPerLine)))
+                totalLines += max(explicitErrorNewlines, wrappedErrorLines)
+            }
+            
+            // The score is based on extra lines beyond the first one (which is covered by baseHeight).
+            // A minimum of 1 line is always assumed.
+            verticalityScore = totalLines > 1 ? totalLines - 1 : 0
+            
+        } else if let value = self.lastSuccessfulValue {
+            // For successful LaTeX previews, calculate height based on content structure.
+            var rowCount = 0
+            switch value {
+            case .vector(let v): rowCount = v.dimension
+            case .matrix(let m): rowCount = m.rows
+            case .complexVector(let cv): rowCount = cv.dimension
+            case .complexMatrix(let cm): rowCount = cm.rows
+            default: break
+            }
+            
+            let latexNewlines = finalLiveLaTeXPreview.components(separatedBy: "\\\\").count - 1
+            
+            // Use the maximum of parsed LaTeX newlines or actual matrix rows for robustness.
+            let effectiveNewlines = max(latexNewlines, rowCount > 1 ? rowCount - 1 : 0)
+            let fractionCount = finalLiveLaTeXPreview.components(separatedBy: "\\frac").count - 1
+            
+            verticalityScore = effectiveNewlines + fractionCount
         }
 
-        let latexNewlines = contentForHeightCheck.components(separatedBy: "\\\\").count - 1
-        let textNewlines = contentForHeightCheck.components(separatedBy: "\n").count - 1
-        let fractionCount = contentForHeightCheck.components(separatedBy: "\\frac").count - 1
-        let verticalityScore = max(latexNewlines, textNewlines) + fractionCount
-
+        // Define sizing parameters.
         let baseHeight: CGFloat = 60.0
-        let heightPerUnit: CGFloat = 20.0
-        let maxHeight: CGFloat = 180.0
-        
+        let heightPerUnit: CGFloat = 22.0
+        let maxHeight: CGFloat = 200.0
+
         var calculatedHeight = baseHeight + (CGFloat(verticalityScore) * heightPerUnit)
 
-        if verticalityScore == 0 && contentForHeightCheck.count > 80 {
+        // A fallback for long, single-line LaTeX that doesn't have vertical operators.
+        // This should only trigger when there is no help or error text.
+        if verticalityScore == 0 && finalLiveLaTeXPreview.count > 80 && finalLiveErrorText.isEmpty && finalLiveHelpText.isEmpty {
             calculatedHeight = 100.0
         }
 
