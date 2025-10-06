@@ -37,6 +37,7 @@ struct TextContents {
         .init(name: "cvector", signature: "cvector(a ; b ; c ; ...)", description: "Forms a complex vector of given real or imaginary numbers."),
         .init(name: "derivative", signature: "derivative(expr, var, point, [order])", description: "Finds the instantaneous rate of change (slope). Can calculate higher-order derivatives (e.g., order 2 for concavity)."),
         .init(name: "det", signature: "det(matrix)", description: "Calculates the determinant of a square matrix."),
+        .init(name: "diag", signature: "diag(matrix or vector or a, b, ...)", description: "If given a single vector, creates a diagonal matrix. If given a single matrix, extracts its main diagonal. If given multiple scalars, creates a diagonal matrix from them."),
         .init(name: "dot", signature: "dot(vectorA, vectorB)", description: "Calculates the dot product of two vectors (real or complex). **Example:** `dot(vector(1;2;3), vector(4;5;6))`"),
         .init(name: "eye", signature: "eye(n)", description: "Creates an n x n identity matrix."),
         .init(name: "fact", signature: "fact(integer)", description: "Calculates the factorial of a non-negative integer."),

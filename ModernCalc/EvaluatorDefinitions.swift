@@ -45,6 +45,43 @@ extension Evaluator {
     ]
     
     static let variadicFunctions: [String: ([MathValue]) throws -> MathValue] = [
+        "diag": { args in
+                if args.isEmpty {
+                    throw MathError.requiresAtLeastOneArgument(function: "diag")
+                }
+
+                // Case 1: A single argument was passed (a vector or a matrix).
+                if args.count == 1 {
+                    let arg = args[0]
+                    switch arg {
+                    case .vector(let v):
+                        let n = v.dimension
+                        var values = [Double](repeating: 0, count: n * n)
+                        for i in 0..<n {
+                            values[i * n + i] = v[i]
+                        }
+                        return .matrix(Matrix(values: values, rows: n, columns: n, dimensions: v.dimensions))
+                    case .matrix(let m):
+                        let n = min(m.rows, m.columns)
+                        let values = (0..<n).map { m[$0, $0] }
+                        return .vector(Vector(values: values, dimensions: m.dimensions))
+                    default:
+                        // If the single argument is a scalar, treat it as a 1x1 matrix.
+                        let scalar = try arg.asScalar()
+                        return .matrix(Matrix(values: [scalar], rows: 1, columns: 1))
+                    }
+                }
+
+                // Case 2: Multiple scalar arguments were passed.
+                let diagonalValues = try args.map { try $0.asScalar() }
+                let n = diagonalValues.count
+                var matrixValues = [Double](repeating: 0, count: n * n)
+                for i in 0..<n {
+                    matrixValues[i * n + i] = diagonalValues[i]
+                }
+                // A matrix created from a list of scalars is dimensionless.
+                return .matrix(Matrix(values: matrixValues, rows: n, columns: n, dimensions: [:]))
+            },
         "sum": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.sum()) }) },
         "avg": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.average()) }) },
         "average": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.average()) }) },
