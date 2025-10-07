@@ -41,6 +41,14 @@ class UserSettings: ObservableObject {
         }
     }
     
+    @Published var isAlwaysOnTop: Bool {
+       didSet {
+           if isPersistenceEnabled {
+               UserDefaults.standard.set(isAlwaysOnTop, forKey: "isAlwaysOnTop")
+           }
+       }
+   }
+    
     @Published var decimalSeparator: DecimalSeparator {
         didSet {
             if isPersistenceEnabled {
@@ -115,6 +123,8 @@ class UserSettings: ObservableObject {
         let savedSeparator = defaults.string(forKey: "decimalSeparator") ?? ""
         self.decimalSeparator = DecimalSeparator(rawValue: savedSeparator) ?? .period
         
+        self.isAlwaysOnTop = defaults.bool(forKey: "isAlwaysOnTop")
+        
         self.fixedDecimalPlaces = defaults.integer(forKey: "fixedDecimalPlaces")
         
         self.enableLiveRounding = defaults.bool(forKey: "enableLiveRounding")
@@ -157,6 +167,7 @@ class UserSettings: ObservableObject {
         temporarySettings.decimalSeparator = self.decimalSeparator
         temporarySettings.fixedDecimalPlaces = self.fixedDecimalPlaces
         temporarySettings.enableLiveRounding = self.enableLiveRounding
+        temporarySettings.isAlwaysOnTop = self.isAlwaysOnTop
         temporarySettings.livePreviewDecimalPlaces = self.livePreviewDecimalPlaces
         temporarySettings.enableCSVRounding = self.enableCSVRounding
         temporarySettings.csvDecimalPlaces = self.csvDecimalPlaces

@@ -425,6 +425,12 @@ struct VariableEditorView: View {
                     Stepper("Decimal Places: \(settings.solverDecimalPlaces)", value: $settings.solverDecimalPlaces, in: 0...10)
                 }
             }
+            
+            Divider()
+            
+           Section(header: Text("Window Behavior")) {
+                   Toggle("Keep window on top", isOn: $settings.isAlwaysOnTop)
+               }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding()

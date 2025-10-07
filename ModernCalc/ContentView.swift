@@ -8,12 +8,14 @@
 import SwiftUI
 
 struct ContentView: View {
-    var settings: UserSettings
+    @ObservedObject var settings: UserSettings
     @State var viewModel: CalculatorViewModel
     
     @FocusState private var isInputFocused: Bool
     @State private var isShowingSheet = false
     @Environment(\.openWindow) private var openWindow
+    
+    @State private var window: NSWindow?
     
     // Namespace for the animated DEG/RAD selector
     @Namespace private var angleSelectorAnimation
@@ -60,6 +62,21 @@ struct ContentView: View {
         .onAppear {
             isInputFocused = true
         }
+       // Use a background view to get access to the NSWindow
+      .background(WindowAccessor { newWindow in
+           // This runs when the window becomes available.
+           // We store the window and apply the initial setting.
+           self.window = newWindow
+           self.window?.level = settings.isAlwaysOnTop ? .floating : .normal
+       })
+       // This observes changes to the setting and updates the window level.
+       .onChange(of: settings.isAlwaysOnTop) { _, newValue in
+           window?.level = newValue ? .floating : .normal
+       }
+        
+       .onChange(of: viewModel.rawExpression) {
+           viewModel.handleInputChange()
+       }
         .onChange(of: viewModel.plotToShow) { oldID, newID in
             if let id = newID {
                 openWindow(value: id)

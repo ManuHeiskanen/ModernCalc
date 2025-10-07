@@ -45,9 +45,7 @@ struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
 @MainActor
 class CalculatorViewModel {
 
-    var rawExpression: String = "" {
-        didSet { handleInputChange() }
-    }
+    var rawExpression: String = "" 
     var history: [Calculation] = []
     var liveHelpText: String = ""
     var liveErrorText: String = ""
@@ -112,7 +110,7 @@ class CalculatorViewModel {
         loadState()
     }
     
-    private func handleInputChange() {
+    func handleInputChange() {
         // Cancel any previously scheduled task to reset the debounce timer
         debounceTask?.cancel()
 
