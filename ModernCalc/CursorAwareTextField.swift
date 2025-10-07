@@ -25,6 +25,7 @@ struct CursorAwareTextField: NSViewRepresentable {
         textField.backgroundColor = .clear
         textField.focusRingType = .none
         textField.font = .monospacedSystemFont(ofSize: 26, weight: .regular)
+        textField.textColor = .clear // Hide the real text, but keep the cursor
         return textField
     }
 
@@ -124,3 +125,4 @@ struct CursorAwareTextField: NSViewRepresentable {
         }
     }
 }
+

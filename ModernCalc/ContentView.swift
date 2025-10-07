@@ -216,39 +216,48 @@ struct UnifiedInputView: View {
                     SymbolsGridView(viewModel: viewModel, operatorSymbols: operatorSymbols, constantSymbols: constantSymbols)
                 }
                 
+                // Precompute overlay strings so the overlay closure only returns a View.
+                let expressionNSString = expression as NSString
+                let textBeforeCursor: String = {
+                    if cursorPosition.location <= expressionNSString.length {
+                        return expressionNSString.substring(to: cursorPosition.location)
+                    } else {
+                        return expression
+                    }
+                }()
+                let textAfterCursor: String = {
+                    let selectionEnd = cursorPosition.location + cursorPosition.length
+                    if selectionEnd <= expressionNSString.length {
+                        return expressionNSString.substring(from: selectionEnd)
+                    } else {
+                        return ""
+                    }
+                }()
+
                 CursorAwareTextField(text: $expression, selectedRange: $cursorPosition)
                     .onTapGesture { onTap() }
                     .font(.system(size: 26, weight: .regular, design: .monospaced))
                     .overlay(alignment: .leading) {
-                        // This overlay shows the placeholder and the history navigation preview.
-
-                        // 1. Show the navigation preview text if it's available.
-                        if !previewText.isEmpty {
-                            HStack(spacing: 0) {
-                                // This invisible Text view is a spacer. It takes up the
-                                // same space as the user's current input, pushing the
-                                // preview text to appear right after it.
-                                Text(expression)
-                                    .foregroundColor(.clear)
-                                
-                                // This is the visible, gray preview text.
-                                Text(previewText)
+                        HStack(spacing: 0) {
+                            if expression.isEmpty && previewText.isEmpty {
+                                Text("Enter expression...")
                                     .foregroundColor(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.head) // Show the end of the preview if it's too long
+                            } else {
+                                Text(textBeforeCursor)
                                 
-                                Spacer() // Keep the HStack aligned to the left
+                                if !previewText.isEmpty {
+                                    Text(previewText)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                        .truncationMode(.head)
+                                }
+                                
+                                Text(textAfterCursor)
                             }
-                            .font(.system(size: 26, weight: .regular, design: .monospaced))
-                            .allowsHitTesting(false) // Prevents the overlay from blocking clicks
+                            Spacer()
                         }
-                        // 2. If no preview is active and the input is empty, show the default placeholder.
-                        else if expression.isEmpty {
-                            Text("Enter expression...")
-                                .font(.system(size: 26, weight: .regular, design: .monospaced))
-                                .foregroundColor(.secondary)
-                                .allowsHitTesting(false)
-                        }
+                        .font(.system(size: 26, weight: .regular, design: .monospaced))
+                        .allowsHitTesting(false)
                     }
             }
             .padding(.horizontal)
@@ -833,3 +842,4 @@ extension AngleMode {
         }
     }
 }
+
