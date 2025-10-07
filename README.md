@@ -51,7 +51,7 @@ Import data directly from `.csv` files into matrix variables. Preview your data,
 Examples:
 
 `2.5.m + 50.cm -> 3 m`
-`9.81.m/.s^2 * 10.kg -> 98 N`
+`9.81.m/.s^2 * 10.kg -> 98.1 N`
 `1.acre in .m^2 -> 4046.86 m^2`
 
 - **Uncertainty Propagation**: Handle experimental data with confidence.  
