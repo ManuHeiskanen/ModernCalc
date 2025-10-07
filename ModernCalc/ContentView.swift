@@ -220,8 +220,31 @@ struct UnifiedInputView: View {
                     .onTapGesture { onTap() }
                     .font(.system(size: 26, weight: .regular, design: .monospaced))
                     .overlay(alignment: .leading) {
-                        if expression.isEmpty {
-                            Text(previewText.isEmpty ? "Enter expression..." : previewText)
+                        // This overlay shows the placeholder and the history navigation preview.
+
+                        // 1. Show the navigation preview text if it's available.
+                        if !previewText.isEmpty {
+                            HStack(spacing: 0) {
+                                // This invisible Text view is a spacer. It takes up the
+                                // same space as the user's current input, pushing the
+                                // preview text to appear right after it.
+                                Text(expression)
+                                    .foregroundColor(.clear)
+                                
+                                // This is the visible, gray preview text.
+                                Text(previewText)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.head) // Show the end of the preview if it's too long
+                                
+                                Spacer() // Keep the HStack aligned to the left
+                            }
+                            .font(.system(size: 26, weight: .regular, design: .monospaced))
+                            .allowsHitTesting(false) // Prevents the overlay from blocking clicks
+                        }
+                        // 2. If no preview is active and the input is empty, show the default placeholder.
+                        else if expression.isEmpty {
+                            Text("Enter expression...")
                                 .font(.system(size: 26, weight: .regular, design: .monospaced))
                                 .foregroundColor(.secondary)
                                 .allowsHitTesting(false)
