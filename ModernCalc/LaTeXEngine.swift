@@ -524,7 +524,9 @@ struct LaTeXEngine {
                 if absValue > 0 && (absValue < 1e-4 || absValue >= 1e15) {
                     return formatScientificNotation(fromString: String(format: "%.4g", value), using: settings)
                 }
-                let temp = String(format: "%.10f", value).trimmingCharacters(in: ["0"])
+                // --- CHANGE: Use settings to control max precision ---
+                let maxPrecision = settings.livePreviewDecimalPlaces > 0 ? settings.livePreviewDecimalPlaces : 10
+                let temp = String(format: "%.\(maxPrecision)f", value).trimmingCharacters(in: ["0"])
                 formattedString = temp.hasSuffix(".") ? String(temp.dropLast()) : (temp.isEmpty ? "0" : temp)
             }
         case .scientific:

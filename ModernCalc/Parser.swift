@@ -339,6 +339,9 @@ class Parser {
         case .op(let opString) where ["-", "+", "~"].contains(opString): // Added ~
             let child = try parseExpression(currentPrecedence: unaryOperatorPrecedence())
             return UnaryOpNode(op: token, child: child)
+        // --- NEW: Handle standalone colon for full-dimension slicing ---
+        case .op(":"):
+            return ConstantNode(name: ":")
         case .paren("("):
             let expression = try parseExpression()
             try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "closing ')'"))
@@ -717,6 +720,8 @@ class Parser {
     private func infixOperatorPrecedence(for token: Token) -> Int? {
         if case .op(let opString) = token.type {
             switch opString {
+            // --- NEW: Add the range operator with very low precedence ---
+            case ":": return 0
             case "||": return 1
             case "&&": return 2
             case "==", "!=", ">", "<", ">=", "<=": return 3
@@ -771,3 +776,4 @@ class Parser {
         try advance()
     }
 }
+

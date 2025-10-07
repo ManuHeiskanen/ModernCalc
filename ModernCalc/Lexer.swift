@@ -186,7 +186,8 @@ class Lexer {
                     currentToken = Token(type: .assignment, rawValue: ":=")
                 } else {
                     advance()
-                    currentToken = Token(type: .assignment, rawValue: ":")
+                    // --- FIX: A standalone colon is the range operator, not an assignment ---
+                    currentToken = Token(type: .op(":"), rawValue: ":")
                 }
             case ";":
                 advance()

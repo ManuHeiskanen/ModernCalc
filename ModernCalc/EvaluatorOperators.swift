@@ -297,6 +297,13 @@ extension Evaluator {
             case "*", ".*": return s * v
             case "-": return s - v
             case "/", "./": guard !v.values.contains(0) else { throw MathError.divisionByZero }; return s / v
+            // --- NEW: Handle reversed scalar-vector comparisons ---
+            case ">": return Vector(values: v.values.map { s > $0 ? 1.0 : 0.0 })
+            case "<": return Vector(values: v.values.map { s < $0 ? 1.0 : 0.0 })
+            case ">=": return Vector(values: v.values.map { s >= $0 ? 1.0 : 0.0 })
+            case "<=": return Vector(values: v.values.map { s <= $0 ? 1.0 : 0.0 })
+            case "==": return Vector(values: v.values.map { s == $0 ? 1.0 : 0.0 })
+            case "!=": return Vector(values: v.values.map { s != $0 ? 1.0 : 0.0 })
             default: throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Vector")
             }
         } else {
@@ -306,6 +313,13 @@ extension Evaluator {
             case "-": return v - s
             case "/", "./": guard s != 0 else { throw MathError.divisionByZero }; return v / s
             case "^": return Vector(values: v.values.map { pow($0, s) })
+            // --- NEW: Handle vector-scalar comparisons ---
+            case ">": return Vector(values: v.values.map { $0 > s ? 1.0 : 0.0 })
+            case "<": return Vector(values: v.values.map { $0 < s ? 1.0 : 0.0 })
+            case ">=": return Vector(values: v.values.map { $0 >= s ? 1.0 : 0.0 })
+            case "<=": return Vector(values: v.values.map { $0 <= s ? 1.0 : 0.0 })
+            case "==": return Vector(values: v.values.map { $0 == s ? 1.0 : 0.0 })
+            case "!=": return Vector(values: v.values.map { $0 != s ? 1.0 : 0.0 })
             default: throw MathError.unsupportedOperation(op: op, typeA: "Vector", typeB: "Scalar")
             }
         }
@@ -322,6 +336,25 @@ extension Evaluator {
             default: throw MathError.unsupportedOperation(op: op, typeA: "UnitValue", typeB: "Vector")
             }
         } else {
+            // --- NEW: Handle vector-unit comparisons ---
+            if ["<", ">", "==", "!=", "<=", ">="].contains(op) {
+                guard v.dimensions == u.dimensions else {
+                     throw MathError.dimensionMismatch(reason: "Cannot compare vector and scalar with incompatible units.")
+                }
+                let opFunc: (Double, Double) -> Bool
+                switch op {
+                    case ">": opFunc = (>)
+                    case "<": opFunc = (<)
+                    case ">=": opFunc = (>=)
+                    case "<=": opFunc = (<=)
+                    case "==": opFunc = (==)
+                    case "!=": opFunc = (!=)
+                    default: fatalError() // Should not happen
+                }
+                let newValues = v.values.map { opFunc($0, s) ? 1.0 : 0.0 }
+                return Vector(values: newValues, dimensions: [:]) // Result is a dimensionless boolean vector
+            }
+
             switch op {
             case "*", ".*":
                 let newValues = v.values.map { $0 * s }
@@ -344,17 +377,25 @@ extension Evaluator {
     }
     private func performMatrixScalarOp(_ op: String, _ m: Matrix, _ s: Double, reversed: Bool = false) throws -> Matrix {
         let newValues: [Double];
+        let newDimensions: UnitDimension
         switch op {
-        case "+": newValues = m.values.map { $0 + s }
-        case "*", ".*": newValues = m.values.map { $0 * s }
-        case "-": newValues = reversed ? m.values.map { s - $0 } : m.values.map { $0 - s }
+        case "+": newValues = m.values.map { $0 + s }; newDimensions = m.dimensions
+        case "*", ".*": newValues = m.values.map { $0 * s }; newDimensions = m.dimensions
+        case "-": newValues = reversed ? m.values.map { s - $0 } : m.values.map { $0 - s }; newDimensions = m.dimensions
         case "/", "./":
             if reversed { throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix") }
             guard s != 0 else { throw MathError.divisionByZero }
-            newValues = m.values.map { $0 / s }
+            newValues = m.values.map { $0 / s }; newDimensions = m.dimensions
+        // --- NEW: Handle matrix-scalar comparisons ---
+        case ">": newValues = m.values.map { (reversed ? s > $0 : $0 > s) ? 1.0 : 0.0 }; newDimensions = [:]
+        case "<": newValues = m.values.map { (reversed ? s < $0 : $0 < s) ? 1.0 : 0.0 }; newDimensions = [:]
+        case ">=": newValues = m.values.map { (reversed ? s >= $0 : $0 >= s) ? 1.0 : 0.0 }; newDimensions = [:]
+        case "<=": newValues = m.values.map { (reversed ? s <= $0 : $0 <= s) ? 1.0 : 0.0 }; newDimensions = [:]
+        case "==": newValues = m.values.map { (reversed ? s == $0 : $0 == s) ? 1.0 : 0.0 }; newDimensions = [:]
+        case "!=": newValues = m.values.map { (reversed ? s != $0 : $0 != s) ? 1.0 : 0.0 }; newDimensions = [:]
         default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Scalar")
         }
-        return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: m.dimensions)
+        return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: newDimensions)
     }
     private func performMatrixUnitOp(_ op: String, _ m: Matrix, _ u: UnitValue, reversed: Bool = false) throws -> Matrix {
         let s = u.value
@@ -368,6 +409,25 @@ extension Evaluator {
             default: throw MathError.unsupportedOperation(op: op, typeA: "UnitValue", typeB: "Matrix")
             }
         } else {
+            // --- NEW: Handle matrix-unit comparisons ---
+            if ["<", ">", "==", "!=", "<=", ">="].contains(op) {
+                guard m.dimensions == u.dimensions else {
+                     throw MathError.dimensionMismatch(reason: "Cannot compare matrix and scalar with incompatible units.")
+                }
+                let opFunc: (Double, Double) -> Bool
+                switch op {
+                    case ">": opFunc = (>)
+                    case "<": opFunc = (<)
+                    case ">=": opFunc = (>=)
+                    case "<=": opFunc = (<=)
+                    case "==": opFunc = (==)
+                    case "!=": opFunc = (!=)
+                    default: fatalError() // Should not happen
+                }
+                let newValues = m.values.map { opFunc($0, s) ? 1.0 : 0.0 }
+                return Matrix(values: newValues, rows: m.rows, columns: m.columns, dimensions: [:]) // Result is a dimensionless boolean matrix
+            }
+            
             switch op {
             case "*", ".*":
                 let newValues = m.values.map { $0 * s }
@@ -431,3 +491,4 @@ extension Evaluator {
         }
     }
 }
+

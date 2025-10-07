@@ -357,6 +357,26 @@ struct Vector: Equatable, Codable {
         newValues[index] = operation(newValues[index], scalar)
         return Vector(values: newValues, dimensions: self.dimensions)
     }
+    
+    // --- NEW: Slicing function ---
+    func slice(indices: [Int]) throws -> MathValue {
+        var newValues: [Double] = []
+        for index in indices {
+            // Using 1-based indexing for user input
+            guard index >= 1 && index <= self.dimension else {
+                throw MathError.dimensionMismatch(reason: "Index \(index) is out of bounds for vector of size \(self.dimension).")
+            }
+            newValues.append(self.values[index - 1])
+        }
+
+        // If a single element is requested, return it as a scalar UnitValue
+        if newValues.count == 1 {
+            return .unitValue(UnitValue(value: newValues[0], dimensions: self.dimensions))
+        }
+        
+        // Otherwise, return a new Vector
+        return .vector(Vector(values: newValues, dimensions: self.dimensions))
+    }
 
     static func + (lhs: Vector, rhs: Vector) throws -> Vector {
         guard lhs.dimension == rhs.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have same dimensions for addition.") }
@@ -565,6 +585,7 @@ struct Matrix: Equatable, Codable {
         return Matrix(values: zip(self.values, other.values).map(/), rows: self.rows, columns: self.columns, dimensions: newDimensions)
     }
     
+    // --- FIX: Re-added getcolumn and getrow ---
     func getcolumn(index: Int) throws -> Vector {
         let zeroBasedIndex = index - 1
         guard zeroBasedIndex >= 0 && zeroBasedIndex < columns else {
@@ -581,6 +602,32 @@ struct Matrix: Equatable, Codable {
         }
         let rowValues = (0..<columns).map { self[zeroBasedIndex, $0] }
         return Vector(values: rowValues, dimensions: self.dimensions)
+    }
+    
+    // --- CORRECTED: Slicing function logic ---
+    func slice(rowIndices: [Int], colIndices: [Int]) throws -> MathValue {
+        var newValues: [Double] = []
+        for r in rowIndices {
+            guard r >= 1 && r <= self.rows else {
+                throw MathError.dimensionMismatch(reason: "Row index \(r) is out of bounds for matrix with \(self.rows) rows.")
+            }
+            for c in colIndices {
+                guard c >= 1 && c <= self.columns else {
+                     throw MathError.dimensionMismatch(reason: "Column index \(c) is out of bounds for matrix with \(self.columns) columns.")
+                }
+                newValues.append(self[r - 1, c - 1])
+            }
+        }
+
+        // If a single element is requested, return it as a scalar UnitValue.
+        if newValues.count == 1 {
+            return .unitValue(UnitValue(value: newValues[0], dimensions: self.dimensions))
+        }
+        // Otherwise, always return a Matrix, preserving the shape of the slice
+        // (e.g., a 1xN row vector or an Mx1 column vector).
+        else {
+            return .matrix(Matrix(values: newValues, rows: rowIndices.count, columns: colIndices.count, dimensions: self.dimensions))
+        }
     }
     
     static func + (lhs: Matrix, rhs: Matrix) throws -> Matrix {
@@ -675,6 +722,28 @@ struct ComplexVector: Equatable, Codable {
         var newValues = self.values
         newValues[index] = try operation(newValues[index], scalar)
         return ComplexVector(values: newValues, dimensions: self.dimensions)
+    }
+    
+    // --- NEW: Slicing function ---
+    func slice(indices: [Int]) throws -> MathValue {
+        var newValues: [Complex] = []
+        for index in indices {
+            guard index >= 1 && index <= self.dimension else {
+                throw MathError.dimensionMismatch(reason: "Index \(index) is out of bounds for vector of size \(self.dimension).")
+            }
+            newValues.append(self.values[index - 1])
+        }
+        
+        if newValues.count == 1 {
+            let result = newValues[0]
+            if self.dimensions.isEmpty {
+                return .complex(result)
+            } else {
+                return .complexUnitValue(ComplexUnitValue(value: result, dimensions: self.dimensions))
+            }
+        }
+        
+        return .complexVector(ComplexVector(values: newValues, dimensions: self.dimensions))
     }
     
     static func + (lhs: ComplexVector, rhs: ComplexVector) throws -> ComplexVector {
@@ -786,6 +855,33 @@ struct ComplexMatrix: Equatable, Codable {
         guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square for trace.") }
         let traceValue = (0..<rows).map { self[$0, $0] }.reduce(.zero, +)
         return (traceValue, self.dimensions)
+    }
+    
+    // --- CORRECTED: Slicing function logic ---
+    func slice(rowIndices: [Int], colIndices: [Int]) throws -> MathValue {
+        var newValues: [Complex] = []
+        for r in rowIndices {
+            guard r >= 1 && r <= self.rows else {
+                throw MathError.dimensionMismatch(reason: "Row index \(r) is out of bounds for matrix with \(self.rows) rows.")
+            }
+            for c in colIndices {
+                guard c >= 1 && c <= self.columns else {
+                     throw MathError.dimensionMismatch(reason: "Column index \(c) is out of bounds for matrix with \(self.columns) columns.")
+                }
+                newValues.append(self[r - 1, c - 1])
+            }
+        }
+
+        if newValues.count == 1 {
+            let result = newValues[0]
+            if self.dimensions.isEmpty {
+                return .complex(result)
+            } else {
+                return .complexUnitValue(ComplexUnitValue(value: result, dimensions: self.dimensions))
+            }
+        } else {
+            return .complexMatrix(ComplexMatrix(values: newValues, rows: rowIndices.count, columns: colIndices.count, dimensions: self.dimensions))
+        }
     }
     
     static func + (lhs: ComplexMatrix, rhs: ComplexMatrix) throws -> ComplexMatrix {
@@ -1019,3 +1115,4 @@ extension Array {
         }
     }
 }
+

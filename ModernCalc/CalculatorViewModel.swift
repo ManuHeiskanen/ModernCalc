@@ -448,7 +448,7 @@ class CalculatorViewModel {
                 } else {
                     if self.settings.enableLiveRounding {
                         let liveSettings = self.settings.makeTemporaryCopy()
-                        liveSettings.displayMode = .fixed
+                        // --- CHANGE: No longer force display mode to fixed ---
                         liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings, expression: expression)
                     } else {

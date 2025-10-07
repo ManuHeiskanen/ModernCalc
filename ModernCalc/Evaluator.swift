@@ -158,6 +158,11 @@ struct Evaluator {
             if let value = variables[constantNode.name] { return (value, usedAngle) }
             else if let value = Evaluator.siPrefixes[constantNode.name] { return (.dimensionless(value), usedAngle) }
             else if let value = Evaluator.constants[constantNode.name] { return (.dimensionless(value), usedAngle) }
+            // 'end' is a special keyword for indexing, it shouldn't be evaluated here.
+            // It will be handled inside evaluateIndexAccess. If it reaches here, it's an error.
+            else if constantNode.name == "end" {
+                throw MathError.unsupportedOperation(op: "end", typeA: "Keyword 'end' can only be used inside matrix/vector indexing.", typeB: nil)
+            }
             else { throw MathError.unknownConstant(name: constantNode.name) }
             
         case let assignmentNode as AssignmentNode:
@@ -170,6 +175,18 @@ struct Evaluator {
             return (.functionDefinition(funcDefNode.name), usedAngle)
             
         case let functionNode as FunctionCallNode:
+            // --- FIX: Check if this is an index access operation before treating it as a function call ---
+            if let targetValue = variables[functionNode.name] {
+                switch targetValue {
+                case .matrix, .vector, .complexMatrix, .complexVector:
+                    // It's a variable that can be indexed, so treat it as an index access.
+                    return try evaluateIndexAccess(target: targetValue, argNodes: functionNode.arguments, variables: &variables, functions: &functions, angleMode: angleMode)
+                default:
+                    // It's some other type of variable, so it can't be indexed. Fall through to treat as a function call.
+                    break
+                }
+            }
+            // If no variable with this name exists, it must be a function call.
             return try evaluateFunctionCall(functionNode, variables: &variables, functions: &functions, angleMode: angleMode)
             
         case let uncertNode as UncertaintyNode:
@@ -306,7 +323,6 @@ struct Evaluator {
             let result = try evaluateBinaryOperation(op: binaryNode.op, left: leftValue, right: rightValue)
             return (result, leftUsedAngle || rightUsedAngle)
 
-        // --- MODIFIED: Handle units in derivative calculation ---
         case let derivativeNode as DerivativeNode:
             let (bodyNode, varName): (ExpressionNode, String)
             let pointNode = derivativeNode.point
@@ -329,8 +345,12 @@ struct Evaluator {
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: pointNode, variables: &variables, functions: &functions, angleMode: angleMode)
             let (orderValue, _) = try _evaluateSingle(node: derivativeNode.order, variables: &variables, functions: &functions, angleMode: angleMode)
             
-            guard let pointUnitValue = pointValue.asUnitValue() else {
-                 throw MathError.typeMismatch(expected: "A scalar value for the derivative point", found: pointValue.typeName)
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let pointUnitValue: UnitValue
+            switch pointValue {
+            case .dimensionless(let d): pointUnitValue = .dimensionless(d)
+            case .unitValue(let u): pointUnitValue = u
+            default: throw MathError.typeMismatch(expected: "A scalar value for the derivative point", found: pointValue.typeName)
             }
 
             guard case .dimensionless(let orderScalar) = orderValue, orderScalar >= 1, orderScalar.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.typeMismatch(expected: "Positive integer for derivative order", found: orderValue.typeName) }
@@ -343,14 +363,23 @@ struct Evaluator {
             let result = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: pointUnitValue, order: order, variables: &variables, functions: &functions, angleMode: angleMode)
             return (.unitValue(result), pointUsedAngle || bodyUsedAngle)
 
-        // --- MODIFIED: Handle units in integral calculation ---
         case let integralNode as IntegralNode:
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
             let (upperValue, upperUsedAngle) = try _evaluateSingle(node: integralNode.upperBound, variables: &variables, functions: &functions, angleMode: angleMode)
 
-            guard let a = lowerValue.asUnitValue(), let b = upperValue.asUnitValue() else {
-                throw MathError.typeMismatch(expected: "Scalar values for integral bounds", found: "\(lowerValue.typeName) or \(upperValue.typeName)")
+            // --- FIX: Replaced ambiguous asUnitValue() with switch statements ---
+            let a: UnitValue, b: UnitValue
+            switch lowerValue {
+            case .dimensionless(let d): a = .dimensionless(d)
+            case .unitValue(let u): a = u
+            default: throw MathError.typeMismatch(expected: "Scalar values for integral bounds", found: lowerValue.typeName)
             }
+            switch upperValue {
+            case .dimensionless(let d): b = .dimensionless(d)
+            case .unitValue(let u): b = u
+            default: throw MathError.typeMismatch(expected: "Scalar values for integral bounds", found: upperValue.typeName)
+            }
+            
             guard a.dimensions == b.dimensions else {
                 throw MathError.dimensionMismatch(reason: "Integral bounds must have the same units")
             }
@@ -366,8 +395,13 @@ struct Evaluator {
                     angleMode: angleMode
                 )
                 bodyUsedAngle = bodyUsedAngle || f_usedAngle
-                guard let resultUnit = value.asUnitValue() else {
-                    throw MathError.typeMismatch(expected: "A value with units from integral body", found: value.typeName)
+                
+                // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+                let resultUnit: UnitValue
+                switch value {
+                case .dimensionless(let d): resultUnit = .dimensionless(d)
+                case .unitValue(let u): resultUnit = u
+                default: throw MathError.typeMismatch(expected: "A value with units from integral body", found: value.typeName)
                 }
                 return resultUnit
             }
@@ -377,7 +411,6 @@ struct Evaluator {
                     
             return (.unitValue(result), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
 
-        // --- MODIFIED: Handle units in prime notation derivative ---
         case let primeNode as PrimeDerivativeNode:
             guard let userFunction = functions[primeNode.functionName] else {
                 throw MathError.unknownFunction(name: primeNode.functionName)
@@ -389,8 +422,12 @@ struct Evaluator {
 
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: primeNode.argument, variables: &variables, functions: &functions, angleMode: angleMode)
             
-            guard let pointUnitValue = pointValue.asUnitValue() else {
-                throw MathError.typeMismatch(expected: "A scalar value for the derivative point", found: pointValue.typeName)
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let pointUnitValue: UnitValue
+            switch pointValue {
+            case .dimensionless(let d): pointUnitValue = .dimensionless(d)
+            case .unitValue(let u): pointUnitValue = u
+            default: throw MathError.typeMismatch(expected: "A scalar value for the derivative point", found: pointValue.typeName)
             }
 
             var tempVars = variables
@@ -429,6 +466,104 @@ struct Evaluator {
 
         default:
             throw MathError.invalidNode
+        }
+    }
+    
+    // --- REWRITTEN: Function to handle all matrix/vector indexing cases ---
+    private func evaluateIndexAccess(target: MathValue, argNodes: [ExpressionNode], variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode], angleMode: AngleMode) throws -> (result: MathValue, usedAngle: Bool) {
+
+        // Helper to evaluate a single index component (e.g., '3', 'end', '1:5', 'v>5')
+        func evaluateIndexArgument(node: ExpressionNode, maxDimension: Int) throws -> [Int] {
+            
+            // Inner helper to resolve a single integer value which could be a number or 'end'
+            func resolveIndexValue(node: ExpressionNode) throws -> Int {
+                if let constNode = node as? ConstantNode, constNode.name == "end" {
+                    return maxDimension
+                }
+                let (value, _) = try _evaluateSingle(node: node, variables: &variables, functions: &functions, angleMode: angleMode)
+                let scalar = try value.asScalar()
+                guard scalar.truncatingRemainder(dividingBy: 1) == 0 else {
+                    throw MathError.typeMismatch(expected: "Integer for index", found: "Non-integer value")
+                }
+                return Int(scalar)
+            }
+
+            // Case 1: Range operator 'start:end'
+            if let binaryNode = node as? BinaryOpNode, binaryNode.op.rawValue == ":" {
+                let startIdx = try resolveIndexValue(node: binaryNode.left)
+                let endIdx = try resolveIndexValue(node: binaryNode.right)
+                
+                guard startIdx <= endIdx else { return [] } // Empty range is valid
+                return Array(startIdx...endIdx)
+            }
+            
+            // Case 2: Standalone ':' for full dimension, or a single number/end
+            if let constNode = node as? ConstantNode {
+                switch constNode.name {
+                case "end":
+                    return [maxDimension]
+                case ":":
+                    return Array(1...maxDimension)
+                default:
+                    // It's a variable name, which could be part of a logical expression. Fall through.
+                    break
+                }
+            }
+            
+            // Case 3: A single number node, not captured by logical indexing
+            if node is NumberNode {
+                 let index = try resolveIndexValue(node: node)
+                 return [index]
+            }
+            
+            // Case 4: Logical Indexing (e.g., v(v>5)). This is the fallback.
+            let (logicalValue, _) = try _evaluateSingle(node: node, variables: &variables, functions: &functions, angleMode: angleMode)
+            
+            // The result of the logical expression must be a vector of 0s and 1s.
+            guard case .vector(let logicalVector) = logicalValue else {
+                throw MathError.typeMismatch(expected: "Logical vector (e.g., v > 5) for indexing", found: logicalValue.typeName)
+            }
+            
+            guard logicalVector.dimension == maxDimension else {
+                throw MathError.dimensionMismatch(reason: "Logical index vector dimension (\(logicalVector.dimension)) must match the target dimension (\(maxDimension)).")
+            }
+            
+            var indices: [Int] = []
+            for (i, value) in logicalVector.values.enumerated() {
+                if value != 0 {
+                    indices.append(i + 1) // Convert from 0-based to 1-based index
+                }
+            }
+            return indices
+        }
+        
+        // Main logic for evaluateIndexAccess
+        switch target {
+        case .vector(let v):
+            guard argNodes.count == 1 else { throw MathError.incorrectArgumentCount(function: "Vector indexing", expected: "1", found: argNodes.count) }
+            let indices = try evaluateIndexArgument(node: argNodes[0], maxDimension: v.dimension)
+            return (try v.slice(indices: indices), false)
+            
+        case .matrix(let m):
+            guard argNodes.count == 2 else { throw MathError.incorrectArgumentCount(function: "Matrix indexing", expected: "2", found: argNodes.count) }
+            let rowIndices = try evaluateIndexArgument(node: argNodes[0], maxDimension: m.rows)
+            let colIndices = try evaluateIndexArgument(node: argNodes[1], maxDimension: m.columns)
+            return (try m.slice(rowIndices: rowIndices, colIndices: colIndices), false)
+
+        case .complexVector(let cv):
+            guard argNodes.count == 1 else { throw MathError.incorrectArgumentCount(function: "Complex vector indexing", expected: "1", found: argNodes.count) }
+            let indices = try evaluateIndexArgument(node: argNodes[0], maxDimension: cv.dimension)
+            return (try cv.slice(indices: indices), false)
+            
+        case .complexMatrix(let cm):
+            guard argNodes.count == 2 else { throw MathError.incorrectArgumentCount(function: "Complex matrix indexing", expected: "2", found: argNodes.count) }
+            let rowIndices = try evaluateIndexArgument(node: argNodes[0], maxDimension: cm.rows)
+            let colIndices = try evaluateIndexArgument(node: argNodes[1], maxDimension: cm.columns)
+            return (try cm.slice(rowIndices: rowIndices, colIndices: colIndices), false)
+
+        default:
+            // This case should not be hit due to the check in evaluateFunctionCall
+            throw MathError.typeMismatch(expected: "Matrix or Vector", found: target.typeName)
         }
     }
 }
