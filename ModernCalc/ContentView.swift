@@ -249,7 +249,7 @@ struct UnifiedInputView: View {
                                     Text(previewText)
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
-                                        .truncationMode(.head)
+                                        .truncationMode(.tail)
                                 }
                                 
                                 Text(textAfterCursor)
@@ -679,6 +679,39 @@ struct CalculationResultView: View {
                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
                         .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.matrix(eigenvalues))) }
+                }
+            }
+        } else if case .odeSolution(let time, let states) = calculation.result { // ADD THIS ENTIRE BLOCK
+            VStack(alignment: .trailing, spacing: 8) {
+                HStack {
+                    Text("T =")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                    Text(viewModel.formatForHistory(.vector(time)))
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, 2).padding(.vertical, 2)
+                        .background(isResultSelected(calculation: calculation, index: 0) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                        .onHover { isHovering in
+                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
+                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.vector(time))) }
+                }
+                HStack {
+                    Text("Y =")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                    Text(viewModel.formatForHistory(.matrix(states)))
+                        .font(.system(size: 24, weight: .light, design: .monospaced))
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, 2).padding(.vertical, 2)
+                        .background(isResultSelected(calculation: calculation, index: 1) ? selectionColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                        .onHover { isHovering in
+                            withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 1)) : nil }
+                            if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
+                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.matrix(states))) }
                 }
             }
         } else if case .roots(let roots) = calculation.result {
