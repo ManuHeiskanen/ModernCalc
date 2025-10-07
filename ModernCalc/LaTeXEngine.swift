@@ -10,6 +10,8 @@ import Foundation
 // A dedicated engine for converting calculations into LaTeX strings.
 struct LaTeXEngine {
     
+    private static let maxRowsForPreview = 15
+    
     /// Formats a complete `Calculation` object into a single LaTeX string.
     static func format(calculation: Calculation, evaluator: Evaluator, angleMode: AngleMode, settings: UserSettings) -> String {
         let expressionLaTeX = formatExpression(calculation.expression, evaluator: evaluator, settings: settings)
@@ -171,10 +173,17 @@ struct LaTeXEngine {
             return "\\text{\(funcDefNode.name)}\\left(\(params)\\right) := \(body)"
 
         case let vectorNode as VectorNode:
+            if vectorNode.elements.count > Self.maxRowsForPreview {
+                return "\\text{\(vectorNode.elements.count)-element Vector}"
+            }
             let elements = vectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
 
         case let matrixNode as MatrixNode:
+            if matrixNode.rows.count > Self.maxRowsForPreview {
+                let cols = matrixNode.rows.first?.count ?? 0
+                return "\\text{\(matrixNode.rows.count)x\(cols) Matrix}"
+            }
             let rows = matrixNode.rows.map { $0.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " & ") }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
@@ -187,10 +196,17 @@ struct LaTeXEngine {
             }
 
         case let cVectorNode as ComplexVectorNode:
+            if cVectorNode.elements.count > Self.maxRowsForPreview {
+                return "\\text{\(cVectorNode.elements.count)-element Complex Vector}"
+            }
             let elements = cVectorNode.elements.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(elements) \\end{bmatrix}"
 
         case let cMatrixNode as ComplexMatrixNode:
+            if cMatrixNode.rows.count > Self.maxRowsForPreview {
+                let cols = cMatrixNode.rows.first?.count ?? 0
+                return "\\text{\(cMatrixNode.rows.count)x\(cols) Complex Matrix}"
+            }
             let rows = cMatrixNode.rows.map { $0.map { formatNode($0, evaluator: evaluator, settings: settings) }.joined(separator: " & ") }.joined(separator: " \\\\ ")
             return "\\begin{bmatrix} \(rows) \\end{bmatrix}"
         
@@ -243,8 +259,6 @@ struct LaTeXEngine {
             if u.dimensions.isEmpty { return formatScalar(u.value, settings: settings) }
             
             if let compoundUnitString = UnitStore.commonCompoundUnits[u.dimensions] {
-                // The value 'u.value' is already in base SI, which is what we need.
-                // We just append the nicely formatted compound string.
                 return "\(formatScalar(u.value, settings: settings)) \\, \(formatUnitSymbol(compoundUnitString))"
             }
             
@@ -252,13 +266,15 @@ struct LaTeXEngine {
                 let convertedValue = u.value / bestUnit.conversionFactor
                 return "\(formatScalar(convertedValue, settings: settings)) \\, \(formatUnitSymbol(bestUnit.symbol))"
             }
-            // Fallback for complex units without a single symbol.
             let valStr = formatScalar(u.value, settings: settings)
             let unitStr = formatDimensions(u.dimensions)
             return "\(valStr) \\, \(unitStr)"
         case .complex(let c):
             return formatComplex(c, settings: settings)
         case .vector(let v):
+            if v.dimension > Self.maxRowsForPreview {
+                return "\\text{\(v.dimension)-element Vector}"
+            }
             if let compoundUnitString = UnitStore.commonCompoundUnits[v.dimensions] {
                 let elements = v.values.map { formatScalar($0, settings: settings) }.joined(separator: " \\\\ ")
                 let matrix = "\\begin{bmatrix} \(elements) \\end{bmatrix}"
@@ -276,6 +292,9 @@ struct LaTeXEngine {
             let unitStr = formatDimensions(v.dimensions)
             return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .matrix(let m):
+            if m.rows > Self.maxRowsForPreview {
+                return "\\text{\(m.rows)x\(m.columns) Matrix}"
+            }
             if let compoundUnitString = UnitStore.commonCompoundUnits[m.dimensions] {
                 let rows = (0..<m.rows).map { r in
                     (0..<m.columns).map { c in formatScalar(m[r, c], settings: settings) }.joined(separator: " & ")
@@ -310,11 +329,17 @@ struct LaTeXEngine {
         case .functionDefinition(let name):
             return "\\text{Defined: } \(name)"
         case .complexVector(let cv):
+            if cv.dimension > Self.maxRowsForPreview {
+                return "\\text{\(cv.dimension)-element Complex Vector}"
+            }
             let elements = cv.values.map { formatComplex($0, settings: settings) }.joined(separator: " \\\\ ")
             let matrix = "\\begin{bmatrix} \(elements) \\end{bmatrix}"
             let unitStr = formatDimensions(cv.dimensions)
             return unitStr.isEmpty ? matrix : "\(matrix) \\, \(unitStr)"
         case .complexMatrix(let cm):
+            if cm.rows > Self.maxRowsForPreview {
+                return "\\text{\(cm.rows)x\(cm.columns) Complex Matrix}"
+            }
             let rows = (0..<cm.rows).map { r in
                 (0..<cm.columns).map { c in formatComplex(cm[r, c], settings: settings) }.joined(separator: " & ")
             }.joined(separator: " \\\\ ")
@@ -409,11 +434,15 @@ struct LaTeXEngine {
             } else {
                 return "\(variableName) \\approx \(rootsString)"
             }
-        // --- NEW: Add LaTeX formatting for the eigenvalue decomposition result ---
         case .eigenDecomposition(let eigenvectors, let eigenvalues):
             let vMatrix = formatMathValue(.matrix(eigenvectors), angleMode: angleMode, settings: settings, expression: nil)
             let dMatrix = formatMathValue(.matrix(eigenvalues), angleMode: angleMode, settings: settings, expression: nil)
             return "\\begin{cases} \\mathbf{V} = \(vMatrix) \\\\ \\mathbf{D} = \(dMatrix) \\end{cases}"
+        case .odeSolution(let time, let states):
+            let tVector = formatMathValue(.vector(time), angleMode: angleMode, settings: settings, expression: nil)
+            let sMatrix = formatMathValue(.matrix(states), angleMode: angleMode, settings: settings, expression: nil)
+            return "\\begin{cases} \\mathbf{T} = \(tVector) \\\\ \\mathbf{Y} = \(sMatrix) \\end{cases}"
+
         default:
             return ""
         }
@@ -634,3 +663,4 @@ struct LaTeXEngine {
         return node is BinaryOpNode || node is UnaryOpNode
     }
 }
+
