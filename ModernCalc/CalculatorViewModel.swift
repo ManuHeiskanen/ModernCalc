@@ -45,7 +45,10 @@ struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
 @MainActor
 class CalculatorViewModel {
 
-    var rawExpression: String = "" 
+    // The didSet observer has been removed to prevent update cycle warnings.
+    // The view now handles this logic via .onChange.
+    var rawExpression: String = ""
+    
     var history: [Calculation] = []
     var liveHelpText: String = ""
     var liveErrorText: String = ""
@@ -59,12 +62,9 @@ class CalculatorViewModel {
     var autocompleteSuggestions: [AutocompleteSuggestion] = []
     var showAutocomplete = false
     
-    var angleMode: AngleMode = .degrees {
-        didSet {
-            saveState()
-            handleInputChange()
-        }
-    }
+    // The angleMode now correctly triggers updates from the view.
+    var angleMode: AngleMode = .degrees
+    
     var userFunctionDefinitions: [String: String] = [:]
     var cursorPosition = NSRange() {
         didSet { handleInputChange() }
@@ -110,6 +110,7 @@ class CalculatorViewModel {
         loadState()
     }
     
+    // This function is now 'internal' (by removing 'private') so ContentView can call it.
     func handleInputChange() {
         // Cancel any previously scheduled task to reset the debounce timer
         debounceTask?.cancel()
@@ -669,7 +670,7 @@ class CalculatorViewModel {
         }
     }
 
-    private func saveState() {
+    func saveState() {
         do {
             let variablesData = try JSONEncoder().encode(variables); let functionsData = try JSONEncoder().encode(userFunctionDefinitions)
             UserDefaults.standard.set(variablesData, forKey: "userVariables"); UserDefaults.standard.set(functionsData, forKey: "userFunctionDefinitions")
@@ -731,4 +732,3 @@ class CalculatorViewModel {
         return DisplayFormatter.formatScalarForDisplay(value, with: self.settings)
     }
 }
-

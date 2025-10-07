@@ -15,9 +15,12 @@ struct FunctionCategory: Identifiable {
 
 struct VariableEditorView: View {
     @Bindable var viewModel: CalculatorViewModel
-    @ObservedObject var settings: UserSettings // Kept as-is, assuming UserSettings is still an ObservableObject
+    @ObservedObject var settings: UserSettings
     @Environment(\.dismiss) var dismiss
     @Environment(\.dismissSearch) private var dismissSearch
+    
+    // --- State to hold the picker's value locally ---
+    @State private var localDisplayMode: NumberDisplayMode = .auto
     
     @State private var searchText = ""
     @State private var selectedTab = 0
@@ -374,17 +377,18 @@ struct VariableEditorView: View {
     }
     
     private var settingsView: some View {
-        // --- This view does not have the .searchable modifier because there is no list of data to filter. ---
         Form {
             Section(header: Text("History & Export Formatting")) {
-                Picker("Display Mode", selection: $settings.displayMode) {
+                // --- CHANGE: Bind the Picker to the local state ---
+                Picker("Display Mode", selection: $localDisplayMode) {
                     ForEach(NumberDisplayMode.allCases, id: \.self) {
                         Text($0.rawValue)
                     }
                 }
                 .pickerStyle(.segmented)
                 
-                if settings.displayMode == .fixed {
+                // --- CHANGE: This condition now uses the local state ---
+                if localDisplayMode == .fixed {
                     Stepper("Decimal Places: \(settings.fixedDecimalPlaces)", value: $settings.fixedDecimalPlaces, in: 0...10)
                 }
                 
@@ -434,6 +438,13 @@ struct VariableEditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding()
+        // --- ADDED: Initialize the local state and listen for changes ---
+        .onAppear {
+            self.localDisplayMode = settings.displayMode
+        }
+        .onChange(of: localDisplayMode) { _, newMode in
+            settings.displayMode = newMode
+        }
     }
     
     private var helpView: some View {
