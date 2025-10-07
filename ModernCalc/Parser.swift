@@ -134,6 +134,14 @@ struct SolveNode: ExpressionNode {
     }
 }
 
+// --- NEW: Add an AST node for the ODE solver ---
+struct ODENode: ExpressionNode {
+    let functionName: ConstantNode
+    let timeSpan: ExpressionNode
+    let initialConditions: ExpressionNode
+    var description: String { "ode45(\(functionName.description), \(timeSpan.description), \(initialConditions.description))" }
+}
+
 struct ImportCSVNode: ExpressionNode {
     var description: String { "importcsv()" }
 }
@@ -324,6 +332,8 @@ class Parser {
                 case "importcsv": return try parseImportCSV()
                 case "uncert": return try parseUncert()
                 case "solve", "nsolve": return try parseSolve()
+                // --- NEW: Add a case for the ode45 solver ---
+                case "ode45": return try parseODE()
                 default: return try parseFunctionCall(name: name)
                 }
             } else if let primeToken = peek(), case .op("'") = primeToken.type, let parenToken = peek(offset: 1), case .paren("(") = parenToken.type {
@@ -389,6 +399,32 @@ class Parser {
         
         try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close solve call"))
         return SolveNode(equation: equation, variable: variableNode, guess: guess)
+    }
+    
+    // --- NEW: A dedicated parser for the ode45 function syntax ---
+    private func parseODE() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for ode45 call"))
+
+        // Argument 1: Function name
+        guard let funcNameToken = peek(), case .identifier(let name) = funcNameToken.type else {
+            throw ParserError.unexpectedToken(token: peek(), expected: "a function name for the first argument")
+        }
+        try advance()
+        let functionNameNode = ConstantNode(name: name)
+
+        try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "',' after function name"))
+
+        // Argument 2: Time span
+        let timeSpanNode = try parseExpression()
+
+        try consumeArgumentSeparator(orThrow: .unexpectedToken(token: peek(), expected: "',' after time span"))
+
+        // Argument 3: Initial conditions
+        let initialConditionsNode = try parseExpression()
+
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "')' to close ode45 call"))
+
+        return ODENode(functionName: functionNameNode, timeSpan: timeSpanNode, initialConditions: initialConditionsNode)
     }
 
     private func parseUncert() throws -> ExpressionNode {

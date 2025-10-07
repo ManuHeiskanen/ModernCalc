@@ -45,7 +45,7 @@ class NavigationManager: ObservableObject {
             }
             
         } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), selectedItem.type != .functionDefinition {
-            // MODIFIED: This logic now also recognizes eigenvalue and regression results as having 2 parts.
+            // MODIFIED: This logic now also recognizes ODE, eigenvalue and regression results as having 2 parts.
             let resultCount: Int
             if case .tuple(let values) = selectedItem.result {
                 resultCount = values.count
@@ -53,6 +53,8 @@ class NavigationManager: ObservableObject {
                 resultCount = 2 // m and b
             } else if case .eigenDecomposition = selectedItem.result {
                 resultCount = 2 // V and D
+            } else if case .odeSolution = selectedItem.result {
+                resultCount = 2 // time and states
             } else if case .roots(let values) = selectedItem.result {
                 resultCount = values.count
             } else if case .polynomialFit = selectedItem.result {
@@ -98,6 +100,9 @@ class NavigationManager: ObservableObject {
                     }
                 } else if case .eigenDecomposition(let eigenvectors, let eigenvalues) = selectedItem.result {
                     let valueToParse = (index == 0) ? MathValue.matrix(eigenvectors) : MathValue.matrix(eigenvalues)
+                    return viewModel.formatForParsing(valueToParse)
+                } else if case .odeSolution(let time, let states) = selectedItem.result {
+                    let valueToParse = (index == 0) ? MathValue.vector(time) : MathValue.matrix(states)
                     return viewModel.formatForParsing(valueToParse)
                 } else if case .regressionResult(let slope, let intercept) = selectedItem.result {
                     // FIX: Use .unitValue to correctly wrap the UnitValue types for slope and intercept.

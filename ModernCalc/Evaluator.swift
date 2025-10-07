@@ -460,6 +460,9 @@ struct Evaluator {
 
         case let solveNode as SolveNode:
             return try evaluateSolve(solveNode, variables: &variables, functions: &functions, angleMode: angleMode)
+            
+        case let odeNode as ODENode:
+            return try (evaluateODESolve(odeNode, variables: &variables, functions: &functions, angleMode: angleMode), false)
 
         case is ImportCSVNode:
             return (.triggerCSVImport, false)

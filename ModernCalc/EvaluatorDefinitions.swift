@@ -1292,4 +1292,3 @@ fileprivate func performPercentile(values: [Double], p: Double) -> Double {
         return lowerValue + (rank - Double(lowerIndex)) * (upperValue - lowerValue)
     }
 }
-

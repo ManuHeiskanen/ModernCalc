@@ -297,6 +297,10 @@ struct DisplayFormatter {
             let vMatrix = formatForHistory(.matrix(eigenvectors), with: settings, angleMode: angleMode)
             let dMatrix = formatForHistory(.matrix(eigenvalues), with: settings, angleMode: angleMode)
             return "Eigenvectors (V):\n\(vMatrix)\n\nEigenvalues (D):\n\(dMatrix)"
+        case .odeSolution(let time, let states):
+            let tVector = formatForHistory(.vector(time), with: settings, angleMode: angleMode)
+            let sMatrix = formatForHistory(.matrix(states), with: settings, angleMode: angleMode)
+            return "Time Vector (T):\n\(tVector)\n\nStates Matrix (Y):\n\(sMatrix)"
         }
     }
     
@@ -389,6 +393,7 @@ struct DisplayFormatter {
             if roots.isEmpty { return "" }
             return "vector(\(roots.map { formatForParsing($0, with: settings) }.joined(separator: ";")))"
         case .eigenDecomposition: return "" // Cannot be parsed back easily
+        case .odeSolution: return "" // Cannot be parsed back
         }
     }
 

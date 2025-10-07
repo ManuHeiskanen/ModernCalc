@@ -104,4 +104,104 @@ struct Solver {
         
         return nil // Failed to converge within max iterations.
     }
+    
+    // --- NEW: ode45 implementation using the Dormand-Prince method ---
+    /// Solves a system of ordinary differential equations using the Dormand-Prince 5(4) method with adaptive step sizing.
+    /// - Parameters:
+    ///   - f: The function `(Double, Vector) throws -> Vector` representing the system `dy/dt = f(t, y)`.
+    ///   - t_span: A 2-element array `[t_start, t_end]` specifying the integration interval.
+    ///   - y0: The initial state vector at `t_start`.
+    ///   - tol: The desired relative tolerance for the error control.
+    /// - Returns: A tuple containing a `Vector` of time points and a `Matrix` of corresponding state vectors.
+    static func ode45(f: (Double, Vector) throws -> Vector, t_span: [Double], y0: Vector, tol: Double = 1e-6) throws -> (time: Vector, states: Matrix) {
+        // Butcher Tableau for Dormand-Prince 5(4) "RKDP"
+        let c: [Double] = [0, 1/5, 3/10, 4/5, 8/9, 1, 1]
+        let a: [[Double]] = [
+            [],
+            [1/5],
+            [3/40, 9/40],
+            [44/45, -56/15, 32/9],
+            [19372/6561, -25360/2187, 64448/6561, -212/729],
+            [9017/3168, -355/33, 46732/5247, 49/176, -5103/18656],
+            [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84]
+        ]
+        // 5th order solution coefficients
+        let b: [Double] = [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84, 0]
+        // 4th order (embedded) solution coefficients for error estimation
+        let b_star: [Double] = [5179/57600, 0, 7571/16695, 393/640, -92097/339200, 187/2100, 1/40]
+
+        let t0 = t_span[0]
+        let tf = t_span[1]
+
+        var t = t0
+        var y = y0
+        // Initial step size guess
+        var h = abs(tf - t0) * 0.01 * (tf > t0 ? 1 : -1)
+
+        var timePoints = [t0]
+        var stateVectors = [y0]
+
+        let maxIter = 100000
+        var iter = 0
+        
+        while t < tf && iter < maxIter {
+            // Ensure the final step lands exactly on tf
+            if t + h > tf { h = tf - t }
+
+            // Calculate k stages
+            var k: [Vector] = []
+            k.append(try f(t, y) * h)
+            k.append(try f(t + c[1]*h, y + (k[0] * a[1][0])) * h)
+            k.append(try f(t + c[2]*h, y + (k[0] * a[2][0] + k[1] * a[2][1])) * h)
+            k.append(try f(t + c[3]*h, y + (k[0] * a[3][0] + k[1] * a[3][1] + k[2] * a[3][2])) * h)
+            k.append(try f(t + c[4]*h, y + (k[0] * a[4][0] + k[1] * a[4][1] + k[2] * a[4][2] + k[3] * a[4][3])) * h)
+            k.append(try f(t + c[5]*h, y + (k[0] * a[5][0] + k[1] * a[5][1] + k[2] * a[5][2] + k[3] * a[5][3] + k[4] * a[5][4])) * h)
+            k.append(try f(t + c[6]*h, y + (k[0] * a[6][0] + k[1] * a[6][1] + k[2] * a[6][2] + k[3] * a[6][3] + k[4] * a[6][4] + k[5] * a[6][5])) * h)
+
+            // Calculate error by comparing 5th and 4th order results
+            var errorVec = Vector(values: Array(repeating: 0.0, count: y0.dimension))
+            for i in 0..<7 {
+                errorVec = try errorVec + (k[i] * (b[i] - b_star[i]))
+            }
+            let error = errorVec.magnitude().value / tol
+
+            // Adapt step size
+            let h_new: Double
+            if error <= 1.0 { // Step is accepted
+                t += h
+                var y_next = y
+                for i in 0..<7 {
+                    y_next = try y_next + (k[i] * b[i])
+                }
+                y = y_next
+                
+                timePoints.append(t)
+                stateVectors.append(y)
+                
+                // Increase step size for next iteration
+                h_new = h * min(5.0, 0.9 * pow(error, -0.20))
+            } else { // Step is rejected
+                // Decrease step size and retry
+                h_new = h * max(0.1, 0.9 * pow(error, -0.25))
+            }
+            
+            h = h_new
+            
+            // Prevent step size from becoming excessively small
+            if abs(h) < 1e-15 { break }
+
+            iter += 1
+        }
+        
+        if iter >= maxIter {
+            print("Warning: ode45 reached the maximum number of iterations.")
+        }
+        
+        // Format the output into the required MathValue types
+        let timeResult = Vector(values: timePoints)
+        let stateValues = stateVectors.flatMap { $0.values }
+        let stateMatrix = Matrix(values: stateValues, rows: stateVectors.count, columns: y0.dimension)
+        
+        return (time: timeResult, states: stateMatrix)
+    }
 }
