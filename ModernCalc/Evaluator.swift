@@ -519,17 +519,27 @@ struct Evaluator {
             // Case 4: Logical Indexing (e.g., v(v>5)). This is the fallback.
             let (logicalValue, _) = try _evaluateSingle(node: node, variables: &variables, functions: &functions, angleMode: angleMode)
             
-            // The result of the logical expression must be a vector of 0s and 1s.
-            guard case .vector(let logicalVector) = logicalValue else {
-                throw MathError.typeMismatch(expected: "Logical vector (e.g., v > 5) for indexing", found: logicalValue.typeName)
-            }
+            // --- NEW: Handle both vector and matrix logical indices ---
+            let logicalValues: [Double]
+            let logicalCount: Int
             
-            guard logicalVector.dimension == maxDimension else {
-                throw MathError.dimensionMismatch(reason: "Logical index vector dimension (\(logicalVector.dimension)) must match the target dimension (\(maxDimension)).")
+            switch logicalValue {
+            case .vector(let v):
+                logicalValues = v.values
+                logicalCount = v.dimension
+            case .matrix(let m):
+                logicalValues = m.values
+                logicalCount = m.values.count
+            default:
+                throw MathError.typeMismatch(expected: "Logical vector or matrix (e.g., v > 5) for indexing", found: logicalValue.typeName)
+            }
+
+            guard logicalCount == maxDimension else {
+                throw MathError.dimensionMismatch(reason: "Logical index must have same number of elements as the target (\(logicalCount) vs \(maxDimension)).")
             }
             
             var indices: [Int] = []
-            for (i, value) in logicalVector.values.enumerated() {
+            for (i, value) in logicalValues.enumerated() {
                 if value != 0 {
                     indices.append(i + 1) // Convert from 0-based to 1-based index
                 }
@@ -545,10 +555,36 @@ struct Evaluator {
             return (try v.slice(indices: indices), false)
             
         case .matrix(let m):
-            guard argNodes.count == 2 else { throw MathError.incorrectArgumentCount(function: "Matrix indexing", expected: "2", found: argNodes.count) }
-            let rowIndices = try evaluateIndexArgument(node: argNodes[0], maxDimension: m.rows)
-            let colIndices = try evaluateIndexArgument(node: argNodes[1], maxDimension: m.columns)
-            return (try m.slice(rowIndices: rowIndices, colIndices: colIndices), false)
+            if argNodes.count == 1 {
+                // Handle linear/logical indexing for matrices, e.g., m(m>5) or m(3)
+                let indices = try evaluateIndexArgument(node: argNodes[0], maxDimension: m.values.count)
+                
+                var newValues: [Double] = []
+                for index in indices {
+                    // Using 1-based indexing for user input
+                    guard index >= 1 && index <= m.values.count else {
+                        throw MathError.dimensionMismatch(reason: "Index \(index) is out of bounds for matrix with \(m.values.count) elements.")
+                    }
+                    newValues.append(m.values[index - 1])
+                }
+
+                // A single element is returned as a scalar
+                if newValues.count == 1 {
+                    return (.unitValue(UnitValue(value: newValues[0], dimensions: m.dimensions)), false)
+                }
+                
+                // Multiple elements are returned as a column vector (Nx1 matrix)
+                return (.matrix(Matrix(values: newValues, rows: newValues.count, columns: 1, dimensions: m.dimensions)), false)
+
+            } else if argNodes.count == 2 {
+                // Keep existing logic for m(row, col) indexing
+                let rowIndices = try evaluateIndexArgument(node: argNodes[0], maxDimension: m.rows)
+                let colIndices = try evaluateIndexArgument(node: argNodes[1], maxDimension: m.columns)
+                return (try m.slice(rowIndices: rowIndices, colIndices: colIndices), false)
+            } else {
+                // Throw error for incorrect number of arguments
+                throw MathError.incorrectArgumentCount(function: "Matrix indexing", expected: "1 or 2", found: argNodes.count)
+            }
 
         case .complexVector(let cv):
             guard argNodes.count == 1 else { throw MathError.incorrectArgumentCount(function: "Complex vector indexing", expected: "1", found: argNodes.count) }
@@ -556,10 +592,26 @@ struct Evaluator {
             return (try cv.slice(indices: indices), false)
             
         case .complexMatrix(let cm):
-            guard argNodes.count == 2 else { throw MathError.incorrectArgumentCount(function: "Complex matrix indexing", expected: "2", found: argNodes.count) }
-            let rowIndices = try evaluateIndexArgument(node: argNodes[0], maxDimension: cm.rows)
-            let colIndices = try evaluateIndexArgument(node: argNodes[1], maxDimension: cm.columns)
-            return (try cm.slice(rowIndices: rowIndices, colIndices: colIndices), false)
+             if argNodes.count == 1 {
+                let indices = try evaluateIndexArgument(node: argNodes[0], maxDimension: cm.values.count)
+                var newValues: [Complex] = []
+                for index in indices {
+                    guard index >= 1 && index <= cm.values.count else {
+                        throw MathError.dimensionMismatch(reason: "Index \(index) is out of bounds for complex matrix with \(cm.values.count) elements.")
+                    }
+                    newValues.append(cm.values[index - 1])
+                }
+                if newValues.count == 1 {
+                     return (.complex(newValues[0]), false) // Assuming dimensionless for now
+                }
+                return (.complexMatrix(ComplexMatrix(values: newValues, rows: newValues.count, columns: 1, dimensions: cm.dimensions)), false)
+             } else if argNodes.count == 2 {
+                let rowIndices = try evaluateIndexArgument(node: argNodes[0], maxDimension: cm.rows)
+                let colIndices = try evaluateIndexArgument(node: argNodes[1], maxDimension: cm.columns)
+                return (try cm.slice(rowIndices: rowIndices, colIndices: colIndices), false)
+             } else {
+                throw MathError.incorrectArgumentCount(function: "Complex matrix indexing", expected: "1 or 2", found: argNodes.count)
+             }
 
         default:
             // This case should not be hit due to the check in evaluateFunctionCall
