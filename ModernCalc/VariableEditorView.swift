@@ -128,15 +128,16 @@ struct VariableEditorView: View {
             "Calculus": ["derivative", "grad", "integral", "solve", "nsolve"],
             "Complex Numbers": ["abs", "arg", "conj", "imag", "polar", "real"],
             "Data Generation & IO": ["importcsv", "linspace", "random", "randm", "randv", "range"],
+            "Differential Equations": ["ode45"],
             "Electrical Engineering": ["impedance", "fft", "ifft", "powerspectrum"],
             "Geometry": ["angle", "area_circle", "area_rect", "area_tri", "circum_circle", "hypot", "side", "unit", "vol_cone", "vol_cube", "vol_cylinder", "vol_sphere"],
             "Number Theory": ["fact", "factor", "find", "gcd", "isprime", "lcm", "mod", "nCr", "nPr"],
             "Plotting": ["autoplot", "plot", "scatterplot"],
-            "Statistics": ["avg", "binomdist", "corr", "count", "countabove", "countbelow", "cov", "geomean", "harmean", "iqr", "linreg", "max", "mean", "median", "min", "mode", "normdist", "percentile", "polyfit", "rmse", "rmsd", "sort", "stddev", "stddevp", "sum", "unique", "variance"],
+            "Statistics": ["avg", "binomdist", "corr", "count", "countabove", "countbelow", "cov", "geomean", "harmean", "iqr", "linreg", "max", "mean", "median", "min", "mode", "normdist", "percentile", "polyfit", "rmse", "rmsd", "sort", "stddev", "stddevp", "sum", "unique", "variance", "quartile"],
             "Trigonometry": ["acos", "acosh", "acot", "acoth", "acsc", "acsch", "asec", "asech", "asin", "asinh", "atan", "atan2", "atanh", "cos", "cosh", "cot", "coth", "csc", "csch", "sin", "sinh", "tan", "tanh", "sec", "sech"],
             "Uncertainty": ["uncert"],
             "Utility & Conversion": ["ceil", "deg2rad", "floor", "if", "lg", "ln", "log", "rad2deg", "root", "round", "sign", "sqrt"],
-            "Vector & Matrix": ["cmatrix", "cross", "ctranspose", "cvector", "det", "diag", "dot", "eye", "getcolumn", "getrow", "inv", "linsolve", "matrix", "ones", "trace", "transpose", "vector", "zeros"]
+            "Vector & Matrix": ["cmatrix", "cross", "ctranspose", "cvector", "det", "diag", "dot", "eig", "eye", "getcolumn", "getrow", "inv", "linsolve", "norm", "matrix", "ones", "rank", "trace", "transpose", "vector", "zeros"]
         ]
 
         var categories: [String: [BuiltinFunction]] = [:]
