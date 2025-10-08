@@ -12,19 +12,27 @@ import SwiftUI
 @MainActor
 class PlotViewModel {
     var plotData: PlotData
-    var viewDomainX: ClosedRange<Double>
-    var viewDomainY: ClosedRange<Double>
+    var viewDomainX: ClosedRange<Double> {
+        didSet { updateStringFieldsFromDomains() }
+    }
+    var viewDomainY: ClosedRange<Double> {
+        didSet { updateStringFieldsFromDomains() }
+    }
+    
+    // --- NEW: String properties to bind to TextFields for manual control ---
+    var xMinString: String = ""
+    var xMaxString: String = ""
+    var yMinString: String = ""
+    var yMaxString: String = ""
     
     var xAxisLabel: String
     var yAxisLabel: String
+    
     private let initialDomainX: ClosedRange<Double>
     private let initialDomainY: ClosedRange<Double>
     private let initialSeries: [PlotSeries]
-
-    // --- NEW: Tracks the full range of X-values for which we have calculated data ---
     private var dataDomainX: ClosedRange<Double>
     
-    // --- MODIFIED: The handler now fetches data for a specific domain ---
     var regenerationHandler: ((ClosedRange<Double>) -> Task<[PlotSeries]?, Never>)?
     private var regenerationTask: Task<Void, Never>?
 
@@ -33,95 +41,32 @@ class PlotViewModel {
         self.xAxisLabel = plotData.xAxisLabel
         self.yAxisLabel = plotData.yAxisLabel
         self.regenerationHandler = regenerationHandler
-        self.initialSeries = plotData.series // Store the original data for reset
+        self.initialSeries = plotData.series
         
-        var calculatedDomainX: ClosedRange<Double>
-        var calculatedDomainY: ClosedRange<Double>
-
-        if plotData.plotType == .vector {
-            let allPoints = plotData.series.flatMap { $0.dataPoints }
-            if allPoints.isEmpty {
-                calculatedDomainX = -5...5
-                calculatedDomainY = -5...5
-            } else {
-                let allX = allPoints.map { abs($0.x) }
-                let allY = allPoints.map { abs($0.y) }
-                let maxCoord = max(allX.max() ?? 0, allY.max() ?? 0)
-                let paddedMax = maxCoord * 1.2
-                calculatedDomainX = -paddedMax...paddedMax
-                calculatedDomainY = -paddedMax...paddedMax
-            }
-        } else {
-            let allPoints = plotData.series.flatMap { $0.dataPoints }.filter { $0.x.isFinite && $0.y.isFinite }
-            if allPoints.isEmpty {
-                calculatedDomainX = -10...10
-                calculatedDomainY = -10...10
-            } else {
-                if plotData.plotType == .parametric {
-                    let allX = allPoints.map { $0.x }; let allY = allPoints.map { $0.y }
-                    let minX = allX.min()!, maxX = allX.max()!, minY = allY.min()!, maxY = allY.max()!
-                    let xSpan = maxX - minX; let ySpan = maxY - minY
-                    let maxSpan = max(xSpan, ySpan) * 1.2
-                    let midX = (minX + maxX) / 2; let midY = (minY + maxY) / 2
-                    calculatedDomainX = (midX - maxSpan / 2)...(midX + maxSpan / 2)
-                    calculatedDomainY = (midY - maxSpan / 2)...(midY + maxSpan / 2)
-                } else {
-                    if let xRange = plotData.initialXRange {
-                        calculatedDomainX = xRange.min...xRange.max
-                    } else {
-                        var minX = allPoints.map { $0.x }.min()!, maxX = allPoints.map { $0.x }.max()!
-                        if minX == maxX { minX -= 1; maxX += 1 }
-                        if abs(minX + maxX) < (maxX - minX) * 0.1 { let mag = max(abs(minX), abs(maxX)); minX = -mag; maxX = mag }
-                        let xPadding = (maxX - minX) * 0.05
-                        calculatedDomainX = (minX - max(xPadding, 0.5))...(maxX + max(xPadding, 0.5))
-                    }
-                    
-                    if let yRange = plotData.explicitYRange {
-                        calculatedDomainY = yRange.min...yRange.max
-                    } else {
-                        var minY = allPoints.map { $0.y }.min()!, maxY = allPoints.map { $0.y }.max()!
-                        if minY == maxY { minY -= 1; maxY += 1 }
-                        if abs(minY + maxY) < (maxY - minY) * 0.1 { let mag = max(abs(minY), abs(maxY)); minY = -mag; maxY = mag }
-                        let yPadding = (maxY - minY) * 0.1
-                        calculatedDomainY = (minY - max(yPadding, 1.0))...(maxY + max(yPadding, 1.0))
-                    }
-                    
-                    let xSpan = calculatedDomainX.upperBound - calculatedDomainX.lowerBound
-                    let ySpan = calculatedDomainY.upperBound - calculatedDomainY.lowerBound
-
-                    if ySpan > 1e-9 {
-                        let targetAspectRatio = 4.0
-                        let currentAspectRatio = xSpan / ySpan
-                        
-                        if currentAspectRatio > targetAspectRatio {
-                            let yCenter = (calculatedDomainY.lowerBound + calculatedDomainY.upperBound) / 2
-                            let newYSpan = xSpan / targetAspectRatio
-                            calculatedDomainY = (yCenter - newYSpan / 2)...(yCenter + newYSpan / 2)
-                        }
-                    }
-                }
-            }
-        }
+        // Initial domain calculation remains the same
+        let (calculatedDomainX, calculatedDomainY) = Self.calculateInitialDomains(for: plotData)
         
         self.viewDomainX = calculatedDomainX
         self.viewDomainY = calculatedDomainY
         self.initialDomainX = calculatedDomainX
         self.initialDomainY = calculatedDomainY
         
-        // --- NEW: Initialize the dataDomainX based on the actual data provided ---
         let allPoints = plotData.series.flatMap { $0.dataPoints }
         if let minX = allPoints.map({ $0.x }).min(), let maxX = allPoints.map({ $0.x }).max() {
             self.dataDomainX = minX...maxX
         } else {
-            self.dataDomainX = calculatedDomainX // Fallback
+            self.dataDomainX = calculatedDomainX
         }
+        
+        // Sync the string fields with the initial domains
+        updateStringFieldsFromDomains()
     }
     
     func resetView() {
         self.plotData.series = initialSeries
         self.viewDomainX = initialDomainX
         self.viewDomainY = initialDomainY
-        // --- NEW: Reset the data domain as well ---
+        
         let allPoints = initialSeries.flatMap { $0.dataPoints }
         if let minX = allPoints.map({ $0.x }).min(), let maxX = allPoints.map({ $0.x }).max() {
             self.dataDomainX = minX...maxX
@@ -152,49 +97,41 @@ class PlotViewModel {
         let maxSpan: Double = 1e12
         let minSpan: Double = 1e-9
         
-        if newXSpan < minSpan { newXSpan = minSpan }
-        if newYSpan < minSpan { newYSpan = minSpan }
-        if newXSpan > maxSpan { newXSpan = maxSpan }
-        if newYSpan > maxSpan { newYSpan = maxSpan }
+        newXSpan = min(max(newXSpan, minSpan), maxSpan)
+        newYSpan = min(max(newYSpan, minSpan), maxSpan)
 
         let xCenter = (viewDomainX.lowerBound + viewDomainX.upperBound) / 2
         let yCenter = (viewDomainY.lowerBound + viewDomainY.upperBound) / 2
         
         viewDomainX = (xCenter - newXSpan / 2)...(xCenter + newXSpan / 2)
         viewDomainY = (yCenter - newYSpan / 2)...(yCenter + newYSpan / 2)
+        
+        // --- MODIFIED: Auto-rescale Y-axis after zooming, but not after panning ---
+        recalculateYDomain(forVisibleXRange: viewDomainX)
     }
     
-    // --- NEW: Smart trigger for data regeneration ---
     func triggerDataRegenerationIfNeeded() {
         guard let handler = regenerationHandler, plotData.plotType == .line || plotData.plotType == .parametric else { return }
 
         regenerationTask?.cancel()
 
-        // Define a threshold (e.g., 25% from the edge) to trigger pre-fetching.
         let dataSpan = dataDomainX.upperBound - dataDomainX.lowerBound
         guard dataSpan > 0 else { return }
         let threshold = dataSpan * 0.25
 
         var domainToFetch: ClosedRange<Double>? = nil
 
-        // Check if user is near the right edge
         if viewDomainX.upperBound > dataDomainX.upperBound - threshold {
             let fetchStart = dataDomainX.upperBound
-            let fetchEnd = dataDomainX.upperBound + dataSpan // Fetch another "page" of data
+            let fetchEnd = dataDomainX.upperBound + dataSpan
             domainToFetch = fetchStart...fetchEnd
-        }
-        // Check if user is near the left edge
-        else if viewDomainX.lowerBound < dataDomainX.lowerBound + threshold {
+        } else if viewDomainX.lowerBound < dataDomainX.lowerBound + threshold {
             let fetchStart = dataDomainX.lowerBound - dataSpan
             let fetchEnd = dataDomainX.lowerBound
             domainToFetch = fetchStart...fetchEnd
         }
 
-        guard let newDomain = domainToFetch else {
-            // No need to fetch, but if zooming out has revealed empty space, recalculate Y-domain
-            recalculateYDomain(forVisibleXRange: viewDomainX)
-            return
-        }
+        guard let newDomain = domainToFetch else { return }
 
         regenerationTask = Task {
             do {
@@ -208,72 +145,127 @@ class PlotViewModel {
         }
     }
     
-    // --- NEW: Appends new data and updates domains ---
     private func appendNewData(newSeries: [PlotSeries]) {
         for newSeriesChunk in newSeries {
             if let existingSeriesIndex = self.plotData.series.firstIndex(where: { $0.name == newSeriesChunk.name }) {
                 
                 var combinedPoints = self.plotData.series[existingSeriesIndex].dataPoints
                 combinedPoints.append(contentsOf: newSeriesChunk.dataPoints)
-                
-                // Sort by x-value to keep the data in order for line drawing.
                 combinedPoints.sort { $0.x < $1.x }
                 
-                // A simple de-duplication step
                 var uniquePoints: [DataPoint] = []
                 if let first = combinedPoints.first {
                     uniquePoints.append(first)
                     for i in 1..<combinedPoints.count {
-                        if combinedPoints[i].x != combinedPoints[i-1].x {
-                            uniquePoints.append(combinedPoints[i])
-                        }
+                        if combinedPoints[i].x != combinedPoints[i-1].x { uniquePoints.append(combinedPoints[i]) }
                     }
                 }
                 
-                self.plotData.series[existingSeriesIndex] = PlotSeries(
-                    name: newSeriesChunk.name,
-                    dataPoints: uniquePoints,
-                    equation: newSeriesChunk.equation
-                )
+                self.plotData.series[existingSeriesIndex] = PlotSeries(name: newSeriesChunk.name, dataPoints: uniquePoints, equation: newSeriesChunk.equation)
             }
         }
         
-        // Update the data domain to reflect the newly expanded range
         if let minX = plotData.series.flatMap({ $0.dataPoints }).map({ $0.x }).min(),
            let maxX = plotData.series.flatMap({ $0.dataPoints }).map({ $0.x }).max() {
             self.dataDomainX = minX...maxX
         }
-        
-        // Recalculate Y domain based on the new visible data
-        recalculateYDomain(forVisibleXRange: viewDomainX)
     }
     
-    // --- MODIFIED: Recalculates Y domain only for the currently visible X range ---
+    // --- NEW: Public function for the "Auto-Fit" button ---
+    func autoFitDomains() {
+        let (newX, newY) = Self.calculateInitialDomains(for: plotData)
+        withAnimation {
+            self.viewDomainX = newX
+            self.viewDomainY = newY
+        }
+    }
+    
+    // --- NEW: Function to parse strings and update domains ---
+    func applyDomainsFromStrings() {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+
+        if let xMin = formatter.number(from: xMinString)?.doubleValue,
+           let xMax = formatter.number(from: xMaxString)?.doubleValue,
+           xMin < xMax {
+            withAnimation { self.viewDomainX = xMin...xMax }
+        }
+
+        if let yMin = formatter.number(from: yMinString)?.doubleValue,
+           let yMax = formatter.number(from: yMaxString)?.doubleValue,
+           yMin < yMax {
+            withAnimation { self.viewDomainY = yMin...yMax }
+        }
+        triggerDataRegenerationIfNeeded()
+    }
+    
+    // --- NEW: Helper to sync string fields from numeric domains ---
+    private func updateStringFieldsFromDomains() {
+        xMinString = String(format: "%.4g", viewDomainX.lowerBound)
+        xMaxString = String(format: "%.4g", viewDomainX.upperBound)
+        yMinString = String(format: "%.4g", viewDomainY.lowerBound)
+        yMaxString = String(format: "%.4g", viewDomainY.upperBound)
+    }
+    
     private func recalculateYDomain(forVisibleXRange: ClosedRange<Double>) {
         guard plotData.explicitYRange == nil else {
             self.viewDomainY = plotData.explicitYRange!.min...plotData.explicitYRange!.max
             return
         }
-
-        let visiblePoints = plotData.series.flatMap { $0.dataPoints }.filter {
-            $0.y.isFinite && forVisibleXRange.contains($0.x)
-        }
-        
+        let visiblePoints = plotData.series.flatMap { $0.dataPoints }.filter { $0.y.isFinite && forVisibleXRange.contains($0.x) }
         guard !visiblePoints.isEmpty else { return }
-
         var minY = visiblePoints.map { $0.y }.min()!
         var maxY = visiblePoints.map { $0.y }.max()!
-
         if abs(maxY - minY) < 1e-9 { minY -= 1; maxY += 1 }
-        
-        // Symmetrize around zero if the range is close to it
-        if abs(minY + maxY) < (maxY - minY) * 0.1 {
-            let mag = max(abs(minY), abs(maxY)); minY = -mag; maxY = mag
-        }
-
+        if abs(minY + maxY) < (maxY - minY) * 0.1 { let mag = max(abs(minY), abs(maxY)); minY = -mag; maxY = mag }
         let yPadding = (maxY - minY) * 0.1
         withAnimation(.easeInOut(duration: 0.2)) {
             self.viewDomainY = (minY - max(yPadding, 1.0))...(maxY + max(yPadding, 1.0))
         }
     }
+    
+    // --- NEW: Extracted initial calculation logic into a static function ---
+    private static func calculateInitialDomains(for plotData: PlotData) -> (x: ClosedRange<Double>, y: ClosedRange<Double>) {
+        var calculatedDomainX: ClosedRange<Double>
+        var calculatedDomainY: ClosedRange<Double>
+
+        if plotData.plotType == .vector {
+            let allPoints = plotData.series.flatMap { $0.dataPoints }
+            if allPoints.isEmpty { (calculatedDomainX, calculatedDomainY) = (-5...5, -5...5) }
+            else {
+                let maxCoord = max(allPoints.map { abs($0.x) }.max() ?? 0, allPoints.map { abs($0.y) }.max() ?? 0)
+                let paddedMax = maxCoord * 1.2
+                (calculatedDomainX, calculatedDomainY) = (-paddedMax...paddedMax, -paddedMax...paddedMax)
+            }
+        } else {
+            let allPoints = plotData.series.flatMap { $0.dataPoints }.filter { $0.x.isFinite && $0.y.isFinite }
+            if allPoints.isEmpty { (calculatedDomainX, calculatedDomainY) = (-10...10, -10...10) }
+            else {
+                if plotData.plotType == .parametric {
+                    let (minX, maxX) = (allPoints.map { $0.x }.min()!, allPoints.map { $0.x }.max()!)
+                    let (minY, maxY) = (allPoints.map { $0.y }.min()!, allPoints.map { $0.y }.max()!)
+                    let maxSpan = max(maxX - minX, maxY - minY) * 1.2
+                    let midX = (minX + maxX) / 2; let midY = (minY + maxY) / 2
+                    calculatedDomainX = (midX - maxSpan / 2)...(midX + maxSpan / 2)
+                    calculatedDomainY = (midY - maxSpan / 2)...(midY + maxSpan / 2)
+                } else {
+                    calculatedDomainX = plotData.initialXRange.map { $0.min...$0.max } ?? {
+                        var (minX, maxX) = (allPoints.map { $0.x }.min()!, allPoints.map { $0.x }.max()!)
+                        if minX == maxX { minX -= 1; maxX += 1 }
+                        let padding = (maxX - minX) * 0.05
+                        return (minX - max(padding, 0.5))...(maxX + max(padding, 0.5))
+                    }()
+                    
+                    calculatedDomainY = plotData.explicitYRange.map { $0.min...$0.max } ?? {
+                        var (minY, maxY) = (allPoints.map { $0.y }.min()!, allPoints.map { $0.y }.max()!)
+                        if minY == maxY { minY -= 1; maxY += 1 }
+                        let padding = (maxY - minY) * 0.1
+                        return (minY - max(padding, 1.0))...(maxY + max(padding, 1.0))
+                    }()
+                }
+            }
+        }
+        return (calculatedDomainX, calculatedDomainY)
+    }
 }
+

@@ -90,7 +90,7 @@ struct PlotView: View {
     }
     
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
             chartContainer
                 .gesture(
                     DragGesture()
@@ -103,7 +103,6 @@ struct PlotView: View {
                         }
                         .onEnded { _ in
                             initialDragDomains = nil
-                            // --- MODIFIED: Trigger the smart regeneration check ---
                             viewModel.triggerDataRegenerationIfNeeded()
                         }
                 )
@@ -116,7 +115,6 @@ struct PlotView: View {
                         }
                         .onEnded { value in
                             cumulativeZoom = 1.0
-                            // --- MODIFIED: Trigger the smart regeneration check ---
                             viewModel.triggerDataRegenerationIfNeeded()
                         }
                 )
@@ -126,6 +124,11 @@ struct PlotView: View {
                     case .ended: NSCursor.pop()
                     }
                 }
+            
+            // --- NEW: Axis Control Panel ---
+            AxisControlView(viewModel: viewModel)
+
+            Divider()
 
             HStack {
                 Button("Save as PNG") { exportChart() }
@@ -136,9 +139,9 @@ struct PlotView: View {
                     }
                 }
             }
-            .padding([.horizontal, .bottom])
+            .padding()
         }
-        .frame(minWidth: 350, idealWidth: 400, maxWidth: .infinity, minHeight: 350, idealHeight: 600, maxHeight: .infinity)
+        .frame(minWidth: 350, idealWidth: 400, maxWidth: .infinity, minHeight: 450, idealHeight: 650, maxHeight: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
     }
     
@@ -227,6 +230,58 @@ struct PlotView: View {
     }
 }
 
+// --- NEW: A dedicated view for the axis controls ---
+struct AxisControlView: View {
+    @Bindable var viewModel: PlotViewModel
+    @State private var isExpanded = false
+    
+    private static let numberFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 8
+        return formatter
+    }()
+    
+    var body: some View {
+        DisclosureGroup("Axis Controls", isExpanded: $isExpanded) {
+            VStack {
+                HStack {
+                    Text("X-Axis:")
+                        .frame(width: 50, alignment: .trailing)
+                    TextField("Min", text: $viewModel.xMinString)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    Text("to")
+                    TextField("Max", text: $viewModel.xMaxString)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                }
+                HStack {
+                    Text("Y-Axis:")
+                        .frame(width: 50, alignment: .trailing)
+                    TextField("Min", text: $viewModel.yMinString)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    Text("to")
+                    TextField("Max", text: $viewModel.yMaxString)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                }
+                HStack {
+                    Spacer()
+                    Button("Auto-Fit") {
+                        viewModel.autoFitDomains()
+                    }
+                    Button("Apply") {
+                        viewModel.applyDomainsFromStrings()
+                    }
+                    .keyboardShortcut(.return, modifiers: [])
+                }
+            }
+            .padding(.top, 8)
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+}
+
+
 struct Arrowhead: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
@@ -237,3 +292,4 @@ struct Arrowhead: Shape {
         return path
     }
 }
+
