@@ -67,7 +67,7 @@ struct PlotView: View {
                         .background(Color.gray.opacity(0.1))
                         .border(Color.primary.opacity(0.5), width: 1)
                         .aspectRatio(1, contentMode: .fit)
-                        .clipped() // FIX: Prevents the plot from drawing outside its frame.
+                        .clipped()
                         .background(GeometryReader { geo in Color.clear.onAppear { plotSize = geo.size } })
                 }
                 .chartOverlay { proxy in
@@ -103,7 +103,8 @@ struct PlotView: View {
                         }
                         .onEnded { _ in
                             initialDragDomains = nil
-                            // viewModel.requestDataRegeneration()
+                            // --- MODIFIED: Trigger the smart regeneration check ---
+                            viewModel.triggerDataRegenerationIfNeeded()
                         }
                 )
                 .simultaneousGesture(
@@ -115,7 +116,8 @@ struct PlotView: View {
                         }
                         .onEnded { value in
                             cumulativeZoom = 1.0
-                            //viewModel.requestDataRegeneration()
+                            // --- MODIFIED: Trigger the smart regeneration check ---
+                            viewModel.triggerDataRegenerationIfNeeded()
                         }
                 )
                 .onContinuousHover { phase in
@@ -139,9 +141,6 @@ struct PlotView: View {
         .frame(minWidth: 350, idealWidth: 400, maxWidth: .infinity, minHeight: 350, idealHeight: 600, maxHeight: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
     }
-    
-    // --- FIX: The extension with duplicate methods has been removed. ---
-    // --- All chart content helpers are now correctly defined just once. ---
     
     @ChartContentBuilder
     private func vectorPlotContent() -> some ChartContent {

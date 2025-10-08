@@ -782,7 +782,7 @@ struct DisplayFormatter {
         return "(\(equation))"
     }
     
-    private static func formatScalarForParsing(_ value: Double, with settings: UserSettings) -> String {
+    static func formatScalarForParsing(_ value: Double, with settings: UserSettings) -> String {
         if value.truncatingRemainder(dividingBy: 1) == 0 && abs(value) < 1e15 {
             return String(format: "%.0f", value)
         }

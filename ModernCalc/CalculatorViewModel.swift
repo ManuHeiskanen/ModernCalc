@@ -45,8 +45,6 @@ struct AutocompleteSuggestion: Identifiable, Hashable, Equatable {
 @MainActor
 class CalculatorViewModel {
 
-    // The didSet observer has been removed to prevent update cycle warnings.
-    // The view now handles this logic via .onChange.
     var rawExpression: String = ""
     
     var history: [Calculation] = []
@@ -58,11 +56,9 @@ class CalculatorViewModel {
     var functions: [String: FunctionDefinitionNode] = [:]
     var livePreviewHeight: CGFloat = 60.0
     
-    // --- State for autocomplete ---
     var autocompleteSuggestions: [AutocompleteSuggestion] = []
     var showAutocomplete = false
     
-    // The angleMode now correctly triggers updates from the view.
     var angleMode: AngleMode = .degrees
     
     var userFunctionDefinitions: [String: String] = [:]
@@ -110,29 +106,22 @@ class CalculatorViewModel {
         loadState()
     }
     
-    // This function is now 'internal' (by removing 'private') so ContentView can call it.
     func handleInputChange() {
-        // Cancel any previously scheduled task to reset the debounce timer
         debounceTask?.cancel()
 
-        // Schedule a new task to run after a 50ms delay
         debounceTask = Task {
             do {
                 try await Task.sleep(for: .milliseconds(50))
                 
-                // If the task wasn't cancelled while it was sleeping, perform the update
                 guard !Task.isCancelled else { return }
                 
                 await performLiveUpdate()
 
-            } catch {
-                // This catch block is needed to handle cancellation errors from Task.sleep
-            }
+            } catch {}
         }
     }
 
     private func performLiveUpdate() async {
-        // This is the logic that was previously inside the Combine .sink { ... } block
         let expression = self.rawExpression
         let position = self.cursorPosition
         let angle = self.angleMode
@@ -153,7 +142,6 @@ class CalculatorViewModel {
         if expression == self.lastCalculatedExpression && angle == self.lastCalculatedAngleMode {
             let newHelpText = self.getContextualHelp(expression: expression, cursor: position) ?? ""
             if newHelpText != self.liveHelpText {
-                // Recalculate height and update view properties when only help text changes.
                 updateLivePreview(latex: self.liveLaTeXPreview, helpText: newHelpText, errorText: self.liveErrorText)
             }
             return
@@ -164,7 +152,6 @@ class CalculatorViewModel {
         self.lastCalculatedAngleMode = angle
     }
     
-    /// Replaces the currently typed word with the selected suggestion.
     func selectAutocomplete(suggestion: AutocompleteSuggestion) {
         let nsExpression = rawExpression as NSString
         let textBeforeCursor = nsExpression.substring(to: cursorPosition.location)
@@ -197,12 +184,9 @@ class CalculatorViewModel {
     }
 
     
-    /// Finds the word currently being typed and searches for matching variables and functions.
     private func updateAutocompleteSuggestions(for expression: String, at position: NSRange) {
-        // Run as a Task to avoid blocking the main thread during typing
         Task {
             guard position.location <= (expression as NSString).length else {
-                // This prevents a crash if the expression updates faster than the cursor position
                 self.autocompleteSuggestions = []
                 self.showAutocomplete = false
                 return
@@ -251,7 +235,6 @@ class CalculatorViewModel {
             
             let newSuggestions = Array(Set(suggestions)).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             
-            // Hide popover if there's only one suggestion and it's an exact match
             if newSuggestions.count == 1, let suggestion = newSuggestions.first, suggestion.name.lowercased() == lowercasedWord {
                 self.showAutocomplete = false
                 self.autocompleteSuggestions = []
@@ -289,34 +272,49 @@ class CalculatorViewModel {
             let capturedSettings = self.settings
             let capturedAngleMode = self.angleMode
 
+            // --- REVISED: This handler now correctly reconstructs the plot command for regeneration ---
             let handler = { (newDomain: ClosedRange<Double>) -> Task<[PlotSeries]?, Never> in
                 Task {
                     do {
-                        var expressionToEvaluate = expression
+                        var expressionToEvaluate: String
                         let trimmedExpression = expression.trimmingCharacters(in: .whitespaces)
                         
-                        // FIX: Calculate a wider render domain to pre-load data for panning.
-                        let span = newDomain.upperBound - newDomain.lowerBound
-                        let renderDomain = (newDomain.lowerBound - span)...(newDomain.upperBound + span)
+                        var functionPart: String?
+                        var variableName: String?
 
-                        if trimmedExpression.starts(with: "autoplot") {
-                            let pattern = #"autoplot\s*\((.*)\)"#
-                            if let regex = try? NSRegularExpression(pattern: pattern),
-                               let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
-                               let range = Range(match.range(at: 1), in: expression) {
-                                let innerExpression = String(expression[range])
-                                // FIX: Use the new, wider renderDomain for evaluation.
-                                expressionToEvaluate = "plot(\(innerExpression), x=(\(renderDomain.lowerBound), \(renderDomain.upperBound)))"
+                        // Simplified logic to extract the core function part of the plot command.
+                        // This is more robust than complex regex.
+                        if let firstParen = trimmedExpression.firstIndex(of: "("),
+                           let lastParen = trimmedExpression.lastIndex(of: ")") {
+                            let innerContent = String(trimmedExpression[trimmedExpression.index(after: firstParen)..<lastParen])
+                            
+                            if trimmedExpression.starts(with: "plot") {
+                                // For `plot`, we find the last comma to separate expressions from var/range
+                                if let lastComma = innerContent.lastIndex(of: ",") {
+                                    let secondToLastComma = innerContent[..<lastComma].lastIndex(of: ",")
+                                    if let secondToLastComma = secondToLastComma {
+                                        let varAndFuncs = innerContent[..<secondToLastComma]
+                                        if let finalCommaInPart = varAndFuncs.lastIndex(of: ",") {
+                                            functionPart = String(varAndFuncs[..<finalCommaInPart])
+                                            variableName = String(varAndFuncs[varAndFuncs.index(after: finalCommaInPart)...]).trimmingCharacters(in: .whitespaces)
+                                        }
+                                    }
+                                }
+                            } else { // Handles `autoplot`
+                                functionPart = innerContent
+                                // A more robust way to find the variable could be parsing, but 'x' or 't' are strong defaults.
+                                variableName = innerContent.contains("t") ? "t" : "x"
                             }
-                        } else if trimmedExpression.starts(with: "plot") {
-                            let pattern = #"plot\s*\(([^,]+).*\)"#
-                            if let regex = try? NSRegularExpression(pattern: pattern),
-                               let match = regex.firstMatch(in: expression, range: NSRange(expression.startIndex..., in: expression)),
-                               let range = Range(match.range(at: 1), in: expression) {
-                                let functionExpression = String(expression[range])
-                                // FIX: Use the new, wider renderDomain for evaluation.
-                                expressionToEvaluate = "plot(\(functionExpression), x=(\(renderDomain.lowerBound), \(renderDomain.upperBound)))"
-                            }
+                        }
+
+                        if let functionPart = functionPart, let variableName = variableName {
+                            let lowerBoundString = DisplayFormatter.formatScalarForParsing(newDomain.lowerBound, with: capturedSettings)
+                            let upperBoundString = DisplayFormatter.formatScalarForParsing(newDomain.upperBound, with: capturedSettings)
+
+                            expressionToEvaluate = "plot(\(functionPart), \(variableName), \(lowerBoundString), \(upperBoundString))"
+                        } else {
+                            print("Regeneration failed: Could not parse original plot expression '\(expression)'")
+                            return nil
                         }
                                         
                         let resultValue = try await self.evaluateExpression(
@@ -448,7 +446,6 @@ class CalculatorViewModel {
                 } else {
                     if self.settings.enableLiveRounding {
                         let liveSettings = self.settings.makeTemporaryCopy()
-                        // --- CHANGE: No longer force display mode to fixed ---
                         liveSettings.fixedDecimalPlaces = self.settings.livePreviewDecimalPlaces
                         resultLaTeX = LaTeXEngine.formatMathValue(value, angleMode: self.angleMode, settings: liveSettings, expression: expression)
                     } else {
@@ -473,18 +470,14 @@ class CalculatorViewModel {
     }
     
     private func updateLivePreview(latex: String, helpText: String, errorText: String) {
-        // --- HEIGHT CALCULATION LOGIC ---
         var verticalityScore = 0
 
-        // First, check for help/error text. This always takes precedence for height calculation.
         if !errorText.isEmpty || !helpText.isEmpty {
             var totalLines = 0
-            let charsPerLine = 55 // Approximate characters per line in the view.
+            let charsPerLine = 55
 
             if !helpText.isEmpty {
-                // A multi-line help string might have explicit newlines.
                 let explicitHelpNewlines = helpText.components(separatedBy: "\n").count
-                // Also estimate lines if a single line is very long and would wrap.
                 let wrappedHelpLines = Int(ceil(Double(helpText.count) / Double(charsPerLine)))
                 totalLines += max(explicitHelpNewlines, wrappedHelpLines)
             }
@@ -495,26 +488,21 @@ class CalculatorViewModel {
                 totalLines += max(explicitErrorNewlines, wrappedErrorLines)
             }
             
-            // The score is based on extra lines beyond the first one (which is covered by baseHeight).
             verticalityScore = totalLines > 1 ? totalLines - 1 : 0
             
         } else {
-            // ONLY if there's no help/error text, calculate height based on the visual structure of the LaTeX.
-            // This is more reliable as it directly reflects what is being rendered.
             let latexNewlines = latex.components(separatedBy: "\\\\").count - 1
             let fractionCount = latex.components(separatedBy: "\\frac").count - 1
             
             verticalityScore = max(0, latexNewlines) + fractionCount
         }
 
-        // Define sizing parameters.
         let baseHeight: CGFloat = 60.0
         let heightPerUnit: CGFloat = 22.0
         let maxHeight: CGFloat = 200.0
 
         var calculatedHeight = baseHeight + (CGFloat(verticalityScore) * heightPerUnit)
 
-        // A fallback for long, single-line LaTeX that doesn't have vertical operators.
         if verticalityScore == 0 && latex.count > 80 && errorText.isEmpty && helpText.isEmpty {
             calculatedHeight = 100.0
         }
@@ -732,3 +720,4 @@ class CalculatorViewModel {
         return DisplayFormatter.formatScalarForDisplay(value, with: self.settings)
     }
 }
+
