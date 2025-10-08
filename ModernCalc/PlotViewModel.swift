@@ -12,14 +12,23 @@ import SwiftUI
 @MainActor
 class PlotViewModel {
     var plotData: PlotData
+    
+    // --- FIX 1: Split didSet observers to prevent race conditions ---
     var viewDomainX: ClosedRange<Double> {
-        didSet { updateStringFieldsFromDomains() }
+        didSet {
+            // Only update the X-axis text fields when the X-domain changes.
+            xMinString = String(format: "%.4g", viewDomainX.lowerBound)
+            xMaxString = String(format: "%.4g", viewDomainX.upperBound)
+        }
     }
     var viewDomainY: ClosedRange<Double> {
-        didSet { updateStringFieldsFromDomains() }
+        didSet {
+            // Only update the Y-axis text fields when the Y-domain changes.
+            yMinString = String(format: "%.4g", viewDomainY.lowerBound)
+            yMaxString = String(format: "%.4g", viewDomainY.upperBound)
+        }
     }
     
-    // --- NEW: String properties to bind to TextFields for manual control ---
     var xMinString: String = ""
     var xMaxString: String = ""
     var yMinString: String = ""
@@ -33,7 +42,6 @@ class PlotViewModel {
     private let initialSeries: [PlotSeries]
     private var dataDomainX: ClosedRange<Double>
     
-    // --- NEW: Flag to prevent auto-scaling when user manually sets Y-axis ---
     private var isYAxisManuallySet: Bool = false
     
     var regenerationHandler: ((ClosedRange<Double>) -> Task<[PlotSeries]?, Never>)?
@@ -53,7 +61,6 @@ class PlotViewModel {
         self.initialDomainX = calculatedDomainX
         self.initialDomainY = calculatedDomainY
         
-        // If the plot was created with an explicit Y-range, consider it "manual" from the start.
         if plotData.explicitYRange != nil {
             self.isYAxisManuallySet = true
         }
@@ -65,7 +72,11 @@ class PlotViewModel {
             self.dataDomainX = calculatedDomainX
         }
         
-        updateStringFieldsFromDomains()
+        // Initial population of string fields
+        xMinString = String(format: "%.4g", viewDomainX.lowerBound)
+        xMaxString = String(format: "%.4g", viewDomainX.upperBound)
+        yMinString = String(format: "%.4g", viewDomainY.lowerBound)
+        yMaxString = String(format: "%.4g", viewDomainY.upperBound)
     }
     
     func resetView() {
@@ -110,12 +121,9 @@ class PlotViewModel {
         let xCenter = (viewDomainX.lowerBound + viewDomainX.upperBound) / 2
         let yCenter = (viewDomainY.lowerBound + viewDomainY.upperBound) / 2
         
-        // --- MODIFIED: The Y-axis now scales proportionally without a jarring auto-fit ---
         viewDomainX = (xCenter - newXSpan / 2)...(xCenter + newXSpan / 2)
         viewDomainY = (yCenter - newYSpan / 2)...(yCenter + newYSpan / 2)
         
-        // After zooming, we re-enable auto-fitting for the *next* "Auto-Fit" click,
-        // but we don't trigger it automatically.
         isYAxisManuallySet = false
     }
     
@@ -180,8 +188,6 @@ class PlotViewModel {
            let maxX = plotData.series.flatMap({ $0.dataPoints }).map({ $0.x }).max() {
             self.dataDomainX = minX...maxX
         }
-        
-        // --- REMOVED: Do not automatically rescale Y-axis after fetching new data from a pan ---
     }
     
     func autoFitDomains() {
@@ -197,9 +203,14 @@ class PlotViewModel {
         recalculateYDomain(forVisibleXRange: viewDomainX)
     }
     
+    // --- FIX 2: Make NumberFormatter locale-independent ---
     func applyDomainsFromStrings() {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
+        // Use a POSIX locale to guarantee the decimal separator is a period '.',
+        // matching the output of String(format:). This prevents parsing errors
+        // with both floats and scientific notation across different system languages.
+        formatter.locale = Locale(identifier: "en_US_POSIX")
 
         if let xMin = formatter.number(from: xMinString)?.doubleValue,
            let xMax = formatter.number(from: xMaxString)?.doubleValue,
@@ -214,13 +225,6 @@ class PlotViewModel {
             withAnimation { self.viewDomainY = yMin...yMax }
         }
         triggerDataRegenerationIfNeeded()
-    }
-    
-    private func updateStringFieldsFromDomains() {
-        xMinString = String(format: "%.4g", viewDomainX.lowerBound)
-        xMaxString = String(format: "%.4g", viewDomainX.upperBound)
-        yMinString = String(format: "%.4g", viewDomainY.lowerBound)
-        yMaxString = String(format: "%.4g", viewDomainY.upperBound)
     }
     
     private func recalculateYDomain(forVisibleXRange: ClosedRange<Double>) {
@@ -287,4 +291,3 @@ class PlotViewModel {
         return (calculatedDomainX, calculatedDomainY)
     }
 }
-
