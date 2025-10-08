@@ -58,8 +58,13 @@ struct PlotView: View {
                 .chartForegroundStyleScale(domain: viewModel.plotData.series.map { $0.name }, range: chartColors)
                 .chartXScale(domain: viewModel.viewDomainX)
                 .chartYScale(domain: viewModel.viewDomainY)
-                .chartXAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
-                .chartYAxis { AxisMarks(preset: .automatic, stroke: StrokeStyle(lineWidth: 1)) }
+                .chartXAxis {
+                    AxisMarks(preset: .automatic, values: .automatic(desiredCount: 6), stroke: StrokeStyle(lineWidth: 1))
+                    
+                }
+                .chartYAxis {
+                    AxisMarks(preset: .automatic, values: .automatic(desiredCount: 6), stroke: StrokeStyle(lineWidth: 1))
+                }
                 .chartXAxisLabel(viewModel.xAxisLabel)
                 .chartYAxisLabel(viewModel.yAxisLabel)
                 .chartPlotStyle { plotArea in
