@@ -180,7 +180,7 @@ extension Evaluator {
             }
         }
 
-        let numPoints = 200
+        let numPoints = 1000
         var defaultRange = -10.0...10.0
         
         // --- Smarter Range for Periodic Functions ---

@@ -16,6 +16,9 @@ struct PlotView: View {
     @State private var plotSize: CGSize = .zero
     @State private var initialDragDomains: (x: ClosedRange<Double>, y: ClosedRange<Double>)? = nil
     @State private var cumulativeZoom: CGFloat = 1.0
+    
+    // --- NEW: State to track the locked axis during a drag gesture ---
+    @State private var lockedDragAxis: DragAxis? = nil
 
     private var colorMap: [String: Color] {
         Dictionary(uniqueKeysWithValues: viewModel.plotData.series.enumerated().map { (index, series) in
@@ -97,17 +100,27 @@ struct PlotView: View {
     var body: some View {
         VStack(spacing: 0) {
             chartContainer
+                // --- MODIFIED: The drag gesture logic is updated to lock the panning axis. ---
                 .gesture(
                     DragGesture()
                         .onChanged { value in
                             if initialDragDomains == nil {
                                 initialDragDomains = (viewModel.viewDomainX, viewModel.viewDomainY)
+                                // At the start of a drag, determine and lock the axis.
+                                if abs(value.translation.width) > abs(value.translation.height) {
+                                    lockedDragAxis = .horizontal
+                                } else {
+                                    lockedDragAxis = .vertical
+                                }
                             }
-                            guard let startDomains = initialDragDomains else { return }
-                            viewModel.pan(by: value.translation, from: startDomains, plotSize: plotSize)
+                            guard let startDomains = initialDragDomains, let axis = lockedDragAxis else { return }
+                            // Call the new pan function with the locked axis.
+                            viewModel.pan(by: value.translation, from: startDomains, plotSize: plotSize, lockedTo: axis)
                         }
                         .onEnded { _ in
+                            // Reset state on gesture end.
                             initialDragDomains = nil
+                            lockedDragAxis = nil
                             viewModel.triggerDataRegenerationIfNeeded()
                         }
                 )
@@ -297,4 +310,3 @@ struct Arrowhead: Shape {
         return path
     }
 }
-

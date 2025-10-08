@@ -8,6 +8,11 @@
 import Foundation
 import SwiftUI
 
+// --- NEW: An enum to specify the drag direction ---
+enum DragAxis {
+    case horizontal, vertical
+}
+
 @Observable
 @MainActor
 class PlotViewModel {
@@ -93,14 +98,25 @@ class PlotViewModel {
         }
     }
     
-    func pan(by translation: CGSize, from startDomains: (x: ClosedRange<Double>, y: ClosedRange<Double>), plotSize: CGSize) {
+    // --- MODIFIED: The pan function is replaced with one that locks to a specific axis. ---
+    func pan(by translation: CGSize, from startDomains: (x: ClosedRange<Double>, y: ClosedRange<Double>), plotSize: CGSize, lockedTo axis: DragAxis) {
         guard plotSize.width > 0, plotSize.height > 0 else { return }
-        let xSpan = startDomains.x.upperBound - startDomains.x.lowerBound
-        let ySpan = startDomains.y.upperBound - startDomains.y.lowerBound
-        let xShift = -translation.width * (xSpan / plotSize.width)
-        let yShift = translation.height * (ySpan / plotSize.height)
-        viewDomainX = (startDomains.x.lowerBound + xShift)...(startDomains.x.upperBound + xShift)
-        viewDomainY = (startDomains.y.lowerBound + yShift)...(startDomains.y.upperBound + yShift)
+
+        switch axis {
+        case .horizontal:
+            let xSpan = startDomains.x.upperBound - startDomains.x.lowerBound
+            let xShift = -translation.width * (xSpan / plotSize.width)
+            viewDomainX = (startDomains.x.lowerBound + xShift)...(startDomains.x.upperBound + xShift)
+            // When panning horizontally, we should recalculate the Y-domain to fit the new data.
+            recalculateYDomain(forVisibleXRange: viewDomainX, animated: false)
+
+        case .vertical:
+            let ySpan = startDomains.y.upperBound - startDomains.y.lowerBound
+            let yShift = translation.height * (ySpan / plotSize.height)
+            viewDomainY = (startDomains.y.lowerBound + yShift)...(startDomains.y.upperBound + yShift)
+            // Manually panning the Y-axis disables auto-fitting.
+            isYAxisManuallySet = true
+        }
     }
 
     func zoom(by scale: CGFloat) {
@@ -205,7 +221,7 @@ class PlotViewModel {
             return
         }
         
-        recalculateYDomain(forVisibleXRange: viewDomainX)
+        recalculateYDomain(forVisibleXRange: viewDomainX, animated: true)
     }
     
     // --- FIX 2: Make NumberFormatter locale-independent ---
@@ -232,7 +248,8 @@ class PlotViewModel {
         triggerDataRegenerationIfNeeded()
     }
     
-    private func recalculateYDomain(forVisibleXRange: ClosedRange<Double>) {
+    // --- MODIFIED: Added `animated` parameter to avoid jerky animations during drag gestures. ---
+    private func recalculateYDomain(forVisibleXRange: ClosedRange<Double>, animated: Bool) {
         guard !isYAxisManuallySet, plotData.explicitYRange == nil else {
             return
         }
@@ -244,8 +261,14 @@ class PlotViewModel {
         if abs(maxY - minY) < 1e-9 { minY -= 1; maxY += 1 }
         if abs(minY + maxY) < (maxY - minY) * 0.1 { let mag = max(abs(minY), abs(maxY)); minY = -mag; maxY = mag }
         let yPadding = (maxY - minY) * 0.1
-        withAnimation(.easeInOut(duration: 0.2)) {
-            self.viewDomainY = (minY - max(yPadding, 1.0))...(maxY + max(yPadding, 1.0))
+        let newDomain = (minY - max(yPadding, 1.0))...(maxY + max(yPadding, 1.0))
+
+        if animated {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                self.viewDomainY = newDomain
+            }
+        } else {
+            self.viewDomainY = newDomain
         }
     }
     
@@ -296,4 +319,3 @@ class PlotViewModel {
         return (calculatedDomainX, calculatedDomainY)
     }
 }
-
