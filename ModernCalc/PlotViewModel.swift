@@ -132,18 +132,23 @@ class PlotViewModel {
 
         regenerationTask?.cancel()
 
-        let dataSpan = dataDomainX.upperBound - dataDomainX.lowerBound
-        guard dataSpan > 0 else { return }
-        let threshold = dataSpan * 0.25
+        // --- FIX: Use the initial domain span to calculate fetch size ---
+        // This ensures that the density of points in newly generated data chunks remains constant,
+        // preventing the graph from deforming when panning far from the origin.
+        let fetchSpan = initialDomainX.upperBound - initialDomainX.lowerBound
+        
+        guard fetchSpan > 0 else { return }
+        // The threshold is now based on a fixed span, making it consistent.
+        let threshold = fetchSpan * 0.25
 
         var domainToFetch: ClosedRange<Double>? = nil
 
         if viewDomainX.upperBound > dataDomainX.upperBound - threshold {
             let fetchStart = dataDomainX.upperBound
-            let fetchEnd = dataDomainX.upperBound + dataSpan
+            let fetchEnd = dataDomainX.upperBound + fetchSpan
             domainToFetch = fetchStart...fetchEnd
         } else if viewDomainX.lowerBound < dataDomainX.lowerBound + threshold {
-            let fetchStart = dataDomainX.lowerBound - dataSpan
+            let fetchStart = dataDomainX.lowerBound - fetchSpan
             let fetchEnd = dataDomainX.lowerBound
             domainToFetch = fetchStart...fetchEnd
         }
@@ -291,3 +296,4 @@ class PlotViewModel {
         return (calculatedDomainX, calculatedDomainY)
     }
 }
+
