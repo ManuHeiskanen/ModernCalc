@@ -132,7 +132,7 @@ struct VariableEditorView: View {
             "Electrical Engineering": ["impedance", "fft", "ifft", "powerspectrum"],
             "Geometry": ["angle", "area_circle", "area_rect", "area_tri", "circum_circle", "hypot", "side", "unit", "vol_cone", "vol_cube", "vol_cylinder", "vol_sphere"],
             "Number Theory": ["fact", "factor", "find", "gcd", "isprime", "lcm", "mod", "nCr", "nPr"],
-            "Plotting": ["autoplot", "plot", "scatterplot"],
+            "Plotting": ["autoplot", "plot", "scatterplot", "areaplot", "powerspectrum"],
             "Statistics": ["avg", "binomdist", "corr", "count", "countabove", "countbelow", "cov", "geomean", "harmean", "iqr", "linreg", "max", "mean", "median", "min", "mode", "normdist", "percentile", "polyfit", "rmse", "rmsd", "sort", "stddev", "stddevp", "sum", "unique", "variance", "quartile"],
             "Trigonometry": ["acos", "acosh", "acot", "acoth", "acsc", "acsch", "asec", "asech", "asin", "asinh", "atan", "atan2", "atanh", "cos", "cosh", "cot", "coth", "csc", "csch", "sin", "sinh", "tan", "tanh", "sec", "sech"],
             "Uncertainty": ["uncert"],

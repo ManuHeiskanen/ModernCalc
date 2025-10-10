@@ -51,6 +51,14 @@ struct PlotView: View {
                 let xLabel = cleanAxisLabel(for: viewModel.xAxisLabel.isEmpty ? "X-Axis" : viewModel.xAxisLabel)
                 return "\(yLabel) vs. \(xLabel)"
             }
+        case .area:
+            let functionName = viewModel.plotData.series.first?.name ?? "f(x)"
+            guard let xRange = viewModel.plotData.initialXRange else {
+                return "Area Plot for \(functionName)"
+            }
+            let xMin = String(format: "%.4g", xRange.min)
+            let xMax = String(format: "%.4g", xRange.max)
+            return "Integral of \(functionName) from \(xMin) to \(xMax)"
         }
     }
 
@@ -90,7 +98,7 @@ struct PlotView: View {
                             }
                         }
                     }
-                    .padding(10)
+                    .padding(EdgeInsets(top: 30, leading: 10, bottom: 10, trailing: 10))
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 .padding()
@@ -197,6 +205,21 @@ struct PlotView: View {
             .foregroundStyle(by: .value("Function", series.name))
         }
     }
+
+    @ChartContentBuilder
+    private func areaPlotContent() -> some ChartContent {
+        ForEach(viewModel.plotData.series) { series in
+            ForEach(series.dataPoints) { point in
+                AreaMark(
+                    x: .value("X", point.x),
+                    yStart: .value("Y Start", point.y_end ?? 0),
+                    yEnd: .value("Y End", point.y)
+                )
+            }
+            .foregroundStyle(by: .value("Function", series.name))
+            .opacity(0.3)
+        }
+    }
     
     @ChartContentBuilder
     private func scatterPlotContent() -> some ChartContent {
@@ -222,6 +245,7 @@ struct PlotView: View {
         case .vector: vectorPlotContent()
         case .scatter: scatterPlotContent()
         case .line, .parametric: lineAndParametricPlotContent()
+        case .area: areaPlotContent()
         }
     }
     
@@ -310,3 +334,4 @@ struct Arrowhead: Shape {
         return path
     }
 }
+

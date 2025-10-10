@@ -117,6 +117,13 @@ struct PlotNode: ExpressionNode {
     var description: String { "plot(\(expressions.map { $0.description }.joined(separator: ", ")), for: \(variable.description) in [\(xRange.0.description), \(xRange.1.description)])" }
 }
 
+struct AreaPlotNode: ExpressionNode {
+    let expressions: [ExpressionNode]
+    let variable: ConstantNode
+    let xRange: (ExpressionNode, ExpressionNode)
+    var description: String { "areaplot(\(expressions.map { $0.description }.joined(separator: ", ")), for: \(variable.description) in [\(xRange.0.description), \(xRange.1.description)])" }
+}
+
 struct ScatterplotNode: ExpressionNode {
     let arguments: [ExpressionNode]
     var description: String { "scatterplot(\(arguments.map { $0.description }.joined(separator: ", ")))" }
@@ -328,6 +335,7 @@ class Parser {
                 case "integral": return try parseIntegral()
                 case "autoplot": return try parseAutoplot()
                 case "plot": return try parsePlot()
+                case "areaplot": return try parseAreaPlot()
                 case "scatterplot": return try parseScatterplot()
                 case "importcsv": return try parseImportCSV()
                 case "uncert": return try parseUncert()
@@ -531,6 +539,39 @@ class Parser {
         }
 
         return PlotNode(expressions: expressions, variable: variableNode, xRange: xRange, yRange: yRange)
+    }
+
+    private func parseAreaPlot() throws -> ExpressionNode {
+        try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for areaplot call"))
+        var allArguments: [ExpressionNode] = []
+        
+        repeat {
+            allArguments.append(try parseExpression())
+            if let nextToken = peek(), case .separator(let char) = nextToken.type, char != ";" {
+                try advance()
+            } else { break }
+        } while true
+        
+        try consume(.paren(")"), orThrow: .unexpectedToken(token: peek(), expected: "argument separator or ')' for areaplot call"))
+        
+        guard allArguments.count >= 4 else {
+            throw ParserError.incorrectArgumentCount(function: "areaplot", expected: "at least 4 (func1, var, min, max)", found: allArguments.count)
+        }
+        
+        let xMax = allArguments.removeLast()
+        let xMin = allArguments.removeLast()
+        guard let variable = allArguments.removeLast() as? ConstantNode else {
+            throw ParserError.unexpectedToken(token: nil, expected: "an identifier for the plot variable (e.g., 'x')")
+        }
+        
+        let xRange = (xMin, xMax)
+        let expressions = allArguments
+        
+        guard !expressions.isEmpty && expressions.count <= 2 else {
+             throw ParserError.incorrectArgumentCount(function: "areaplot", expected: "1 or 2 functions to plot", found: expressions.count)
+        }
+
+        return AreaPlotNode(expressions: expressions, variable: variable, xRange: xRange)
     }
     
     private func parseScatterplot() throws -> ExpressionNode {
@@ -812,4 +853,3 @@ class Parser {
         try advance()
     }
 }
-

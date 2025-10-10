@@ -12,6 +12,7 @@ struct TextContents {
         .init(name: "area_circle", signature: "area_circle(r)", description: "Area of a circle."),
         .init(name: "area_rect", signature: "area_rect(w, h)", description: "Area of a rectangle."),
         .init(name: "area_tri", signature: "area_tri(b, h)", description: "Area of a triangle."),
+        .init(name: "areaplot", signature: "areaplot(f(x), g(x), x, min, max)", description: "Plots and calculates the area between f(x) and g(x) from min to max. If only f(x) is provided, it calculates the area between the function and the x-axis."),
         .init(name: "arg", signature: "arg(complex)", description: "Calculates the argument (phase) of a complex number."),
         .init(name: "asin", signature: "asin(value)", description: "Calculates the inverse sine (arcsin)."),
         .init(name: "asinh", signature: "asinh(value)", description: "Calculates the inverse hyperbolic sine."),

@@ -454,6 +454,9 @@ struct Evaluator {
             
         case let plotNode as PlotNode:
             return try (evaluatePlot(plotNode, variables: &variables, functions: &functions), false)
+        
+        case let areaPlotNode as AreaPlotNode:
+            return try (evaluateAreaPlot(areaPlotNode, variables: &variables, functions: &functions), false)
 
         case let scatterNode as ScatterplotNode:
             return try (evaluateScatterplot(scatterNode, variables: &variables, functions: &functions), false)
@@ -715,4 +718,3 @@ private func extractComplexValuesAndDimension(from elements: [MathValue]) throws
     
     return (values, finalDimension)
 }
-

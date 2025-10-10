@@ -537,6 +537,148 @@ extension Evaluator {
         }
         return .plot(plotData)
     }
+
+    func evaluateAreaPlot(_ node: AreaPlotNode, variables: inout [String: MathValue], functions: inout [String: FunctionDefinitionNode]) throws -> MathValue {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        let (xMinVal, _) = try _evaluateSingle(node: node.xRange.0, variables: &variables, functions: &functions, angleMode: .radians)
+        let (xMaxVal, _) = try _evaluateSingle(node: node.xRange.1, variables: &variables, functions: &functions, angleMode: .radians)
+        
+        let xMin: UnitValue
+        let xMax: UnitValue
+        switch (xMinVal, xMaxVal) {
+            case (.unitValue(let u1), .unitValue(let u2)):
+                guard u1.dimensions == u2.dimensions else { throw MathError.plotError(reason: "Plot range units must be compatible") }
+                xMin = u1; xMax = u2
+            case (.dimensionless(let d1), .dimensionless(let d2)):
+                xMin = .dimensionless(d1); xMax = .dimensionless(d2)
+            // Other cases for mixed dimensionless/unitValue omitted for brevity but would be here
+            default:
+                throw MathError.plotError(reason: "Incompatible plot range types")
+        }
+        
+        let xAxisDimension = xMin.dimensions
+        guard xMin.value < xMax.value else { throw MathError.plotError(reason: "Plot range min must be less than max") }
+
+        let numPoints = 500
+        let varName = node.variable.name
+        
+        let body1 = node.expressions[0]
+        let body2 = node.expressions.count > 1 ? node.expressions[1] : nil
+        
+        // --- Dry run to check units ---
+        var tempVarsDryRun = variables
+        tempVarsDryRun[varName] = .unitValue(xMin)
+        let (dryRunY1, _) = try _evaluateSingle(node: body1, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+        let yAxisDimension = dryRunY1.dimensionsIfUnitOrDimensionless
+        
+        if let body2 = body2 {
+            let (dryRunY2, _) = try _evaluateSingle(node: body2, variables: &tempVarsDryRun, functions: &functions, angleMode: .radians)
+            guard yAxisDimension == dryRunY2.dimensionsIfUnitOrDimensionless else {
+                throw MathError.dimensionMismatch(reason: "Functions in areaplot must have the same units.")
+            }
+        }
+        
+        // --- Data Generation ---
+        var dataPoints: [DataPoint] = []
+        let step = (xMax.value - xMin.value) / Double(numPoints - 1)
+        
+        for i in 0..<numPoints {
+            let x_si = xMin.value + Double(i) * step
+            let xVar = MathValue.unitValue(UnitValue(value: x_si, dimensions: xAxisDimension))
+            
+            var localVars = variables
+            var localFuncs = functions
+            
+            do {
+                let (y1Value, _) = try evaluateWithTempVar(node: body1, varName: varName, varValue: xVar, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                guard y1Value.dimensionsIfUnitOrDimensionless == yAxisDimension else { continue }
+
+                let y1_si: Double
+                switch y1Value {
+                case .dimensionless(let d): y1_si = d
+                case .unitValue(let u): y1_si = u.value
+                default: continue
+                }
+
+                var y2_si: Double? = nil
+                if let body2 = body2 {
+                    let (y2Value, _) = try evaluateWithTempVar(node: body2, varName: varName, varValue: xVar, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+                    guard y2Value.dimensionsIfUnitOrDimensionless == yAxisDimension else { continue }
+                    
+                    switch y2Value {
+                    case .dimensionless(let d): y2_si = d
+                    case .unitValue(let u): y2_si = u.value
+                    default: continue
+                    }
+                }
+                
+                if y1_si.isFinite && (y2_si == nil || y2_si!.isFinite) {
+                    dataPoints.append(DataPoint(x: x_si, y: y1_si, y_end: y2_si))
+                }
+            } catch {
+                // Continue if a point fails to evaluate
+            }
+        }
+        
+        if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the area plot.") }
+        
+        // --- NEW: Calculate Area using Integral Function ---
+        let bodyForIntegration: ExpressionNode
+        if let body2 = body2 {
+            bodyForIntegration = BinaryOpNode(op: Token(type: .op("-"), rawValue: "-"), left: body1, right: body2)
+        } else {
+            bodyForIntegration = body1
+        }
+        
+        let f: (UnitValue) throws -> UnitValue = { x_unit in
+            let (value, _) = try self.evaluateWithTempVar(
+                node: bodyForIntegration,
+                varName: varName,
+                varValue: .unitValue(x_unit),
+                variables: &variables,
+                functions: &functions,
+                angleMode: .radians
+            )
+            
+            guard let resultUnit = value.asUnitValue() else {
+                throw MathError.typeMismatch(expected: "A numeric value from the function body", found: value.typeName)
+            }
+            return resultUnit
+        }
+
+        let tolerance = 1e-7
+        let calculatedArea = try adaptiveSimpson(f: f, a: xMin, b: xMax, tolerance: tolerance)
+
+        // --- NEW: Format area result for display ---
+        let areaValueString = String(format: "%.6g", calculatedArea.value)
+        let unitPart = formatDimensionsForAxis(calculatedArea.dimensions, defaultLabel: "")
+        var unitString = ""
+        if !unitPart.trimmingCharacters(in: .whitespaces).isEmpty {
+            unitString = " " + unitPart.trimmingCharacters(in: .whitespaces).dropFirst().dropLast()
+        }
+        let equationString = "Area ≈ \(areaValueString)\(unitString)"
+        
+        // --- Series & PlotData Creation ---
+        let seriesName: String
+        if let body2Unwrapped = body2 {
+            seriesName = "\(DisplayFormatter.formatNodeForLegend(node: body1)) vs \(DisplayFormatter.formatNodeForLegend(node: body2Unwrapped))"
+        } else {
+            seriesName = DisplayFormatter.formatNodeForLegend(node: body1)
+        }
+        
+        let plotSeries = PlotSeries(name: seriesName, dataPoints: dataPoints, equation: equationString)
+        let allSeries = [plotSeries]
+        
+        let duration = CFAbsoluteTimeGetCurrent() - startTime
+        
+        let xAxisLabel = formatDimensionsForAxis(xAxisDimension, defaultLabel: varName)
+        let yAxisLabel = formatDimensionsForAxis(yAxisDimension, defaultLabel: "f(\(varName))")
+        
+        let plotData = PlotData(expression: node.description, series: allSeries, plotType: .area, explicitYRange: nil, initialXRange: (xMin.value, xMax.value), generationTime: duration, xAxisLabel: xAxisLabel, yAxisLabel: yAxisLabel, xAxisDimension: xAxisDimension, yAxisDimension: yAxisDimension, calculatedArea: calculatedArea)
+
+        return .plot(plotData)
+    }
     
     // MARK: - Equation Solving
     
@@ -791,3 +933,4 @@ extension MathValue {
         }
     }
 }
+

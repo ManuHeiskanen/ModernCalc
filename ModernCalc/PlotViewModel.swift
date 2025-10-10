@@ -17,6 +17,7 @@ enum DragAxis {
 @MainActor
 class PlotViewModel {
     var plotData: PlotData
+    var settings: UserSettings
     
     // --- FIX 1: Split didSet observers to prevent race conditions ---
     var viewDomainX: ClosedRange<Double> {
@@ -52,8 +53,9 @@ class PlotViewModel {
     var regenerationHandler: ((ClosedRange<Double>) -> Task<[PlotSeries]?, Never>)?
     private var regenerationTask: Task<Void, Never>?
 
-    init(plotData: PlotData, regenerationHandler: ((ClosedRange<Double>) -> Task<[PlotSeries]?, Never>)? = nil) {
+    init(plotData: PlotData, settings: UserSettings, regenerationHandler: ((ClosedRange<Double>) -> Task<[PlotSeries]?, Never>)? = nil) {
         self.plotData = plotData
+        self.settings = settings
         self.xAxisLabel = plotData.xAxisLabel
         self.yAxisLabel = plotData.yAxisLabel
         self.regenerationHandler = regenerationHandler

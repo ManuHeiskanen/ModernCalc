@@ -336,7 +336,7 @@ class CalculatorViewModel {
                 }
             }
             
-            let newPlotViewModel = PlotViewModel(plotData: plotData, regenerationHandler: handler)
+            let newPlotViewModel = PlotViewModel(plotData: plotData, settings: capturedSettings, regenerationHandler: handler)
             Task {
                 plotViewModels.append(newPlotViewModel)
             }
@@ -720,4 +720,3 @@ class CalculatorViewModel {
         return DisplayFormatter.formatScalarForDisplay(value, with: self.settings)
     }
 }
-

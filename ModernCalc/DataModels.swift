@@ -69,8 +69,9 @@ struct PlotData: Identifiable, Hashable {
     // We store the dimensions to allow for potential future unit conversions in the UI.
     let xAxisDimension: UnitDimension?
     let yAxisDimension: UnitDimension?
+    let calculatedArea: UnitValue?
 
-    init(expression: String, series: [PlotSeries], plotType: PlotType, explicitYRange: (min: Double, max: Double)?, initialXRange: (min: Double, max: Double)? = nil, generationTime: TimeInterval? = nil, xAxisLabel: String = "X", yAxisLabel: String = "Y", xAxisDimension: UnitDimension? = nil, yAxisDimension: UnitDimension? = nil) {
+    init(expression: String, series: [PlotSeries], plotType: PlotType, explicitYRange: (min: Double, max: Double)?, initialXRange: (min: Double, max: Double)? = nil, generationTime: TimeInterval? = nil, xAxisLabel: String = "X", yAxisLabel: String = "Y", xAxisDimension: UnitDimension? = nil, yAxisDimension: UnitDimension? = nil, calculatedArea: UnitValue? = nil) {
         self.expression = expression
         self.series = series
         self.plotType = plotType
@@ -81,6 +82,7 @@ struct PlotData: Identifiable, Hashable {
         self.yAxisLabel = yAxisLabel
         self.xAxisDimension = xAxisDimension
         self.yAxisDimension = yAxisDimension
+        self.calculatedArea = calculatedArea
     }
     
     static func == (lhs: PlotData, rhs: PlotData) -> Bool {
@@ -97,6 +99,7 @@ struct DataPoint: Identifiable {
     let id = UUID()
     let x: Double
     let y: Double
+    var y_end: Double? = nil
 }
 
 enum PlotType {
@@ -104,6 +107,7 @@ enum PlotType {
     case parametric
     case vector
     case scatter
+    case area
 }
 
 // MARK: - CSV Data Model
@@ -151,3 +155,4 @@ struct HelpTopic: Identifiable, Hashable {
     let title: String
     let content: String
 }
+
