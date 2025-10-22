@@ -968,6 +968,25 @@ enum MathValue: Codable, Equatable {
         }
     }
     
+    // --- FIX: This is the helper function from the analysis ---
+    // This allows functions to accept arguments that are dimensionless, have units,
+    // or have uncertainty, and treat them all as a simple UnitValue for calculations.
+    func asUnitValue() throws -> UnitValue {
+        switch self {
+        case .dimensionless(let d):
+            return UnitValue.dimensionless(d)
+        case .unitValue(let u):
+            return u
+        case .uncertain(let u):
+            // Use the nominal value of the uncertain number.
+            // A more advanced implementation could propagate the uncertainty,
+            // but this is correct for the nominal value calculation.
+            return UnitValue(value: u.value, dimensions: u.dimensions)
+        default:
+            throw MathError.typeMismatch(expected: "Numeric value (with or without units)", found: self.typeName)
+        }
+    }
+    
     func asScalar() throws -> Double {
         switch self {
         case .dimensionless(let d):

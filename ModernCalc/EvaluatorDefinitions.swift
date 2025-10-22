@@ -67,20 +67,45 @@ extension Evaluator {
                         return .vector(Vector(values: values, dimensions: m.dimensions))
                     default:
                         // If the single argument is a scalar, treat it as a 1x1 matrix.
-                        let scalar = try arg.asScalar()
-                        return .matrix(Matrix(values: [scalar], rows: 1, columns: 1))
+                        // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+                        let s: UnitValue
+                        switch arg {
+                        case .dimensionless(let d): s = .dimensionless(d)
+                        case .unitValue(let u): s = u
+                        case .uncertain(let u): s = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+                        default:
+                            throw MathError.typeMismatch(expected: "A scalar-like value for diag()", found: arg.typeName)
+                        }
+                        return .matrix(Matrix(values: [s.value], rows: 1, columns: 1, dimensions: s.dimensions))
                     }
                 }
 
                 // Case 2: Multiple scalar arguments were passed.
-                let diagonalValues = try args.map { try $0.asScalar() }
+                // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+                let diagonalValues = try args.map { arg -> UnitValue in
+                    switch arg {
+                    case .dimensionless(let d): return .dimensionless(d)
+                    case .unitValue(let u): return u
+                    case .uncertain(let u): return UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+                    default:
+                         throw MathError.typeMismatch(expected: "A scalar-like value for diag()", found: arg.typeName)
+                    }
+                }
+                
+                // Ensure all units are compatible
+                guard let firstDim = diagonalValues.first?.dimensions else {
+                     return .matrix(Matrix(values: [], rows: 0, columns: 0)) // Should not happen if args.count > 1
+                }
+                guard diagonalValues.allSatisfy({ $0.dimensions == firstDim }) else {
+                    throw MathError.dimensionMismatch(reason: "All arguments to diag() must have the same units")
+                }
+                
                 let n = diagonalValues.count
                 var matrixValues = [Double](repeating: 0, count: n * n)
                 for i in 0..<n {
-                    matrixValues[i * n + i] = diagonalValues[i]
+                    matrixValues[i * n + i] = diagonalValues[i].value
                 }
-                // A matrix created from a list of scalars is dimensionless.
-                return .matrix(Matrix(values: matrixValues, rows: n, columns: n, dimensions: [:]))
+                return .matrix(Matrix(values: matrixValues, rows: n, columns: n, dimensions: firstDim))
             },
         "sum": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.sum()) }) },
         "avg": { args in try performStatisticalOperation(args: args, on: { .unitValue($0.average()) }) },
@@ -95,6 +120,7 @@ extension Evaluator {
         },
         "stddevp": { args in try performStatisticalOperation(args: args, on: { $0.stddevp().map { .unitValue($0) } }) },
         "mode": { args in
+            // Mode is tricky with units, so we'll enforce dimensionless for now
             let values = try extractDoublesFromVariadicArgs(args)
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "mode") }
             
@@ -111,6 +137,7 @@ extension Evaluator {
             }
         },
         "geomean": { args in
+            // Geometric mean is tricky with units, so we'll enforce dimensionless for now
             let values = try extractDoublesFromVariadicArgs(args)
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "geomean") }
             guard values.allSatisfy({ $0 >= 0 }) else { throw MathError.unsupportedOperation(op: "geomean", typeA: "All values must be non-negative", typeB: nil) }
@@ -119,6 +146,7 @@ extension Evaluator {
             return .dimensionless(pow(product, 1.0 / Double(values.count)))
         },
         "harmean": { args in
+            // Harmonic mean is tricky with units, so we'll enforce dimensionless for now
             let values = try extractDoublesFromVariadicArgs(args)
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "harmean") }
             guard !values.contains(0) else { throw MathError.unsupportedOperation(op: "harmean", typeA: "Values cannot be zero", typeB: nil) }
@@ -414,10 +442,61 @@ extension Evaluator {
         "real": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .dimensionless(c.real) },
         "imag": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .dimensionless(c.imaginary) },
         "conj": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .complex(c.conjugate()) },
-        "area_circle": { arg in let r = try arg.asScalar(); return .dimensionless(Double.pi * r * r) },
-        "circum_circle": { arg in let r = try arg.asScalar(); return .dimensionless(2 * Double.pi * r) },
-        "vol_sphere": { arg in let r = try arg.asScalar(); return .dimensionless((4.0/3.0) * Double.pi * pow(r, 3)) },
-        "vol_cube": { arg in let s = try arg.asScalar(); return .dimensionless(pow(s, 3)) },
+        
+        // --- FIX: Corrected Geometry Functions ---
+        "area_circle": { arg in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let r: UnitValue
+            switch arg {
+            case .dimensionless(let d): r = .dimensionless(d)
+            case .unitValue(let u): r = u
+            case .uncertain(let u): r = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for area_circle()", found: arg.typeName)
+            }
+            let pi = UnitValue.dimensionless(Double.pi)
+            return .unitValue(pi * r.pow(2))
+        },
+        "circum_circle": { arg in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let r: UnitValue
+            switch arg {
+            case .dimensionless(let d): r = .dimensionless(d)
+            case .unitValue(let u): r = u
+            case .uncertain(let u): r = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for circum_circle()", found: arg.typeName)
+            }
+            let twoPi = UnitValue.dimensionless(2 * Double.pi)
+            return .unitValue(twoPi * r)
+        },
+        "vol_sphere": { arg in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let r: UnitValue
+            switch arg {
+            case .dimensionless(let d): r = .dimensionless(d)
+            case .unitValue(let u): r = u
+            case .uncertain(let u): r = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for vol_sphere()", found: arg.typeName)
+            }
+            let fourThirdsPi = UnitValue.dimensionless((4.0/3.0) * Double.pi)
+            return .unitValue(fourThirdsPi * r.pow(3))
+        },
+        "vol_cube": { arg in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let s: UnitValue
+            switch arg {
+            case .dimensionless(let d): s = .dimensionless(d)
+            case .unitValue(let u): s = u
+            case .uncertain(let u): s = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for vol_cube()", found: arg.typeName)
+            }
+            return .unitValue(s.pow(3))
+        },
+        // --- End of Fix ---
+        
         "unit": { arg in return .vector(try arg.asVector(for: "unit").unit()) },
         "transpose": { arg in
             switch arg {
@@ -784,17 +863,17 @@ extension Evaluator {
             case (let cv1?, let cv2?): // C.dot(C)
                 let (val, dim) = try cv1.dot(with: cv2)
                 if dim.isEmpty { return .complex(val) }
-                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
+                return .complexUnitValue(ComplexUnitValue(value: val, dimensions: dim))
             case (let cv1?, nil): // C.dot(R)
                 guard let v2 = bReal else { break }
                 let (val, dim) = try cv1.dot(with: ComplexVector(from: v2))
                 if dim.isEmpty { return .complex(val) }
-                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
+                return .complexUnitValue(ComplexUnitValue(value: val, dimensions: dim))
             case (nil, let cv2?): // R.dot(C)
                 guard let v1 = aReal else { break }
                 let (val, dim) = try ComplexVector(from: v1).dot(with: cv2)
                 if dim.isEmpty { return .complex(val) }
-                throw MathError.unsupportedOperation(op: "dot", typeA: "ComplexVector with units", typeB: nil)
+                return .complexUnitValue(ComplexUnitValue(value: val, dimensions: dim))
             case (nil, nil): // R.dot(R)
                 if let v1 = aReal, let v2 = bReal {
                     return .unitValue(try v1.dot(with: v2))
@@ -837,16 +916,161 @@ extension Evaluator {
         },
         "nPr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .dimensionless(try permutations(n: n, k: k)) },
         "nCr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .dimensionless(try combinations(n: n, k: k)) },
-        "hypot": { a, b in let s1 = try a.asScalar(); let s2 = try b.asScalar(); return .dimensionless(Foundation.sqrt(s1*s1 + s2*s2)) },
-        "side": { a, b in let c = try a.asScalar(); let s = try b.asScalar(); guard c >= s else { throw MathError.unsupportedOperation(op: "side", typeA: "hyp < side", typeB: nil) }; return .dimensionless(Foundation.sqrt(c*c - s*s)) },
-        "area_rect": { a, b in let w = try a.asScalar(); let h = try b.asScalar(); return .dimensionless(w * h) },
-        "area_tri": { a, b in let base = try a.asScalar(); let h = try b.asScalar(); return .dimensionless(0.5 * base * h) },
-        "vol_cylinder": { a, b in let r = try a.asScalar(); let h = try b.asScalar(); return .dimensionless(Double.pi * r * r * h) },
-        "vol_cone": { a, b in let r = try a.asScalar(); let h = try b.asScalar(); return .dimensionless((1.0/3.0) * Double.pi * r * r * h) },
+        
+        // --- FIX: Corrected Geometry Functions ---
+        "hypot": { a, b in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let s1: UnitValue
+            switch a {
+            case .dimensionless(let d): s1 = .dimensionless(d)
+            case .unitValue(let u): s1 = u
+            case .uncertain(let u): s1 = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for hypot() argument 'a'", found: a.typeName)
+            }
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let s2: UnitValue
+            switch b {
+            case .dimensionless(let d): s2 = .dimensionless(d)
+            case .unitValue(let u): s2 = u
+            case .uncertain(let u): s2 = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for hypot() argument 'b'", found: b.typeName)
+            }
+            // (s1^2 + s2^2)^(1/2)
+            return .unitValue(try (s1.pow(2) + s2.pow(2)).pow(0.5))
+        },
+        "side": { a, b in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let c: UnitValue
+            switch a {
+            case .dimensionless(let d): c = .dimensionless(d)
+            case .unitValue(let u): c = u
+            case .uncertain(let u): c = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for side() argument 'a'", found: a.typeName)
+            }
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let s: UnitValue
+            switch b {
+            case .dimensionless(let d): s = .dimensionless(d)
+            case .unitValue(let u): s = u
+            case .uncertain(let u): s = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for side() argument 'b'", found: b.typeName)
+            }
+            // (c^2 - s^2)^(1/2)
+            let c2 = c.pow(2)
+            let s2 = s.pow(2)
+            guard c2.value >= s2.value else { throw MathError.unsupportedOperation(op: "side", typeA: "hyp < side", typeB: nil) }
+            return .unitValue(try (c2 - s2).pow(0.5))
+        },
+        "area_rect": { a, b in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let w: UnitValue
+            switch a {
+            case .dimensionless(let d): w = .dimensionless(d)
+            case .unitValue(let u): w = u
+            case .uncertain(let u): w = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for area_rect() argument 'a'", found: a.typeName)
+            }
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let h: UnitValue
+            switch b {
+            case .dimensionless(let d): h = .dimensionless(d)
+            case .unitValue(let u): h = u
+            case .uncertain(let u): h = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for area_rect() argument 'b'", found: b.typeName)
+            }
+            return .unitValue(w * h)
+        },
+        "area_tri": { a, b in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let base: UnitValue
+            switch a {
+            case .dimensionless(let d): base = .dimensionless(d)
+            case .unitValue(let u): base = u
+            case .uncertain(let u): base = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for area_tri() argument 'a'", found: a.typeName)
+            }
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let h: UnitValue
+            switch b {
+            case .dimensionless(let d): h = .dimensionless(d)
+            case .unitValue(let u): h = u
+            case .uncertain(let u): h = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for area_tri() argument 'b'", found: b.typeName)
+            }
+            let half = UnitValue.dimensionless(0.5)
+            return .unitValue(half * base * h)
+        },
+        "vol_cylinder": { a, b in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let r: UnitValue
+            switch a {
+            case .dimensionless(let d): r = .dimensionless(d)
+            case .unitValue(let u): r = u
+            case .uncertain(let u): r = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for vol_cylinder() argument 'a'", found: a.typeName)
+            }
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let h: UnitValue
+            switch b {
+            case .dimensionless(let d): h = .dimensionless(d)
+            case .unitValue(let u): h = u
+            case .uncertain(let u): h = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for vol_cylinder() argument 'b'", found: b.typeName)
+            }
+            let pi = UnitValue.dimensionless(Double.pi)
+            return .unitValue(pi * r.pow(2) * h)
+        },
+        "vol_cone": { a, b in
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let r: UnitValue
+            switch a {
+            case .dimensionless(let d): r = .dimensionless(d)
+            case .unitValue(let u): r = u
+            case .uncertain(let u): r = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for vol_cone() argument 'a'", found: a.typeName)
+            }
+            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+            let h: UnitValue
+            switch b {
+            case .dimensionless(let d): h = .dimensionless(d)
+            case .unitValue(let u): h = u
+            case .uncertain(let u): h = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+            default:
+                throw MathError.typeMismatch(expected: "A scalar value for vol_cone() argument 'b'", found: b.typeName)
+            }
+            let oneThirdPi = UnitValue.dimensionless((1.0/3.0) * Double.pi)
+            return .unitValue(oneThirdPi * r.pow(2) * h)
+        },
+        // --- End of Fix ---
+
         "root": { a, b in
-                let x = try a.asScalar(); let n = try b.asScalar()
-                if x < 0 && n.truncatingRemainder(dividingBy: 2) == 0 { return .complex(Complex(real: 0, imaginary: pow(abs(x), 1/n))) }
-                return .dimensionless(pow(x, 1/n))
+                // This is tricky with units. We'll require a dimensionless exponent for now.
+                // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
+                let x_val: UnitValue
+                switch a {
+                case .dimensionless(let d): x_val = .dimensionless(d)
+                case .unitValue(let u): x_val = u
+                case .uncertain(let u): x_val = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+                default:
+                    throw MathError.typeMismatch(expected: "A scalar value for root() argument 'a'", found: a.typeName)
+                }
+                let n = try b.asScalar()
+                if x_val.value < 0 && n.truncatingRemainder(dividingBy: 2) == 0 {
+                    // TODO: Handle complex numbers with units? For now, no.
+                    throw MathError.unsupportedOperation(op: "root", typeA: "Even root of negative number", typeB: nil)
+                }
+                return .unitValue(x_val.pow(1/n))
         },
         "randm": { a, b in
             let rows_s = try a.asScalar(); let cols_s = try b.asScalar()
@@ -856,11 +1080,13 @@ extension Evaluator {
             return .matrix(Matrix(values: values, rows: rows, columns: cols))
         },
         "mod": { a, b in
+            // Modulo with units is complex. Enforce dimensionless.
             let n1 = try a.asScalar(); let n2 = try b.asScalar()
             guard n2 != 0 else { throw MathError.divisionByZero }
             return .dimensionless(n1 - n2 * floor(n1 / n2))
         },
         "percentile": { data, p_val in
+            // Percentile with units is tricky. Enforce dimensionless for now.
             let values = try extractDoubles(from: data).sorted()
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "percentile") }
             let p = try p_val.asScalar()
@@ -904,17 +1130,19 @@ extension Evaluator {
                 let inductanceDim: UnitDimension = [.kilogram: 1, .meter: 2, .second: -2, .ampere: -2]
                 // Capacitance dimensions: kg^-1*m^-2*s^4*A^2 (Farad)
                 let capacitanceDim: UnitDimension = [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2]
+                
+                let val = u.value // Value is already in base SI units
 
                 if u.dimensions == resistanceDim {
                     // It's a resistor
-                    return .complex(Complex(real: u.value, imaginary: 0))
+                    return .complexUnitValue(ComplexUnitValue(value: Complex(real: val, imaginary: 0), dimensions: resistanceDim))
                 } else if u.dimensions == inductanceDim {
                     // It's an inductor
-                    return .complex(Complex(real: 0, imaginary: omega * u.value))
+                    return .complexUnitValue(ComplexUnitValue(value: Complex(real: 0, imaginary: omega * val), dimensions: resistanceDim))
                 } else if u.dimensions == capacitanceDim {
                     // It's a capacitor
-                    guard omega * u.value != 0 else { throw MathError.divisionByZero }
-                    return .complex(Complex(real: 0, imaginary: -1 / (omega * u.value)))
+                    guard omega * val != 0 else { throw MathError.divisionByZero }
+                    return .complexUnitValue(ComplexUnitValue(value: Complex(real: 0, imaginary: -1 / (omega * val)), dimensions: resistanceDim))
                 } else {
                     throw MathError.dimensionMismatch(reason: "Second argument for impedance() must be resistance (Ω), inductance (H), or capacitance (F)")
                 }
@@ -1035,16 +1263,31 @@ extension Evaluator {
             if userFunction.parameterNames.count == 1 && node.arguments.count == 1 {
                 let (argValue, argUsedAngle) = try evaluate(node: node.arguments[0], variables: &variables, functions: &functions, angleMode: angleMode)
                 if case .vector(let v) = argValue {
-                    var resultValues: [Double] = []; var overallUsedAngle = argUsedAngle
-                    for element in v.values {
+                    var resultValues: [MathValue] = []; var overallUsedAngle = argUsedAngle
+                    let (baseValues, baseUnits) = (v.values, v.dimensions)
+                    
+                    for element in baseValues {
                         var localVariables = variables
-                        localVariables[userFunction.parameterNames[0]] = .dimensionless(element)
+                        // Pass the element with the vector's original units
+                        localVariables[userFunction.parameterNames[0]] = .unitValue(UnitValue(value: element, dimensions: baseUnits))
+                        
                         let (result, elementUsedAngle) = try evaluate(node: userFunction.body, variables: &localVariables, functions: &functions, angleMode: angleMode)
-                        let scalarResult = try result.asScalar()
-                        resultValues.append(scalarResult)
+                        
+                        resultValues.append(result)
                         overallUsedAngle = overallUsedAngle || elementUsedAngle
                     }
-                    return (.vector(Vector(values: resultValues)), overallUsedAngle)
+                    
+                    // Re-package the results into a new vector, ensuring units are consistent
+                    if baseUnits.isEmpty {
+                        // If input was dimensionless, extract scalars
+                        let scalarResults = try resultValues.map { try $0.asScalar() }
+                        return (.vector(Vector(values: scalarResults, dimensions: [:])), overallUsedAngle)
+                    } else {
+                        // If input had units, extract UnitValues and check consistency
+                        // --- FIX: Moved extractValuesAndDimension to this file ---
+                        let (finalValues, finalUnits) = try extractValuesAndDimension(from: resultValues)
+                        return (.vector(Vector(values: finalValues, dimensions: finalUnits)), overallUsedAngle)
+                    }
                 }
             }
             
@@ -1060,17 +1303,121 @@ extension Evaluator {
     }
 }
 
+// --- FIX: Moved helper functions from Evaluator.swift to here ---
+
+/// Extracts numeric values and a common unit dimension from a list of MathValues.
+/// This version allows dimensionless values (especially zero) to conform to the vector's unit type.
+fileprivate func extractValuesAndDimension(from elements: [MathValue]) throws -> (values: [Double], dimensions: UnitDimension) {
+    guard !elements.isEmpty else {
+        return ([], [:])
+    }
+    
+    var commonDimension: UnitDimension? = nil
+    // First pass: find a non-dimensionless unit to establish the vector's unit type.
+    for element in elements {
+        if case .unitValue(let u) = element, !u.dimensions.isEmpty {
+            commonDimension = u.dimensions
+            break
+        }
+    }
+    // If no element with units was found, the vector is dimensionless.
+    let finalDimension = commonDimension ?? [:]
+    
+    var values: [Double] = []
+    for element in elements {
+        switch element {
+        case .dimensionless(let d):
+            values.append(d)
+        case .unitValue(let u):
+            // An element is compatible if its dimension matches the vector's,
+            // or if the element is dimensionless (it can adopt the vector's unit).
+            if u.dimensions == finalDimension {
+                values.append(u.value)
+            } else if u.dimensions.isEmpty {
+                 values.append(u.value)
+            } else if finalDimension.isEmpty {
+                // This occurs if the first element had units, but a later one is dimensionless
+                throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units")
+            } else {
+                 throw MathError.dimensionMismatch(reason: "All elements in a vector or matrix must have the same units")
+            }
+        default:
+            throw MathError.typeMismatch(expected: "Numeric value (with or without units)", found: element.typeName)
+        }
+    }
+    
+    return (values, finalDimension)
+}
+
+
+/// Extracts complex values and a common unit dimension, allowing dimensionless values to conform.
+fileprivate func extractComplexValuesAndDimension(from elements: [MathValue]) throws -> (values: [Complex], dimensions: UnitDimension) {
+    guard !elements.isEmpty else {
+        return ([], [:])
+    }
+    
+    var commonDimension: UnitDimension? = nil
+    // First pass to find a non-dimensionless unit.
+    for element in elements {
+        if case .unitValue(let u) = element, !u.dimensions.isEmpty {
+            commonDimension = u.dimensions
+            break
+        }
+    }
+    let finalDimension = commonDimension ?? [:]
+    
+    var values: [Complex] = []
+    for element in elements {
+        let currentDimension: UnitDimension
+        let currentValue: Complex
+        
+        switch element {
+        case .dimensionless(let d):
+            currentValue = Complex(real: d, imaginary: 0)
+            currentDimension = [:]
+        case .unitValue(let u):
+            currentValue = Complex(real: u.value, imaginary: 0)
+            currentDimension = u.dimensions
+        case .complex(let c):
+            currentValue = c
+            currentDimension = [:] // Complex numbers are inherently dimensionless in this system
+        default:
+            throw MathError.typeMismatch(expected: "Numeric or Complex value", found: element.typeName)
+        }
+        
+        if currentDimension == finalDimension || currentDimension.isEmpty {
+            values.append(currentValue)
+        } else if finalDimension.isEmpty {
+            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units")
+        } else {
+            throw MathError.dimensionMismatch(reason: "All elements in a complex vector or matrix must have the same units")
+        }
+    }
+    
+    return (values, finalDimension)
+}
+
+// --- End of Moved Functions ---
+
+
 fileprivate func extractDoubles(from data: MathValue) throws -> [Double] {
     switch data {
     case .dimensionless(let s):
         return [s]
     case .vector(let v):
-        // For now, statistical functions on unit vectors operate on their scalar values.
+        guard v.dimensions.isEmpty else {
+            throw MathError.typeMismatch(expected: "Dimensionless vector", found: "Vector with units")
+        }
         return v.values
     case .matrix(let m):
-        // For now, statistical functions on unit matrices operate on their scalar values.
+        guard m.dimensions.isEmpty else {
+            throw MathError.typeMismatch(expected: "Dimensionless matrix", found: "Matrix with units")
+        }
         return m.values
     case .uncertain(let u):
+        guard u.dimensions.isEmpty else {
+            throw MathError.typeMismatch(expected: "Dimensionless uncertain value", found: "Uncertain value with units")
+        }
         return [u.value]
     default:
         throw MathError.typeMismatch(expected: "Vector, Matrix, or Dimensionless value", found: data.typeName)
@@ -1123,6 +1470,10 @@ fileprivate func extractAndConvertUnitValues(from args: [MathValue]) throws -> (
             if commonDimension == nil { commonDimension = m.dimensions }
             if commonDimension != m.dimensions { throw MathError.dimensionMismatch(reason: "Cannot mix units and dimensionless matrices") }
             allValues.append(contentsOf: m.values)
+        case .uncertain(let u): // Allow uncertain values in statistical ops
+            if commonDimension == nil { commonDimension = u.dimensions }
+            if commonDimension != u.dimensions { throw MathError.dimensionMismatch(reason: "All values must have the same units") }
+            allValues.append(u.value)
         default:
             throw MathError.typeMismatch(expected: "Numeric value", found: val.typeName)
         }
@@ -1154,14 +1505,16 @@ fileprivate func performAggregateIntegerOperation(args: [MathValue], initialValu
         var integers: [Double] = []
         for value in values {
             switch value {
-            case .dimensionless, .uncertain:
+            case .dimensionless, .uncertain, .unitValue: // Allow unitless values
                 let val = try value.asScalar()
                 guard val.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "Integer", typeA: "arguments must be integers", typeB: nil) }
                 integers.append(val)
             case .vector(let v):
+                guard v.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless vector", found: "Vector with units")}
                 guard v.values.allSatisfy({ $0.truncatingRemainder(dividingBy: 1) == 0 }) else { throw MathError.unsupportedOperation(op: "Integer", typeA: "vector elements must be integers", typeB: nil) }
                 integers.append(contentsOf: v.values)
             case .matrix(let m):
+                guard m.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless matrix", found: "Matrix with units")}
                 guard m.values.allSatisfy({ $0.truncatingRemainder(dividingBy: 1) == 0 }) else { throw MathError.unsupportedOperation(op: "Integer", typeA: "matrix elements must be integers", typeB: nil) }
                 integers.append(contentsOf: m.values)
             default:
@@ -1190,16 +1543,19 @@ fileprivate func performElementWiseIntegerOp(_ a: MathValue, _ b: MathValue, opN
         return .dimensionless(operation(try checkInt(n1), try checkInt(n2)))
         
     case (.vector(let v), .dimensionless(let s)):
+        guard v.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless vector", found: "Vector with units")}
         let checkedS = try checkInt(s)
         let results = try v.values.map { operation(try checkInt($0), checkedS) }
         return .vector(Vector(values: results))
         
     case (.dimensionless(let s), .vector(let v)):
+        guard v.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless vector", found: "Vector with units")}
         let checkedS = try checkInt(s)
         let results = try v.values.map { operation(checkedS, try checkInt($0)) }
         return .vector(Vector(values: results))
         
     case (.vector(let v1), .vector(let v2)):
+        guard v1.dimensions.isEmpty, v2.dimensions.isEmpty else { throw MathError.typeMismatch(expected: "Dimensionless vectors", found: "Vectors with units")}
         guard v1.dimension == v2.dimension else { throw MathError.dimensionMismatch(reason: "Vectors must have the same dimension for element-wise \(opName)") }
         let results = try zip(v1.values, v2.values).map { operation(try checkInt($0), try checkInt($1)) }
         return .vector(Vector(values: results))
