@@ -145,7 +145,8 @@ struct Evaluator {
             }
 
             let finalConversionFactor = Foundation.pow(unitDef.conversionFactor, exponent)
-            let finalDimensions = unitDef.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
+            // FIX: Ensure the mapValues result is explicitly cast or inferred as Double
+            let finalDimensions = unitDef.dimensions.mapValues { $0 * exponent }.filter { $0.value != 0 }
 
             let resultUnitValue = UnitValue.create(value: finalConversionFactor, dimensions: finalDimensions)
             return (.unitValue(resultUnitValue), expUsedAngle)
@@ -196,7 +197,7 @@ struct Evaluator {
             switch value {
             case .dimensionless(let d):
                 nominalValue = d
-                dimensions = [:]
+                dimensions = [:] as UnitDimension // Explicitly type the empty dictionary
             case .unitValue(let u):
                 nominalValue = u.value
                 dimensions = u.dimensions

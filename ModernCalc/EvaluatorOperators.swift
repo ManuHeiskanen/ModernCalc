@@ -223,7 +223,8 @@ extension Evaluator {
             }
             let exponent = r.value.real
             let complexExp = try l.value.pow(Complex(real: exponent, imaginary: 0))
-            let newDims = l.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
+            // Update dimension calculation: Remove Int() cast, use tolerance filter
+            let newDims = l.dimensions.mapValues { $0 * exponent }.filter { abs($0.value) > 1e-15 }
             return ComplexUnitValue(value: complexExp, dimensions: newDims)
         default: throw MathError.unknownOperator(op: op)
         }

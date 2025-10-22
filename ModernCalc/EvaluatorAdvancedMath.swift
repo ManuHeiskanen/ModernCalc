@@ -380,7 +380,8 @@ extension Evaluator {
                     let xDim = xVector.dimensions
                     let yDim = yVector.dimensions
                     
-                    let xDimPow = xDim.mapValues { $0 * power }
+                    // FIX: Cast power to Double for multiplication
+                    let xDimPow = xDim.mapValues { $0 * Double(power) }
                     let expectedCoeffDim = yDim.merging(xDimPow.mapValues { -$0 }, uniquingKeysWith: +)
                     
                     // This is a sanity check, the polyfit function should have already produced correct units
@@ -805,10 +806,11 @@ extension Evaluator {
         let positiveDims = dimensions.filter { $0.value > 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
         let negativeDims = dimensions.filter { $0.value < 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
 
-        let formatPart = { (dims: [(key: BaseUnit, value: Int)]) -> String in
+        // FIX: Cast Int exponent to Double before comparison/abs
+        let formatPart = { (dims: [(key: BaseUnit, value: Double)]) -> String in
             dims.map { (unit, exponent) -> String in
                 let symbol = UnitStore.baseUnitSymbols[unit] ?? unit.rawValue
-                let exponentStr = abs(exponent) == 1 ? "" : "^\(abs(exponent))"
+                let exponentStr = abs(exponent) == 1.0 ? "" : "^\(Int(abs(exponent)))" // Assume integer for display
                 return "\(symbol)\(exponentStr)"
             }.joined(separator: "·")
         }
@@ -898,7 +900,8 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Polyno
     // Calculate the correct units for each coefficient and build the final result.
     var unitAwareCoefficients: [UnitValue] = []
     for (power, coeffValue) in dimensionlessCoeffs.values.enumerated() {
-        let xDimToPower = x.dimensions.mapValues { $0 * power }
+        // FIX: Cast power to Double for multiplication
+        let xDimToPower = x.dimensions.mapValues { $0 * Double(power) }
         let coeffDimension = y.dimensions.merging(xDimToPower.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
         
         let unitCoeff = UnitValue.create(value: coeffValue, dimensions: coeffDimension)

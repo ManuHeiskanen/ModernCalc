@@ -1,3 +1,10 @@
+//
+//  TextContents.swift
+//  ModernCalc
+//
+//  Created by Manu Heiskanen on 8.9.2025.
+//
+
 import Foundation
 
 /// A centralized repository for static application content like function definitions,

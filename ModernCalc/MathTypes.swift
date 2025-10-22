@@ -1,6 +1,12 @@
+//
+//  MathTypes.swift
+//  ModernCalc
+//
+//  Created by Manu Heiskanen on 27.8.2025.
+//
+
 import Foundation
 
-// --- NEW: A struct to represent a complex value with its associated physical dimensions ---
 struct ComplexUnitValue: Equatable, Codable {
     var value: Complex
     var dimensions: UnitDimension
@@ -21,14 +27,16 @@ struct ComplexUnitValue: Equatable, Codable {
 
     static func * (lhs: ComplexUnitValue, rhs: ComplexUnitValue) -> ComplexUnitValue {
         let newValue = lhs.value * rhs.value
-        let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+        // Use tolerance instead of != 0
+        let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { abs($0.value) > 1e-15 }
         return ComplexUnitValue(value: newValue, dimensions: newDimensions)
     }
 
     static func / (lhs: ComplexUnitValue, rhs: ComplexUnitValue) throws -> ComplexUnitValue {
         let newValue = try lhs.value / rhs.value
         let negatedRhsDimensions = rhs.dimensions.mapValues { -$0 }
-        let newDimensions = lhs.dimensions.merging(negatedRhsDimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+        // Use tolerance instead of != 0
+        let newDimensions = lhs.dimensions.merging(negatedRhsDimensions, uniquingKeysWith: +).filter { abs($0.value) > 1e-15 }
         return ComplexUnitValue(value: newValue, dimensions: newDimensions)
     }
 }
@@ -42,7 +50,8 @@ struct UnitValue: Equatable, Codable {
 
     // A dimensionless value, for convenience.
     static func dimensionless(_ value: Double) -> UnitValue {
-        return UnitValue(value: value, dimensions: [:])
+        // FIX 1 (User Error 1): Explicitly type the empty dictionary as UnitDimension
+        return UnitValue(value: value, dimensions: [:] as UnitDimension)
     }
     
     static func create(value: Double, dimensions: UnitDimension) -> UnitValue {
@@ -93,7 +102,9 @@ struct UnitValue: Equatable, Codable {
     
     func pow(_ exponent: Double) -> UnitValue {
         let newValue = Foundation.pow(self.value, exponent)
-        let newDimensions = self.dimensions.mapValues { Int(Double($0) * exponent) }
+        // FIX 2: Remove the `Int(Double($0)...)` cast. The value $0 is now a Double,
+        // and we want to preserve the fractional part.
+        let newDimensions = self.dimensions.mapValues { $0 * exponent }
             .filter { $0.value != 0 }
         return UnitValue.create(value: newValue, dimensions: newDimensions)
     }
@@ -195,7 +206,9 @@ struct UncertainValue: Equatable, Codable {
     func pow(_ exponent: Double) -> UncertainValue {
         guard self.value != 0 else { return self }
         let newValue = Foundation.pow(self.value, exponent)
-        let newDimensions = self.dimensions.mapValues { Int(Double($0) * exponent) }.filter { $0.value != 0 }
+        // FIX 3: Remove the `Int(Double($0)...)` cast. The value $0 is now a Double,
+        // and we want to preserve the fractional part.
+        let newDimensions = self.dimensions.mapValues { $0 * exponent }.filter { $0.value != 0 }
         let relativeUncertainty = self.totalUncertainty / self.value
         let newTotalUncertainty = abs(newValue * exponent * relativeUncertainty)
         
@@ -292,7 +305,8 @@ struct Vector: Equatable, Codable {
     let dimensions: UnitDimension
     var dimension: Int { values.count }
     
-    init(values: [Double], dimensions: UnitDimension = [:]) {
+    // FIX 4 (User Error 2): Explicitly type the default empty dictionary
+    init(values: [Double], dimensions: UnitDimension = [:] as UnitDimension) {
         self.values = values
         self.dimensions = dimensions
     }
@@ -337,7 +351,8 @@ struct Vector: Equatable, Codable {
     func unit() -> Vector {
         let mag = self.magnitude().value
         guard mag != 0 else { return self }
-        return Vector(values: self.values.map { $0 / mag }, dimensions: [:])
+        // FIX 5: Explicitly type the empty dictionary for the new dimensionless vector
+        return Vector(values: self.values.map { $0 / mag }, dimensions: [:] as UnitDimension)
     }
 
     func angle(with other: Vector) throws -> Double {
@@ -466,7 +481,8 @@ struct Matrix: Equatable, Codable {
     let columns: Int
     let dimensions: UnitDimension
     
-    init(values: [Double], rows: Int, columns: Int, dimensions: UnitDimension = [:]) {
+    // FIX 6: Explicitly type the default empty dictionary
+    init(values: [Double], rows: Int, columns: Int, dimensions: UnitDimension = [:] as UnitDimension) {
         self.values = values
         self.rows = rows
         self.columns = columns
@@ -500,7 +516,8 @@ struct Matrix: Equatable, Codable {
                 return sign * self[0, c] * (try submatrix(excludingRow: 0, excludingCol: c).determinant().value)
             }.reduce(0, +)
         }
-        let newDimensions = self.dimensions.mapValues { $0 * self.rows }.filter { $0.value != 0 }
+        // FIX 7 (User Error 3): Cast Int to Double for multiplication with Double exponent
+        let newDimensions = self.dimensions.mapValues { $0 * Double(self.rows) }.filter { $0.value != 0 }
         return UnitValue.create(value: detValue, dimensions: newDimensions)
     }
 
@@ -510,7 +527,8 @@ struct Matrix: Equatable, Codable {
         
         let adjugate: Matrix
         if rows == 1 {
-            adjugate = Matrix(values: [1.0], rows: 1, columns: 1, dimensions: [:])
+            // FIX 8: Explicitly type empty dictionary
+            adjugate = Matrix(values: [1.0], rows: 1, columns: 1, dimensions: [:] as UnitDimension)
         } else {
             let cofactors: [Double] = try (0..<rows).flatMap { r -> [Double] in
                 try (0..<columns).map { c -> Double in
@@ -518,7 +536,8 @@ struct Matrix: Equatable, Codable {
                     return sign * (try submatrix(excludingRow: r, excludingCol: c).determinant().value)
                 }
             }
-            adjugate = Matrix(values: cofactors, rows: rows, columns: columns, dimensions: self.dimensions.mapValues { $0 * (self.rows - 1) }).transpose()
+            // FIX 9 (User Error 4): Cast Int to Double for multiplication with Double exponent
+            adjugate = Matrix(values: cofactors, rows: rows, columns: columns, dimensions: self.dimensions.mapValues { $0 * Double(self.rows - 1) }).transpose()
         }
 
         let inverseValues = adjugate.values.map { $0 / det.value }
@@ -697,7 +716,8 @@ struct ComplexVector: Equatable, Codable {
     let dimensions: UnitDimension
     var dimension: Int { values.count }
     
-    init(values: [Complex], dimensions: UnitDimension = [:]) { self.values = values; self.dimensions = dimensions }
+    // FIX 10: Explicitly type the default empty dictionary
+    init(values: [Complex], dimensions: UnitDimension = [:] as UnitDimension) { self.values = values; self.dimensions = dimensions }
     init(from realVector: Vector) { self.values = realVector.values.map { Complex(real: $0, imaginary: 0) }; self.dimensions = realVector.dimensions }
     
     subscript(index: Int) -> Complex { return values[index] }
@@ -783,7 +803,8 @@ struct ComplexMatrix: Equatable, Codable {
     let columns: Int
     let dimensions: UnitDimension
     
-    init(values: [Complex], rows: Int, columns: Int, dimensions: UnitDimension = [:]) { self.values = values; self.rows = rows; self.columns = columns; self.dimensions = dimensions }
+    // FIX 11: Explicitly type the default empty dictionary
+    init(values: [Complex], rows: Int, columns: Int, dimensions: UnitDimension = [:] as UnitDimension) { self.values = values; self.rows = rows; self.columns = columns; self.dimensions = dimensions }
     init(from realMatrix: Matrix) { self.values = realMatrix.values.map { Complex(real: $0, imaginary: 0) }; self.rows = realMatrix.rows; self.columns = realMatrix.columns; self.dimensions = realMatrix.dimensions }
     
     subscript(row: Int, col: Int) -> Complex { return values[row * columns + col] }
@@ -811,7 +832,8 @@ struct ComplexMatrix: Equatable, Codable {
                 return Complex(real: sign, imaginary: 0) * self[0, c] * (try submatrix(excludingRow: 0, excludingCol: c).determinant().value)
             }.reduce(.zero, +)
         }
-        let newDimensions = self.dimensions.mapValues { $0 * self.rows }.filter { $0.value != 0 }
+        // FIX 12 (User Error 5): Cast Int to Double for multiplication with Double exponent
+        let newDimensions = self.dimensions.mapValues { $0 * Double(self.rows) }.filter { $0.value != 0 }
         return (detValue, newDimensions)
     }
 
@@ -821,7 +843,8 @@ struct ComplexMatrix: Equatable, Codable {
         
         let adjugate: ComplexMatrix
         if rows == 1 {
-            adjugate = ComplexMatrix(values: [Complex(real: 1, imaginary: 0)], rows: 1, columns: 1, dimensions: [:])
+            // FIX 13: Explicitly type empty dictionary
+            adjugate = ComplexMatrix(values: [Complex(real: 1, imaginary: 0)], rows: 1, columns: 1, dimensions: [:] as UnitDimension)
         } else {
             let cofactors = try (0..<rows).flatMap { r -> [Complex] in
                 try (0..<columns).map { c -> Complex in
@@ -829,7 +852,8 @@ struct ComplexMatrix: Equatable, Codable {
                     return Complex(real: sign, imaginary: 0) * (try submatrix(excludingRow: r, excludingCol: c).determinant().value)
                 }
             }
-            let adjugateDimensions = self.dimensions.mapValues { $0 * (self.rows - 1) }.filter { $0.value != 0 }
+            // FIX 14 (User Error 6): Cast Int to Double for multiplication with Double exponent
+            let adjugateDimensions = self.dimensions.mapValues { $0 * Double(self.rows - 1) }.filter { $0.value != 0 }
             adjugate = ComplexMatrix(values: cofactors, rows: rows, columns: columns, dimensions: adjugateDimensions).transpose()
         }
         

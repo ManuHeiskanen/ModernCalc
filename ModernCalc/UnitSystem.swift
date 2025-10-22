@@ -17,7 +17,7 @@ enum BaseUnit: String, Codable, CaseIterable {
 // The keys are the base units, and the values are their integer exponents.
 // Example: Velocity (m/s) would be represented as [.meter: 1, .second: -1]
 // Example: A dimensionless quantity would have an empty dictionary.
-typealias UnitDimension = [BaseUnit: Int]
+typealias UnitDimension = [BaseUnit: Double]
 
 // Represents the definition of a single unit, like a meter, foot, or joule.
 struct UnitDefinition {
