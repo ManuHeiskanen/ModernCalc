@@ -67,7 +67,6 @@ extension Evaluator {
                         return .vector(Vector(values: values, dimensions: m.dimensions))
                     default:
                         // If the single argument is a scalar, treat it as a 1x1 matrix.
-                        // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
                         let s: UnitValue
                         switch arg {
                         case .dimensionless(let d): s = .dimensionless(d)
@@ -81,7 +80,6 @@ extension Evaluator {
                 }
 
                 // Case 2: Multiple scalar arguments were passed.
-                // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
                 let diagonalValues = try args.map { arg -> UnitValue in
                     switch arg {
                     case .dimensionless(let d): return .dimensionless(d)
@@ -443,9 +441,7 @@ extension Evaluator {
         "imag": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .dimensionless(c.imaginary) },
         "conj": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .complex(c.conjugate()) },
         
-        // --- FIX: Corrected Geometry Functions ---
         "area_circle": { arg in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let r: UnitValue
             switch arg {
             case .dimensionless(let d): r = .dimensionless(d)
@@ -458,7 +454,6 @@ extension Evaluator {
             return .unitValue(pi * r.pow(2))
         },
         "circum_circle": { arg in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let r: UnitValue
             switch arg {
             case .dimensionless(let d): r = .dimensionless(d)
@@ -471,7 +466,6 @@ extension Evaluator {
             return .unitValue(twoPi * r)
         },
         "vol_sphere": { arg in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let r: UnitValue
             switch arg {
             case .dimensionless(let d): r = .dimensionless(d)
@@ -484,7 +478,6 @@ extension Evaluator {
             return .unitValue(fourThirdsPi * r.pow(3))
         },
         "vol_cube": { arg in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let s: UnitValue
             switch arg {
             case .dimensionless(let d): s = .dimensionless(d)
@@ -495,7 +488,6 @@ extension Evaluator {
             }
             return .unitValue(s.pow(3))
         },
-        // --- End of Fix ---
         
         "unit": { arg in return .vector(try arg.asVector(for: "unit").unit()) },
         "transpose": { arg in
@@ -545,7 +537,6 @@ extension Evaluator {
             guard args.count == 1 else { throw MathError.incorrectArgumentCount(function: "sin", expected: "1", found: args.count) }
             let arg = args[0]
             
-            // FIX: Add element-wise operation for vectors and matrices
             switch arg {
             case .vector(let v):
                 let newValues = v.values.map {
@@ -581,7 +572,6 @@ extension Evaluator {
             guard args.count == 1 else { throw MathError.incorrectArgumentCount(function: "cos", expected: "1", found: args.count) }
             let arg = args[0]
             
-            // FIX: Add element-wise operation for vectors and matrices
             switch arg {
             case .vector(let v):
                 let newValues = v.values.map {
@@ -617,7 +607,6 @@ extension Evaluator {
             guard args.count == 1 else { throw MathError.incorrectArgumentCount(function: "tan", expected: "1", found: args.count) }
             let arg = args[0]
 
-            // FIX: Add element-wise operation for vectors and matrices
             switch arg {
             case .vector(let v):
                 let newValues = v.values.map {
@@ -843,7 +832,6 @@ extension Evaluator {
             let vectorB = try b.asVector(for: "linsolve")
             return .vector(try solveLinearSystem(A: matrixA, b: vectorB))
         },
-        // FIX: Handle dot product between vectors represented as matrices
         "dot": { a, b in
             // Helper to convert a MathValue to a Vector or ComplexVector if it represents one.
             func toVector(_ value: MathValue) -> (real: Vector?, complex: ComplexVector?) {
@@ -917,9 +905,7 @@ extension Evaluator {
         "nPr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .dimensionless(try permutations(n: n, k: k)) },
         "nCr": { a, b in let n = try a.asScalar(); let k = try b.asScalar(); return .dimensionless(try combinations(n: n, k: k)) },
         
-        // --- FIX: Corrected Geometry Functions ---
         "hypot": { a, b in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let s1: UnitValue
             switch a {
             case .dimensionless(let d): s1 = .dimensionless(d)
@@ -928,7 +914,6 @@ extension Evaluator {
             default:
                 throw MathError.typeMismatch(expected: "A scalar value for hypot() argument 'a'", found: a.typeName)
             }
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let s2: UnitValue
             switch b {
             case .dimensionless(let d): s2 = .dimensionless(d)
@@ -941,7 +926,6 @@ extension Evaluator {
             return .unitValue(try (s1.pow(2) + s2.pow(2)).pow(0.5))
         },
         "side": { a, b in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let c: UnitValue
             switch a {
             case .dimensionless(let d): c = .dimensionless(d)
@@ -950,7 +934,6 @@ extension Evaluator {
             default:
                 throw MathError.typeMismatch(expected: "A scalar value for side() argument 'a'", found: a.typeName)
             }
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let s: UnitValue
             switch b {
             case .dimensionless(let d): s = .dimensionless(d)
@@ -966,7 +949,6 @@ extension Evaluator {
             return .unitValue(try (c2 - s2).pow(0.5))
         },
         "area_rect": { a, b in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let w: UnitValue
             switch a {
             case .dimensionless(let d): w = .dimensionless(d)
@@ -975,7 +957,6 @@ extension Evaluator {
             default:
                 throw MathError.typeMismatch(expected: "A scalar value for area_rect() argument 'a'", found: a.typeName)
             }
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let h: UnitValue
             switch b {
             case .dimensionless(let d): h = .dimensionless(d)
@@ -987,7 +968,6 @@ extension Evaluator {
             return .unitValue(w * h)
         },
         "area_tri": { a, b in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let base: UnitValue
             switch a {
             case .dimensionless(let d): base = .dimensionless(d)
@@ -996,7 +976,6 @@ extension Evaluator {
             default:
                 throw MathError.typeMismatch(expected: "A scalar value for area_tri() argument 'a'", found: a.typeName)
             }
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let h: UnitValue
             switch b {
             case .dimensionless(let d): h = .dimensionless(d)
@@ -1009,7 +988,6 @@ extension Evaluator {
             return .unitValue(half * base * h)
         },
         "vol_cylinder": { a, b in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let r: UnitValue
             switch a {
             case .dimensionless(let d): r = .dimensionless(d)
@@ -1018,7 +996,6 @@ extension Evaluator {
             default:
                 throw MathError.typeMismatch(expected: "A scalar value for vol_cylinder() argument 'a'", found: a.typeName)
             }
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let h: UnitValue
             switch b {
             case .dimensionless(let d): h = .dimensionless(d)
@@ -1031,7 +1008,6 @@ extension Evaluator {
             return .unitValue(pi * r.pow(2) * h)
         },
         "vol_cone": { a, b in
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let r: UnitValue
             switch a {
             case .dimensionless(let d): r = .dimensionless(d)
@@ -1040,7 +1016,6 @@ extension Evaluator {
             default:
                 throw MathError.typeMismatch(expected: "A scalar value for vol_cone() argument 'a'", found: a.typeName)
             }
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let h: UnitValue
             switch b {
             case .dimensionless(let d): h = .dimensionless(d)
@@ -1052,16 +1027,13 @@ extension Evaluator {
             let oneThirdPi = UnitValue.dimensionless((1.0/3.0) * Double.pi)
             return .unitValue(oneThirdPi * r.pow(2) * h)
         },
-        // --- End of Fix ---
 
         "root": { a, b in
-                // This is tricky with units. We'll require a dimensionless exponent for now.
-                // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
                 let x_val: UnitValue
                 switch a {
                 case .dimensionless(let d): x_val = .dimensionless(d)
                 case .unitValue(let u): x_val = u
-                case .uncertain(let u): x_val = UnitValue(value: u.value, dimensions: u.dimensions) // Use nominal value
+                case .uncertain(let u): x_val = UnitValue(value: u.value, dimensions: u.dimensions)
                 default:
                     throw MathError.typeMismatch(expected: "A scalar value for root() argument 'a'", found: a.typeName)
                 }
@@ -1080,13 +1052,11 @@ extension Evaluator {
             return .matrix(Matrix(values: values, rows: rows, columns: cols))
         },
         "mod": { a, b in
-            // Modulo with units is complex. Enforce dimensionless.
             let n1 = try a.asScalar(); let n2 = try b.asScalar()
             guard n2 != 0 else { throw MathError.divisionByZero }
             return .dimensionless(n1 - n2 * floor(n1 / n2))
         },
         "percentile": { data, p_val in
-            // Percentile with units is tricky. Enforce dimensionless for now.
             let values = try extractDoubles(from: data).sorted()
             guard !values.isEmpty else { throw MathError.requiresAtLeastOneArgument(function: "percentile") }
             let p = try p_val.asScalar()
@@ -1107,13 +1077,12 @@ extension Evaluator {
             let f: Double
             switch freq_val {
             case .dimensionless(let d):
-                f = d // a dimensionless frequency is assumed to be in Hz
+                f = d
             case .unitValue(let u):
-                // Frequency is 1/s
                 guard u.dimensions == [.second: -1] else {
                     throw MathError.dimensionMismatch(reason: "First argument for impedance() must be a frequency (e.g., in Hz)")
                 }
-                f = u.value // value is already in base SI units (Hz)
+                f = u.value
             default:
                 throw MathError.typeMismatch(expected: "Frequency value", found: freq_val.typeName)
             }
@@ -1131,7 +1100,7 @@ extension Evaluator {
                 // Capacitance dimensions: kg^-1*m^-2*s^4*A^2 (Farad)
                 let capacitanceDim: UnitDimension = [.kilogram: -1, .meter: -2, .second: 4, .ampere: 2]
                 
-                let val = u.value // Value is already in base SI units
+                let val = u.value
 
                 if u.dimensions == resistanceDim {
                     // It's a resistor
@@ -1254,7 +1223,6 @@ extension Evaluator {
                 return (.uncertain(UncertainValue(value: resultVal, randomUncertainty: propagated.randomUncertainty, systematicUncertainty: propagated.systematicUncertainty, dimensions: [:])), argUsedAngle)
             }
             
-            // FIX: Use asScalar() to correctly handle dimensionless UnitValues
             let scalarValue = try arg.asScalar()
             return (.dimensionless(scalarFunc(scalarValue)), argUsedAngle)
         }
@@ -1284,7 +1252,6 @@ extension Evaluator {
                         return (.vector(Vector(values: scalarResults, dimensions: [:])), overallUsedAngle)
                     } else {
                         // If input had units, extract UnitValues and check consistency
-                        // --- FIX: Moved extractValuesAndDimension to this file ---
                         let (finalValues, finalUnits) = try extractValuesAndDimension(from: resultValues)
                         return (.vector(Vector(values: finalValues, dimensions: finalUnits)), overallUsedAngle)
                     }
@@ -1302,8 +1269,6 @@ extension Evaluator {
         throw MathError.unknownFunction(name: node.name)
     }
 }
-
-// --- FIX: Moved helper functions from Evaluator.swift to here ---
 
 /// Extracts numeric values and a common unit dimension from a list of MathValues.
 /// This version allows dimensionless values (especially zero) to conform to the vector's unit type.
