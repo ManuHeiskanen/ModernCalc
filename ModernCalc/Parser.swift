@@ -141,7 +141,6 @@ struct SolveNode: ExpressionNode {
     }
 }
 
-// --- NEW: Add an AST node for the ODE solver ---
 struct ODENode: ExpressionNode {
     let functionName: ConstantNode
     let timeSpan: ExpressionNode
@@ -340,7 +339,6 @@ class Parser {
                 case "importcsv": return try parseImportCSV()
                 case "uncert": return try parseUncert()
                 case "solve", "nsolve": return try parseSolve()
-                // --- NEW: Add a case for the ode45 solver ---
                 case "ode45": return try parseODE()
                 default: return try parseFunctionCall(name: name)
                 }
@@ -357,7 +355,6 @@ class Parser {
         case .op(let opString) where ["-", "+", "~"].contains(opString): // Added ~
             let child = try parseExpression(currentPrecedence: unaryOperatorPrecedence())
             return UnaryOpNode(op: token, child: child)
-        // --- NEW: Handle standalone colon for full-dimension slicing ---
         case .op(":"):
             return ConstantNode(name: ":")
         case .paren("("):
@@ -409,7 +406,6 @@ class Parser {
         return SolveNode(equation: equation, variable: variableNode, guess: guess)
     }
     
-    // --- NEW: A dedicated parser for the ode45 function syntax ---
     private func parseODE() throws -> ExpressionNode {
         try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for ode45 call"))
 
@@ -797,7 +793,6 @@ class Parser {
     private func infixOperatorPrecedence(for token: Token) -> Int? {
         if case .op(let opString) = token.type {
             switch opString {
-            // --- NEW: Add the range operator with very low precedence ---
             case ":": return 0
             case "||": return 1
             case "&&": return 2

@@ -147,7 +147,6 @@ struct UnitStore {
         
         
         // Bad Units
-        
         // Length
         unitMap["in"] = UnitDefinition(symbol: "in", dimensions: [.meter: 1], conversionFactor: 0.0254) // Inch
         unitMap["ft"] = UnitDefinition(symbol: "ft", dimensions: [.meter: 1], conversionFactor: 0.3048) // Foot

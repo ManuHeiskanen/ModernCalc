@@ -25,7 +25,6 @@ struct CSVView: View {
             // Define the grid columns once to be shared by header and data grid.
             let columns = Array(repeating: GridItem(.flexible(minimum: cellMinWidth)), count: viewModel.headers.count)
             
-            // **FIXED:** A single ScrollView now wraps both the header and the data grid
             // to ensure their column widths are calculated identically and they scroll in sync.
             if !columns.isEmpty {
                 ScrollView([.horizontal, .vertical]) {

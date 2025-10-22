@@ -91,7 +91,6 @@ extension Evaluator {
         case (.complex(let l), .dimensionless(let r)): return .complex(try performComplexComplexOp(op.rawValue, l, Complex(real: r, imaginary: 0)))
         case (.dimensionless(let l), .complex(let r)): return .complex(try performComplexComplexOp(op.rawValue, Complex(real: l, imaginary: 0), r))
         
-        // --- NEW: Complex Unit Value Operations & Promotions ---
         case (.complexUnitValue(let l), .complexUnitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, l, r))
         case (.complexUnitValue(let l), .unitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, l, ComplexUnitValue(value: Complex(real: r.value, imaginary: 0), dimensions: r.dimensions)))
         case (.unitValue(let l), .complexUnitValue(let r)): return .complexUnitValue(try performComplexUnitOp(op.rawValue, ComplexUnitValue(value: Complex(real: l.value, imaginary: 0), dimensions: l.dimensions), r))
@@ -209,7 +208,6 @@ extension Evaluator {
         return (result, indexUsedAngle || scalarUsedAngle)
     }
 
-    // --- NEW: Operator logic for ComplexUnitValue ---
     private func performComplexUnitOp(_ op: String, _ l: ComplexUnitValue, _ r: ComplexUnitValue) throws -> ComplexUnitValue {
         switch op {
         case "+": return try l + r
@@ -336,7 +334,6 @@ extension Evaluator {
             default: throw MathError.unsupportedOperation(op: op, typeA: "UnitValue", typeB: "Vector")
             }
         } else {
-            // --- NEW: Handle vector-unit comparisons ---
             if ["<", ">", "==", "!=", "<=", ">="].contains(op) {
                 guard v.dimensions == u.dimensions else {
                      throw MathError.dimensionMismatch(reason: "Cannot compare vector and scalar with incompatible units.")
@@ -386,7 +383,6 @@ extension Evaluator {
             if reversed { throw MathError.unsupportedOperation(op: op, typeA: "Scalar", typeB: "Matrix") }
             guard s != 0 else { throw MathError.divisionByZero }
             newValues = m.values.map { $0 / s }; newDimensions = m.dimensions
-        // --- NEW: Handle matrix-scalar comparisons ---
         case ">": newValues = m.values.map { (reversed ? s > $0 : $0 > s) ? 1.0 : 0.0 }; newDimensions = [:]
         case "<": newValues = m.values.map { (reversed ? s < $0 : $0 < s) ? 1.0 : 0.0 }; newDimensions = [:]
         case ">=": newValues = m.values.map { (reversed ? s >= $0 : $0 >= s) ? 1.0 : 0.0 }; newDimensions = [:]
@@ -409,7 +405,6 @@ extension Evaluator {
             default: throw MathError.unsupportedOperation(op: op, typeA: "UnitValue", typeB: "Matrix")
             }
         } else {
-            // --- NEW: Handle matrix-unit comparisons ---
             if ["<", ">", "==", "!=", "<=", ">="].contains(op) {
                 guard m.dimensions == u.dimensions else {
                      throw MathError.dimensionMismatch(reason: "Cannot compare matrix and scalar with incompatible units.")

@@ -9,7 +9,6 @@ import Foundation
 import Combine
 import SwiftUI
 
-// MODIFIED: SelectionPart now holds the index of the selected result.
 enum SelectionPart: Equatable {
     case equation
     case result(index: Int)
@@ -45,7 +44,6 @@ class NavigationManager: ObservableObject {
             }
             
         } else if let selectedItem = history.first(where: { $0.id == selectedHistoryId }), selectedItem.type != .functionDefinition {
-            // MODIFIED: This logic now also recognizes ODE, eigenvalue and regression results as having 2 parts.
             let resultCount: Int
             if case .tuple(let values) = selectedItem.result {
                 resultCount = values.count
@@ -105,12 +103,10 @@ class NavigationManager: ObservableObject {
                     let valueToParse = (index == 0) ? MathValue.vector(time) : MathValue.matrix(states)
                     return viewModel.formatForParsing(valueToParse)
                 } else if case .regressionResult(let slope, let intercept) = selectedItem.result {
-                    // FIX: Use .unitValue to correctly wrap the UnitValue types for slope and intercept.
                     let valueToParse = (index == 0) ? MathValue.unitValue(slope) : MathValue.unitValue(intercept)
                     return viewModel.formatForParsing(valueToParse)
                 } else if case .roots(let values) = selectedItem.result {
                     if index < values.count {
-                        // FIX: The `values` array now contains MathValue, not Double.
                         return viewModel.formatForParsing(values[index])
                     }
                 } else if case .polynomialFit = selectedItem.result {

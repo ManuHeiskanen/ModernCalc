@@ -175,7 +175,6 @@ struct Evaluator {
             return (.functionDefinition(funcDefNode.name), usedAngle)
             
         case let functionNode as FunctionCallNode:
-            // --- FIX: Check if this is an index access operation before treating it as a function call ---
             if let targetValue = variables[functionNode.name] {
                 switch targetValue {
                 case .matrix, .vector, .complexMatrix, .complexVector:
@@ -345,7 +344,6 @@ struct Evaluator {
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: pointNode, variables: &variables, functions: &functions, angleMode: angleMode)
             let (orderValue, _) = try _evaluateSingle(node: derivativeNode.order, variables: &variables, functions: &functions, angleMode: angleMode)
             
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let pointUnitValue: UnitValue
             switch pointValue {
             case .dimensionless(let d): pointUnitValue = .dimensionless(d)
@@ -367,7 +365,6 @@ struct Evaluator {
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
             let (upperValue, upperUsedAngle) = try _evaluateSingle(node: integralNode.upperBound, variables: &variables, functions: &functions, angleMode: angleMode)
 
-            // --- FIX: Replaced ambiguous asUnitValue() with switch statements ---
             let a: UnitValue, b: UnitValue
             switch lowerValue {
             case .dimensionless(let d): a = .dimensionless(d)
@@ -396,7 +393,6 @@ struct Evaluator {
                 )
                 bodyUsedAngle = bodyUsedAngle || f_usedAngle
                 
-                // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
                 let resultUnit: UnitValue
                 switch value {
                 case .dimensionless(let d): resultUnit = .dimensionless(d)
@@ -422,7 +418,6 @@ struct Evaluator {
 
             let (pointValue, pointUsedAngle) = try _evaluateSingle(node: primeNode.argument, variables: &variables, functions: &functions, angleMode: angleMode)
             
-            // --- FIX: Replaced ambiguous asUnitValue() with a switch statement ---
             let pointUnitValue: UnitValue
             switch pointValue {
             case .dimensionless(let d): pointUnitValue = .dimensionless(d)
@@ -626,7 +621,6 @@ struct Evaluator {
     }
 }
 
-// --- FIX: Helper function to build a unit-aware Vector/Matrix ---
 /// Extracts numeric values and a common unit dimension from a list of MathValues.
 /// This version allows dimensionless values (especially zero) to conform to the vector's unit type.
 private func extractValuesAndDimension(from elements: [MathValue]) throws -> (values: [Double], dimensions: UnitDimension) {
@@ -671,7 +665,6 @@ private func extractValuesAndDimension(from elements: [MathValue]) throws -> (va
     return (values, finalDimension)
 }
 
-// --- FIX: Helper function to build a unit-aware ComplexVector/ComplexMatrix ---
 /// Extracts complex values and a common unit dimension, allowing dimensionless values to conform.
 private func extractComplexValuesAndDimension(from elements: [MathValue]) throws -> (values: [Complex], dimensions: UnitDimension) {
     guard !elements.isEmpty else {

@@ -585,7 +585,6 @@ struct Matrix: Equatable, Codable {
         return Matrix(values: zip(self.values, other.values).map(/), rows: self.rows, columns: self.columns, dimensions: newDimensions)
     }
     
-    // --- FIX: Re-added getcolumn and getrow ---
     func getcolumn(index: Int) throws -> Vector {
         let zeroBasedIndex = index - 1
         guard zeroBasedIndex >= 0 && zeroBasedIndex < columns else {
@@ -963,12 +962,10 @@ enum MathValue: Codable, Equatable {
         case .uncertain: return "UncertainValue"
         case .roots: return "Roots"
         case .eigenDecomposition: return "EigenDecomposition"
-        // --- NEW: Add type name for the ODE solution ---
         case .odeSolution: return "ODESolution"
         }
     }
     
-    // --- FIX: This is the helper function from the analysis ---
     // This allows functions to accept arguments that are dimensionless, have units,
     // or have uncertainty, and treat them all as a simple UnitValue for calculations.
     func asUnitValue() throws -> UnitValue {
@@ -1135,8 +1132,7 @@ enum MathValue: Codable, Equatable {
         case (.constant(let a), .constant(let b)): return a == b
         case (.uncertain(let a), .uncertain(let b)): return a == b
         case (.roots(let a), .roots(let b)): return a == b
-        case (.eigenDecomposition(let v1, let d1), .eigenDecomposition(let v2, let d2)): return v1 == d2 && v2 == d1 // FIX from previous incorrect implementation
-        // --- NEW: Handle equality for the ODE solution ---
+        case (.eigenDecomposition(let v1, let d1), .eigenDecomposition(let v2, let d2)): return v1 == d2 && v2 == d1
         case (.odeSolution(let t1, let s1), .odeSolution(let t2, let s2)): return t1 == t2 && s1 == s2
         default: return false
         }

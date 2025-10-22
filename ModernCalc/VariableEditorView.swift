@@ -27,7 +27,6 @@ struct VariableEditorView: View {
     // --- State to manage the collapsibility of the user-defined sections. ---
     @State private var isVariablesExpanded = false
     @State private var isFunctionsExpanded = false
-    // --- FIX: State to manage expansion for each function category and help topic individually. ---
     @State private var isCategoryExpanded: [String: Bool] = [:]
     @State private var isHelpTopicExpanded: [UUID: Bool] = [:]
 
@@ -314,7 +313,6 @@ struct VariableEditorView: View {
     private var builtinFunctionsView: some View {
         List {
             ForEach(filteredFunctionCategories) { category in
-                // --- FIX: This binding is now created dynamically for each category ---
                 let isExpandedBinding = Binding<Bool>(
                     get: {
                         // Default to expanded, and always be expanded when searching.
@@ -380,7 +378,6 @@ struct VariableEditorView: View {
     private var settingsView: some View {
         Form {
             Section(header: Text("History & Export Formatting")) {
-                // --- CHANGE: Bind the Picker to the local state ---
                 Picker("Display Mode", selection: $localDisplayMode) {
                     ForEach(NumberDisplayMode.allCases, id: \.self) {
                         Text($0.rawValue)
@@ -388,7 +385,6 @@ struct VariableEditorView: View {
                 }
                 .pickerStyle(.segmented)
                 
-                // --- CHANGE: This condition now uses the local state ---
                 if localDisplayMode == .fixed {
                     Stepper("Decimal Places: \(settings.fixedDecimalPlaces)", value: $settings.fixedDecimalPlaces, in: 0...10)
                 }
@@ -439,7 +435,6 @@ struct VariableEditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding()
-        // --- ADDED: Initialize the local state and listen for changes ---
         .onAppear {
             self.localDisplayMode = settings.displayMode
         }
@@ -451,7 +446,6 @@ struct VariableEditorView: View {
     private var helpView: some View {
         List {
             ForEach(filteredHelpTopics) { topic in
-                // --- FIX: This binding is now created dynamically for each help topic ---
                 let isExpandedBinding = Binding<Bool>(
                     get: {
                         // Default to collapsed, but always be expanded when searching.

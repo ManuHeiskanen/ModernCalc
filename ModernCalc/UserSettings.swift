@@ -116,7 +116,6 @@ class UserSettings: ObservableObject {
     init() {
         let defaults = UserDefaults.standard
         
-        // --- Phase 1: Initialize ALL stored properties from UserDefaults ---
         let savedDisplayMode = defaults.string(forKey: "numberDisplayMode") ?? ""
         self.displayMode = NumberDisplayMode(rawValue: savedDisplayMode) ?? .auto
         
@@ -138,7 +137,6 @@ class UserSettings: ObservableObject {
         self.solverDecimalPlaces = defaults.integer(forKey: "solverDecimalPlaces")
 
         
-        // --- Phase 2: After 'self' is initialized, check and apply default values ---
         if self.fixedDecimalPlaces == 0 {
             self.fixedDecimalPlaces = 4 // Default to 4 if not set
         }

@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 
-// --- NEW: An enum to specify the drag direction ---
 enum DragAxis {
     case horizontal, vertical
 }
@@ -19,7 +18,6 @@ class PlotViewModel {
     var plotData: PlotData
     var settings: UserSettings
     
-    // --- FIX 1: Split didSet observers to prevent race conditions ---
     var viewDomainX: ClosedRange<Double> {
         didSet {
             // Only update the X-axis text fields when the X-domain changes.
@@ -100,7 +98,6 @@ class PlotViewModel {
         }
     }
     
-    // --- MODIFIED: The pan function is replaced with one that locks to a specific axis. ---
     func pan(by translation: CGSize, from startDomains: (x: ClosedRange<Double>, y: ClosedRange<Double>), plotSize: CGSize, lockedTo axis: DragAxis) {
         guard plotSize.width > 0, plotSize.height > 0 else { return }
 
@@ -150,7 +147,6 @@ class PlotViewModel {
 
         regenerationTask?.cancel()
 
-        // --- FIX: Use the initial domain span to calculate fetch size ---
         // This ensures that the density of points in newly generated data chunks remains constant,
         // preventing the graph from deforming when panning far from the origin.
         let fetchSpan = initialDomainX.upperBound - initialDomainX.lowerBound
@@ -250,7 +246,6 @@ class PlotViewModel {
         triggerDataRegenerationIfNeeded()
     }
     
-    // --- MODIFIED: Added `animated` parameter to avoid jerky animations during drag gestures. ---
     private func recalculateYDomain(forVisibleXRange: ClosedRange<Double>, animated: Bool) {
         guard !isYAxisManuallySet, plotData.explicitYRange == nil else {
             return

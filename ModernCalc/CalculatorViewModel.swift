@@ -272,7 +272,6 @@ class CalculatorViewModel {
             let capturedSettings = self.settings
             let capturedAngleMode = self.angleMode
 
-            // --- REVISED: This handler now correctly reconstructs the plot command for regeneration ---
             let handler = { (newDomain: ClosedRange<Double>) -> Task<[PlotSeries]?, Never> in
                 Task {
                     do {

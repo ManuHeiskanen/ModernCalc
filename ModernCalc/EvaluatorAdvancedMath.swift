@@ -800,7 +800,6 @@ extension Evaluator {
     
     private func formatDimensionsForAxis(_ dimensions: UnitDimension, defaultLabel: String) -> String {
         if dimensions.isEmpty { return defaultLabel }
-        // FIX: Use the centralized UnitStore.commonDerivedUnits
         if let unitSymbol = UnitStore.commonDerivedUnits[dimensions] { return "\(defaultLabel) [\(unitSymbol)]" }
         
         let positiveDims = dimensions.filter { $0.value > 0 }.sorted { $0.key.rawValue < $1.key.rawValue }
@@ -909,8 +908,6 @@ func performPolynomialFit(x: Vector, y: Vector, degree: Double) throws -> Polyno
     return PolynomialCoefficients(coefficients: unitAwareCoefficients)
 }
 
-
-// --- FIX: Made this extension public (internal) so other files can access its members ---
 extension MathValue {
     var dimensionsIfUnitOrDimensionless: UnitDimension {
         switch self {

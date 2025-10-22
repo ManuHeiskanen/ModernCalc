@@ -27,7 +27,6 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // --- The history view now scrolls freely ---
             HistoryView(
                 viewModel: viewModel,
                 history: viewModel.history,
@@ -45,7 +44,6 @@ struct ContentView: View {
             .frame(height: viewModel.livePreviewHeight)
             .animation(.easeInOut(duration: 0.25), value: viewModel.livePreviewHeight)
 
-            // --- A new unified input area with a glass-like material background ---
             UnifiedInputView(
                 viewModel: viewModel,
                 expression: $viewModel.rawExpression,
@@ -681,7 +679,7 @@ struct CalculationResultView: View {
                         .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.matrix(eigenvalues))) }
                 }
             }
-        } else if case .odeSolution(let time, let states) = calculation.result { // ADD THIS ENTIRE BLOCK
+        } else if case .odeSolution(let time, let states) = calculation.result {
             VStack(alignment: .trailing, spacing: 8) {
                 HStack {
                     Text("T =")

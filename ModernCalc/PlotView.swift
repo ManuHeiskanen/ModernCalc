@@ -17,7 +17,6 @@ struct PlotView: View {
     @State private var initialDragDomains: (x: ClosedRange<Double>, y: ClosedRange<Double>)? = nil
     @State private var cumulativeZoom: CGFloat = 1.0
     
-    // --- NEW: State to track the locked axis during a drag gesture ---
     @State private var lockedDragAxis: DragAxis? = nil
 
     private var colorMap: [String: Color] {
@@ -108,7 +107,6 @@ struct PlotView: View {
     var body: some View {
         VStack(spacing: 0) {
             chartContainer
-                // --- MODIFIED: The drag gesture logic is updated to lock the panning axis. ---
                 .gesture(
                     DragGesture()
                         .onChanged { value in
@@ -151,7 +149,6 @@ struct PlotView: View {
                     }
                 }
             
-            // --- NEW: Axis Control Panel ---
             AxisControlView(viewModel: viewModel)
 
             Divider()
@@ -272,7 +269,6 @@ struct PlotView: View {
     }
 }
 
-// --- NEW: A dedicated view for the axis controls ---
 struct AxisControlView: View {
     @Bindable var viewModel: PlotViewModel
     @State private var isExpanded = false
