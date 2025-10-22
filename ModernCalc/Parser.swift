@@ -451,7 +451,7 @@ class Parser {
             }
             
             let colonToken = try advance()
-            guard case .assignment = colonToken.type else {
+            guard colonToken.type == .op(":") || colonToken.type == .assignment else {
                 throw ParserError.unexpectedToken(token: colonToken, expected: "':' after argument name")
             }
             

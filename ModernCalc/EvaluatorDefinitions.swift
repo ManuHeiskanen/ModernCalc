@@ -413,12 +413,29 @@ extension Evaluator {
         },
         "polar": { arg in guard case .complex(let c) = arg else { throw MathError.typeMismatch(expected: "Complex", found: arg.typeName) }; return .polar(c) },
         "sqrt": { arg in
-            if case .dimensionless(let s) = arg { return s < 0 ? .complex(Complex(real: s, imaginary: 0).sqrt()) : .dimensionless(sqrt(s)) }
-            if case .unitValue(let u) = arg { return .unitValue(u.pow(0.5)) }
-            else if case .complex(let c) = arg { return .complex(c.sqrt()) }
-            else if case .uncertain(let u) = arg { return .uncertain(u.pow(0.5)) }
-            else { throw MathError.typeMismatch(expected: "Scalar, Complex or UncertainValue", found: arg.typeName) }
-        },
+                    if case .dimensionless(let s) = arg {
+                        return s < 0 ? .complex(Complex(real: s, imaginary: 0).sqrt()) : .dimensionless(sqrt(s))
+                    }
+                    if case .unitValue(let u) = arg {
+                        if u.value < 0 {
+                            let complexValue = Complex(real: u.value, imaginary: 0).sqrt()
+                            let newDimensions = u.dimensions.mapValues { $0 * 0.5 }.filter { abs($0.value) > 1e-15 }
+                            return .complexUnitValue(ComplexUnitValue(value: complexValue, dimensions: newDimensions))
+                        } else {
+                            // Positive unit value, use original logic
+                            return .unitValue(u.pow(0.5))
+                        }
+                    }
+                    else if case .complex(let c) = arg { return .complex(c.sqrt()) }
+                    else if case .complexUnitValue(let cu) = arg {
+                        // Handle sqrt of an existing complex unit value
+                        let complexValue = cu.value.sqrt()
+                        let newDimensions = cu.dimensions.mapValues { $0 * 0.5 }.filter { abs($0.value) > 1e-15 }
+                        return .complexUnitValue(ComplexUnitValue(value: complexValue, dimensions: newDimensions))
+                    }
+                    else if case .uncertain(let u) = arg { return .uncertain(u.pow(0.5)) }
+                    else { throw MathError.typeMismatch(expected: "Numeric, Complex, or UnitValue", found: arg.typeName) }
+                },
         "round": { arg in let s = try arg.asScalar(); return .dimensionless(round(s)) },
         "floor": { arg in let s = try arg.asScalar(); return .dimensionless(floor(s)) },
         "ceil": { arg in let s = try arg.asScalar(); return .dimensionless(ceil(s)) },
@@ -1029,21 +1046,37 @@ extension Evaluator {
         },
 
         "root": { a, b in
-                let x_val: UnitValue
-                switch a {
-                case .dimensionless(let d): x_val = .dimensionless(d)
-                case .unitValue(let u): x_val = u
-                case .uncertain(let u): x_val = UnitValue(value: u.value, dimensions: u.dimensions)
-                default:
-                    throw MathError.typeMismatch(expected: "A scalar value for root() argument 'a'", found: a.typeName)
-                }
-                let n = try b.asScalar()
-                if x_val.value < 0 && n.truncatingRemainder(dividingBy: 2) == 0 {
-                    // TODO: Handle complex numbers with units? For now, no.
-                    throw MathError.unsupportedOperation(op: "root", typeA: "Even root of negative number", typeB: nil)
-                }
-                return .unitValue(x_val.pow(1/n))
-        },
+                        let x_val: UnitValue
+                        switch a {
+                        case .dimensionless(let d): x_val = .dimensionless(d)
+                        case .unitValue(let u): x_val = u
+                        case .uncertain(let u): x_val = UnitValue(value: u.value, dimensions: u.dimensions)
+                        default:
+                            throw MathError.typeMismatch(expected: "A scalar value for root() argument 'a'", found: a.typeName)
+                        }
+                        let n = try b.asScalar()
+                        
+                        if x_val.value < 0 && n.truncatingRemainder(dividingBy: 2) == 0 {
+                            // --- FIX: Promote to complex plane for even roots of negative numbers ---
+                            let base = Complex(real: x_val.value, imaginary: 0)
+                            let exponentVal = 1.0 / n
+                            let exponent = Complex(real: exponentVal, imaginary: 0)
+                            let complexValue = try base.pow(exponent)
+                            
+                            let newDimensions = x_val.dimensions.mapValues { $0 * exponentVal }.filter { abs($0.value) > 1e-15 }
+                            
+                            if newDimensions.isEmpty {
+                                // Return a dimensionless complex number
+                                return .complex(complexValue)
+                            } else {
+                                // Return a complex number with units
+                                return .complexUnitValue(ComplexUnitValue(value: complexValue, dimensions: newDimensions))
+                            }
+                        } else {
+                            // Use standard real power function for positive bases or odd roots
+                            return .unitValue(x_val.pow(1/n))
+                        }
+                },
         "randm": { a, b in
             let rows_s = try a.asScalar(); let cols_s = try b.asScalar()
             guard rows_s > 0, cols_s > 0, rows_s.truncatingRemainder(dividingBy: 1) == 0, cols_s.truncatingRemainder(dividingBy: 1) == 0 else { throw MathError.unsupportedOperation(op: "randm", typeA: "dimensions must be positive integers", typeB: nil) }
