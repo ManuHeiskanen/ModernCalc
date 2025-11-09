@@ -535,7 +535,7 @@ struct DisplayFormatter {
                 formattedString = String(format: "%.0f", value)
             } else {
                 let absValue = abs(value)
-                if absValue > 0 && (absValue < 1e-4 || absValue >= 1e15) {
+                if absValue > 0 && (absValue < 1e-2 || absValue >= 1e15) {
                     // Format scientific, then potentially replace 'e' with '×10^' later if needed
                      formattedString = String(format: "%.4g", value)
                 } else {
