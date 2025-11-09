@@ -596,13 +596,8 @@ struct DisplayFormatter {
             return nil
         }
 
-        // Avoid suggesting m^2 or m^3 directly if other units exist
         if dimensions == [.meter: 2.0] || dimensions == [.meter: 3.0] {
-             // Check if a specific area/volume unit matches EXACTLY first
-             if let exactMatch = UnitStore.units.first(where: { $0.value.dimensions == dimensions })?.value {
-                 return exactMatch
-             }
-             return nil // Otherwise, don't suggest anything, let it format as m^2 or m^3
+             return nil
         }
 
 
