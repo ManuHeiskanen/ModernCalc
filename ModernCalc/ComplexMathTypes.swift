@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Accelerate
 
 struct ComplexUnitValue: Equatable, Codable {
     var value: Complex
@@ -27,7 +28,6 @@ struct ComplexUnitValue: Equatable, Codable {
 
     static func * (lhs: ComplexUnitValue, rhs: ComplexUnitValue) -> ComplexUnitValue {
         let newValue = lhs.value * rhs.value
-        // Use tolerance instead of != 0
         let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { abs($0.value) > 1e-15 }
         return ComplexUnitValue(value: newValue, dimensions: newDimensions)
     }
@@ -35,7 +35,6 @@ struct ComplexUnitValue: Equatable, Codable {
     static func / (lhs: ComplexUnitValue, rhs: ComplexUnitValue) throws -> ComplexUnitValue {
         let newValue = try lhs.value / rhs.value
         let negatedRhsDimensions = rhs.dimensions.mapValues { -$0 }
-        // Use tolerance instead of != 0
         let newDimensions = lhs.dimensions.merging(negatedRhsDimensions, uniquingKeysWith: +).filter { abs($0.value) > 1e-15 }
         return ComplexUnitValue(value: newValue, dimensions: newDimensions)
     }
@@ -109,17 +108,31 @@ struct ComplexVector: Equatable, Codable {
     let dimensions: UnitDimension
     var dimension: Int { values.count }
     
-    // FIX 10: Explicitly type the default empty dictionary
     init(values: [Complex], dimensions: UnitDimension = [:] as UnitDimension) { self.values = values; self.dimensions = dimensions }
     init(from realVector: Vector) { self.values = realVector.values.map { Complex(real: $0, imaginary: 0) }; self.dimensions = realVector.dimensions }
     
     subscript(index: Int) -> Complex { return values[index] }
     
+    // Optimized Dot Product using BLAS
     func dot(with other: ComplexVector) throws -> (value: Complex, dimensions: UnitDimension) {
-        guard self.dimension == other.dimension else { throw MathError.dimensionMismatch(reason: "Complex vectors must have same dimensions for dot product.") }
-        let resultValue = zip(self.values, other.values).map { $0 * $1.conjugate() }.reduce(.zero, +)
+        guard self.dimension == other.dimension else {
+            throw MathError.dimensionMismatch(reason: "Complex vectors must have same dimensions for dot product.")
+        }
+        
+        var result = Complex.zero
+        let n = Int(self.dimension)
+        
+        // Use OpaquePointer casts to satisfy Swift compiler requirements for BLAS calls
+        self.values.withUnsafeBufferPointer { aPtr in
+            other.values.withUnsafeBufferPointer { bPtr in
+                withUnsafeMutablePointer(to: &result) { resultPtr in
+                    cblas_zdotc_sub(n, OpaquePointer(aPtr.baseAddress!), 1, OpaquePointer(bPtr.baseAddress!), 1, OpaquePointer(resultPtr))
+                }
+            }
+        }
+        
         let newDimensions = self.dimensions.merging(other.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
-        return (resultValue, newDimensions)
+        return (result, newDimensions)
     }
     
     func conjugateTranspose() -> ComplexMatrix {
@@ -136,7 +149,6 @@ struct ComplexVector: Equatable, Codable {
         return ComplexVector(values: newValues, dimensions: self.dimensions)
     }
     
-    // --- NEW: Slicing function ---
     func slice(indices: [Int]) throws -> MathValue {
         var newValues: [Complex] = []
         for index in indices {
@@ -169,6 +181,7 @@ struct ComplexVector: Equatable, Codable {
         return ComplexVector(values: zip(lhs.values, rhs.values).map(-), dimensions: lhs.dimensions)
     }
     
+    // Outer Product
     static func * (lhs: ComplexVector, rhs: ComplexVector) -> ComplexMatrix {
         let newValues = (0..<lhs.dimension).flatMap { i in (0..<rhs.dimension).map { j in lhs[i] * rhs[j] } }
         let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
@@ -196,7 +209,6 @@ struct ComplexMatrix: Equatable, Codable {
     let columns: Int
     let dimensions: UnitDimension
     
-    // FIX 11: Explicitly type the default empty dictionary
     init(values: [Complex], rows: Int, columns: Int, dimensions: UnitDimension = [:] as UnitDimension) { self.values = values; self.rows = rows; self.columns = columns; self.dimensions = dimensions }
     init(from realMatrix: Matrix) { self.values = realMatrix.values.map { Complex(real: $0, imaginary: 0) }; self.rows = realMatrix.rows; self.columns = realMatrix.columns; self.dimensions = realMatrix.dimensions }
     
@@ -214,45 +226,74 @@ struct ComplexMatrix: Equatable, Codable {
         return ComplexMatrix(values: newValues, rows: rows - 1, columns: columns - 1, dimensions: self.dimensions)
     }
 
+    // Optimized Determinant (LAPACK)
     func determinant() throws -> (value: Complex, dimensions: UnitDimension) {
-        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square to calculate determinant.") }
-        let detValue: Complex
-        if rows == 1 { detValue = self[0, 0] }
-        else if rows == 2 { detValue = (self[0, 0] * self[1, 1]) - (self[0, 1] * self[1, 0]) }
-        else {
-            detValue = try (0..<columns).map { c -> Complex in
-                let sign: Double = (c % 2 == 0) ? 1.0 : -1.0
-                return Complex(real: sign, imaginary: 0) * self[0, c] * (try submatrix(excludingRow: 0, excludingCol: c).determinant().value)
-            }.reduce(.zero, +)
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square.") }
+        
+        var a = values
+        var m = Int(rows)
+        var n = Int(columns)
+        var lda = m
+        var pivots = [Int](repeating: 0, count: rows)
+        var info: Int = 0
+        
+        // Using OpaquePointer to satisfy compiler with Complex type
+        a.withUnsafeMutableBufferPointer { buffer in
+            zgetrf_(&m, &n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, &info)
         }
-        // FIX 12 (User Error 5): Cast Int to Double for multiplication with Double exponent
+        
+        if info < 0 { throw MathError.solverFailed(reason: "Illegal value in LAPACK zgetrf") }
+        if info > 0 { return (.zero, self.dimensions.mapValues { $0 * Double(self.rows) }.filter { $0.value != 0 }) }
+        
+        var det = Complex(real: 1, imaginary: 0)
+        for i in 0..<rows {
+            det = det * a[i * columns + i]
+        }
+        
+        var swaps = 0
+        for i in 0..<rows {
+            if pivots[i] != Int(i + 1) { swaps += 1 }
+        }
+        if swaps % 2 != 0 {
+            det = det * Complex(real: -1, imaginary: 0)
+        }
+        
         let newDimensions = self.dimensions.mapValues { $0 * Double(self.rows) }.filter { $0.value != 0 }
-        return (detValue, newDimensions)
+        return (det, newDimensions)
     }
 
+    // Optimized Inverse (LAPACK)
     func inverse() throws -> ComplexMatrix {
-        let (detValue, _) = try determinant()
-        guard detValue != .zero else { throw MathError.unsupportedOperation(op: "inverse", typeA: "Singular Complex Matrix", typeB: nil) }
+        guard rows == columns else { throw MathError.dimensionMismatch(reason: "Matrix must be square.") }
         
-        let adjugate: ComplexMatrix
-        if rows == 1 {
-            // FIX 13: Explicitly type empty dictionary
-            adjugate = ComplexMatrix(values: [Complex(real: 1, imaginary: 0)], rows: 1, columns: 1, dimensions: [:] as UnitDimension)
-        } else {
-            let cofactors = try (0..<rows).flatMap { r -> [Complex] in
-                try (0..<columns).map { c -> Complex in
-                    let sign: Double = ((r + c) % 2 == 0) ? 1.0 : -1.0
-                    return Complex(real: sign, imaginary: 0) * (try submatrix(excludingRow: r, excludingCol: c).determinant().value)
-                }
-            }
-            // FIX 14 (User Error 6): Cast Int to Double for multiplication with Double exponent
-            let adjugateDimensions = self.dimensions.mapValues { $0 * Double(self.rows - 1) }.filter { $0.value != 0 }
-            adjugate = ComplexMatrix(values: cofactors, rows: rows, columns: columns, dimensions: adjugateDimensions).transpose()
+        var a = values
+        var m = Int(rows)
+        var n = Int(columns)
+        var lda = m
+        var pivots = [Int](repeating: 0, count: rows)
+        var info: Int = 0
+        
+        // LU Factorization
+        a.withUnsafeMutableBufferPointer { buffer in
+             zgetrf_(&m, &n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, &info)
         }
         
-        let inverseValues = try adjugate.values.map { try $0 / detValue }
-        let inverseDimensions = self.dimensions.mapValues { -$0 }.filter { $0.value != 0 }
-        return ComplexMatrix(values: inverseValues, rows: rows, columns: columns, dimensions: inverseDimensions)
+        if info != 0 { throw MathError.unsupportedOperation(op: "inverse", typeA: "Singular Complex Matrix", typeB: nil) }
+        
+        // Inverse Calculation
+        var work = [Complex](repeating: .zero, count: rows * rows)
+        var lwork = Int(rows * rows)
+        
+        a.withUnsafeMutableBufferPointer { buffer in
+            work.withUnsafeMutableBufferPointer { workPtr in
+                 zgetri_(&n, OpaquePointer(buffer.baseAddress!), &lda, &pivots, OpaquePointer(workPtr.baseAddress!), &lwork, &info)
+            }
+        }
+        
+        if info != 0 { throw MathError.solverFailed(reason: "Complex Inversion failed") }
+        
+        let newDimensions = self.dimensions.mapValues { -$0 }.filter { $0.value != 0 }
+        return ComplexMatrix(values: a, rows: rows, columns: columns, dimensions: newDimensions)
     }
     
     func transpose() -> ComplexMatrix {
@@ -273,7 +314,6 @@ struct ComplexMatrix: Equatable, Codable {
         return (traceValue, self.dimensions)
     }
     
-    // --- CORRECTED: Slicing function logic ---
     func slice(rowIndices: [Int], colIndices: [Int]) throws -> MathValue {
         var newValues: [Complex] = []
         for r in rowIndices {
@@ -310,13 +350,45 @@ struct ComplexMatrix: Equatable, Codable {
         guard lhs.dimensions == rhs.dimensions else { throw MathError.dimensionMismatch(reason: "Complex matrices must have the same units for subtraction.") }
         return ComplexMatrix(values: zip(lhs.values, rhs.values).map(-), rows: lhs.rows, columns: lhs.columns, dimensions: lhs.dimensions)
     }
+
+    // Optimized Matrix Multiplication (BLAS)
     static func * (lhs: ComplexMatrix, rhs: ComplexMatrix) throws -> ComplexMatrix {
         guard lhs.columns == rhs.rows else { throw MathError.dimensionMismatch(reason: "For A*B, columns of A must equal rows of B.") }
-        var newValues = [Complex](repeating: .zero, count: lhs.rows * rhs.columns)
-        for i in 0..<lhs.rows { for j in 0..<rhs.columns { newValues[i * rhs.columns + j] = (0..<lhs.columns).map { k in lhs[i, k] * rhs[k, j] }.reduce(.zero, +) } }
+        
+        let m = Int(lhs.rows)
+        let n = Int(rhs.columns)
+        let k = Int(lhs.columns)
+        
+        var c = [Complex](repeating: .zero, count: Int(m * n))
+        
+        let alpha = [Complex(real: 1, imaginary: 0)]
+        let beta = [Complex(real: 0, imaginary: 0)]
+        
+        // Use OpaquePointer casts for cblas_zgemm
+        lhs.values.withUnsafeBufferPointer { aPtr in
+            rhs.values.withUnsafeBufferPointer { bPtr in
+                c.withUnsafeMutableBufferPointer { cPtr in
+                    alpha.withUnsafeBufferPointer { alphaPtr in
+                        beta.withUnsafeBufferPointer { betaPtr in
+                            cblas_zgemm(
+                                CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                                Int(m), Int(n), Int(k),
+                                OpaquePointer(alphaPtr.baseAddress!),
+                                OpaquePointer(aPtr.baseAddress!), Int(k),
+                                OpaquePointer(bPtr.baseAddress!), Int(n),
+                                OpaquePointer(betaPtr.baseAddress!),
+                                OpaquePointer(cPtr.baseAddress!), Int(n)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
         let newDimensions = lhs.dimensions.merging(rhs.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
-        return ComplexMatrix(values: newValues, rows: lhs.rows, columns: rhs.columns, dimensions: newDimensions)
+        return ComplexMatrix(values: c, rows: Int(m), columns: Int(n), dimensions: newDimensions)
     }
+    
     static func * (lhs: ComplexMatrix, rhs: ComplexVector) throws -> ComplexVector {
         guard lhs.columns == rhs.dimension else { throw MathError.dimensionMismatch(reason: "For M*v, columns of M must equal dimension of v.") }
         let newValues = (0..<lhs.rows).map { i in (0..<lhs.columns).map { j in lhs[i, j] * rhs[j] }.reduce(.zero, +) }
