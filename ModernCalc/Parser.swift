@@ -245,7 +245,7 @@ class Parser {
                 }
                 
                 if op.rawValue == "in" {
-                    let targetUnit = try parsePrimary()
+                    let targetUnit = try parseExpression(currentPrecedence: precedence)
                     left = ConversionNode(valueNode: left, targetUnitNode: targetUnit)
                 } else if op.rawValue.hasSuffix("@") {
                      try consume(.paren("("), orThrow: .unexpectedToken(token: peek(), expected: "'(' for indexed operation"))

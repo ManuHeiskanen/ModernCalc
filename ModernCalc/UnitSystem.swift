@@ -189,6 +189,7 @@ struct UnitStore {
         // Speed
         unitMap["mph"] = UnitDefinition(symbol: "mph", dimensions: [.meter: 1, .second: -1], conversionFactor: 0.44704) // Mile per Hour
         unitMap["knot"] = UnitDefinition(symbol: "knot", dimensions: [.meter: 1, .second: -1], conversionFactor: 0.514444) // Knot
+        unitMap["km/h"] = UnitDefinition(symbol: "km/h", dimensions: [.meter: 1, .second: -1], conversionFactor: 1000.0 / 3600.0) // Kilometer per Hour
         
 
         // These don't seem to work for other units than mass, volyme and length units

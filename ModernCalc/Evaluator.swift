@@ -107,13 +107,26 @@ struct Evaluator {
                 throw MathError.typeMismatch(expected: "A target unit (e.g., .cm)", found: targetResult.typeName)
             }
 
-            // Helper to recursively find the base unit symbol from the AST (e.g., 'm' from '.m^3')
             func findBaseSymbol(node: ExpressionNode) -> String? {
                 if let unitNode = node as? UnitAndExponentNode {
                     return unitNode.unitSymbol
                 }
                 if let binaryNode = node as? BinaryOpNode {
-                    // This handles implicit multiplication like `1 * .m^3`
+                    // Handle Division (e.g., .km / .h -> "km/h")
+                    if binaryNode.op.rawValue == "/" || binaryNode.op.rawValue == "÷" {
+                        if let left = findBaseSymbol(node: binaryNode.left),
+                           let right = findBaseSymbol(node: binaryNode.right) {
+                            return "\(left)/\(right)"
+                        }
+                    }
+                    // Handle Multiplication (e.g., .N * .m)
+                    if binaryNode.op.rawValue == "*" || binaryNode.op.rawValue == "·" {
+                         if let left = findBaseSymbol(node: binaryNode.left),
+                            let right = findBaseSymbol(node: binaryNode.right) {
+                             return "\(left)·\(right)"
+                         }
+                    }
+                    // Fallback for implicit multiplication (e.g. 1 * .m)
                     return findBaseSymbol(node: binaryNode.right)
                 }
                 return nil
