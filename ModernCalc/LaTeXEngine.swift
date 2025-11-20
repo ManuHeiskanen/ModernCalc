@@ -75,29 +75,7 @@ struct LaTeXEngine {
             return latex
 
         case let constantNode as ConstantNode:
-            let name = constantNode.name
-            // Use proper LaTeX command for pi.
-            if name == "pi" { return "\\pi" }
-
-            // Handle subscripts denoted by underscore.
-            if let underscoreIndex = name.firstIndex(of: "_") {
-                let base = name[..<underscoreIndex]
-                let subscriptPart = name[name.index(after: underscoreIndex)...]
-
-                // If the part after the underscore is longer than a single character,
-                // it must be wrapped in curly braces for correct LaTeX rendering.
-                if subscriptPart.count > 1 {
-                    // Also, handle any other special characters within the base or subscript.
-                    let formattedBase = String(base).replacingOccurrences(of: "π", with: "\\pi")
-                    let formattedSubscript = String(subscriptPart).replacingOccurrences(of: "π", with: "\\pi")
-                    return "\(formattedBase)_{\(formattedSubscript)}"
-                } else {
-                    return "\(String(base))_{\(String(subscriptPart))}"
-                }
-            }
-
-            // Fallback for names without special subscript handling.
-            return name.replacingOccurrences(of: "π", with: "\\pi")
+            return formatIdentifier(constantNode.name)
 
         case let unaryNode as UnaryOpNode:
             let child = formatNode(unaryNode.child, evaluator: evaluator, settings: settings)
@@ -145,8 +123,8 @@ struct LaTeXEngine {
                 let rightIsParenExpr = binaryNode.right is BinaryOpNode // Check if right side starts with '(' essentially
 
                 if (leftIsNumber || leftIsParen) && (rightIsIdentifier || rightIsFunc || rightIsParenExpr) {
-                     // Check if left is just a number and right starts with a sign, avoid merging e.g. 2 * -3 -> 2-3
-                    if let numNode = binaryNode.left as? NumberNode,
+                    // Check if left is just a number and right starts with a sign, avoid merging e.g. 2 * -3 -> 2-3
+                    if binaryNode.left is NumberNode,
                        let unaryNode = binaryNode.right as? UnaryOpNode,
                        unaryNode.op.rawValue == "-" {
                          return "\(left) \\cdot \(right)"
@@ -177,7 +155,8 @@ struct LaTeXEngine {
 
         case let assignmentNode as AssignmentNode:
             let expr = formatNode(assignmentNode.expression, evaluator: evaluator, settings: settings)
-            return "\(assignmentNode.name) := \(expr)"
+            // FIX Issue 3: Format identifier properly to handle subscripts (C_outmin -> C_{outmin})
+            return "\(formatIdentifier(assignmentNode.name)) := \(expr)"
 
         case let funcDefNode as FunctionDefinitionNode:
             let params = funcDefNode.parameterNames.joined(separator: ", ")
@@ -861,6 +840,25 @@ struct LaTeXEngine {
         }
         return "\\left( \(text) \\right)"
     }
+    
+    // FIX Issue 3: Added helper method to correctly format identifiers, handling subscripts (e.g. C_outmin -> C_{outmin})
+    private static func formatIdentifier(_ name: String) -> String {
+        if name == "pi" { return "\\pi" }
+
+        if let underscoreIndex = name.firstIndex(of: "_") {
+            let base = name[..<underscoreIndex]
+            let subscriptPart = name[name.index(after: underscoreIndex)...]
+
+            let formattedBase = String(base).replacingOccurrences(of: "π", with: "\\pi")
+            let formattedSubscript = String(subscriptPart).replacingOccurrences(of: "π", with: "\\pi")
+            
+            // If the subscript part is more than one character, wrap it in braces for correct LaTeX rendering
+            // Even for single chars, wrapping is safe, but logic here prioritizes consistency.
+            return "\(formattedBase)_{\(formattedSubscript)}"
+        }
+
+        return name.replacingOccurrences(of: "π", with: "\\pi")
+    }
 
     private static func needsParenthesesForFactorial(_ node: ExpressionNode) -> Bool {
         // Factorial needs parentheses for binary ops, unary ops (except simple negation of number/constant), and function calls.
@@ -872,4 +870,3 @@ struct LaTeXEngine {
         return false
     }
 }
-
