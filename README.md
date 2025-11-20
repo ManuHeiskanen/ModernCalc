@@ -1,4 +1,5 @@
 # ModernCalc
+![alt text]([https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png](https://github.com/MHeis22/ModernCalc/blob/main/ModernCalc/Assets.xcassets/DemoImg.png) "Demo Image")
 
 **ModernCalc** is an intuitive and powerful mathematical environment for **macOS**, designed for students, engineers, and scientists.  
 
