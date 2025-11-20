@@ -77,7 +77,9 @@ class CalculatorViewModel {
     private var lastSuccessfulValue: MathValue?
     private var lastUsedAngleFlag: Bool = false
     private var debounceTask: Task<Void, Never>?
-    private let navigationManager = NavigationManager()
+    
+    private var navigationManager = NavigationManager()
+    
     private let ansVariable = "ans"
     
     private var lastCalculatedExpression: String?

@@ -611,7 +611,7 @@ struct LaTeXEngine {
         let den = formatPart(negative)
 
         if den.isEmpty {
-            return num.isEmpty ? "1" : num // Return "1" if dimensionless
+            return num // Return "1" if dimensionless
         }
         if num.isEmpty {
             // If denominator has only one term with sqrt, format nicely

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 
 enum SelectionPart: Equatable {
@@ -14,12 +13,13 @@ enum SelectionPart: Equatable {
     case result(index: Int)
 }
 
-@MainActor
-class NavigationManager: ObservableObject {
-    @Published var selectedHistoryId: UUID? = nil
-    @Published var selectedPart: SelectionPart = .result(index: 0)
+// CHANGED: Converted from class to struct to ensure state mutations trigger view updates
+struct NavigationManager {
+    var selectedHistoryId: UUID? = nil
+    var selectedPart: SelectionPart = .result(index: 0)
 
-    func handleKeyPress(keys: Set<KeyEquivalent>, history: [Calculation], viewModel: CalculatorViewModel) -> String? {
+    // CHANGED: Added 'mutating' keyword
+    @MainActor mutating func handleKeyPress(keys: Set<KeyEquivalent>, history: [Calculation], viewModel: CalculatorViewModel) -> String? {
         guard !history.isEmpty else { return nil }
         
         let currentIndex = selectedHistoryId.flatMap { id in history.firstIndex(where: { $0.id == id }) }
@@ -124,7 +124,8 @@ class NavigationManager: ObservableObject {
         }
     }
 
-    func resetSelection() {
+    // CHANGED: Added 'mutating' keyword
+    mutating func resetSelection() {
         selectedHistoryId = nil
         selectedPart = .result(index: 0)
     }
