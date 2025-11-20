@@ -1,36 +1,93 @@
+//
+//  BenchmarkSuite.swift
+//  ModernCalc
+//
+//  Created by Manu Heiskanen on 20.11.2025.
+//
+
+
 import Foundation
 
 class BenchmarkSuite {
     
+    /// Runs all registered benchmarks with multiple iterations and averaging.
     static func runAll() async {
-        print("----------- STARTING BENCHMARKS -----------")
-        await benchmarkParser()
-        await benchmarkEvaluatorLoop()
-        await benchmarkMatrixOperations()
-        await benchmarkPlottingSimulation()
-        print("-------------------------------------------")
+        print("----------- STARTING BENCHMARKS (Average of 5 runs) -----------")
+        
+        await measure(name: "Parsing", runs: 5) {
+            await benchmarkParser()
+        }
+        
+        await measure(name: "Evaluation Loop (Tree-Walk)", runs: 5) {
+            await benchmarkEvaluatorLoop()
+        }
+        
+        await measure(name: "Matrix Multiplication (100x100)", runs: 5) {
+            await benchmarkMatrixOperations()
+        }
+        
+        await measure(name: "Large Vector Ops (1,000,000 elements)", runs: 5) {
+            await benchmarkLargeVectorOps()
+        }
+        
+        
+        await measure(name: "Linear System Solve (100x100)", runs: 5) {
+            await benchmarkLinearSolve()
+        }
+        
+        await measure(name: "Eigenvalue Decomposition (50x50)", runs: 5) {
+            await benchmarkEigenvalue()
+        }
+        
+        await measure(name: "Numerical Integration", runs: 5) {
+            await benchmarkIntegration()
+        }
+        
+        
+        await measure(name: "FFT (Power Spectrum - 2048 pts)", runs: 5) {
+            await benchmarkFFT()
+        }
+        
+        await measure(name: "Matrix Inversion (100x100)", runs: 5) {
+            await benchmarkMatrixInversion()
+        }
+        
+        print("---------------------------------------------------------------")
     }
     
+    static func measure(name: String, runs: Int, block: () async -> Void) async {
+        print("\n[\(name)]")
+        var totalTime: Double = 0
+        
+        // Warmup run
+        await block()
+        
+        for i in 1...runs {
+            let start = CFAbsoluteTimeGetCurrent()
+            await block()
+            let duration = CFAbsoluteTimeGetCurrent() - start
+            totalTime += duration
+            print("    Run \(i): \(String(format: "%.4f", duration))s")
+        }
+        
+        let avg = totalTime / Double(runs)
+        print("    >> Average: \(String(format: "%.4f", avg))s")
+    }
+    
+    // MARK: - Benchmarks
+    
     static func benchmarkParser() async {
-        print("\n[1] Parsing Benchmark (10,000 iterations)")
         let expression = "sin(x) * (x^2 + 2*x + 1) / (cos(x) + 2)"
         let lexer = Lexer(input: expression)
         let tokens = lexer.tokenize()
-        
-        let start = CFAbsoluteTimeGetCurrent()
         
         for _ in 0..<10_000 {
             let parser = Parser(tokens: tokens)
             _ = try? parser.parse()
         }
-        
-        let duration = CFAbsoluteTimeGetCurrent() - start
-        print("    Time: \(String(format: "%.4f", duration))s")
     }
     
     static func benchmarkEvaluatorLoop() async {
-        print("\n[2] Evaluation Loop (Tree-Walk) (50,000 iterations)")
-        // Simulates evaluating a function repeatedly (like in a loop or integral)
         let expression = "x^2 + sin(x) * cos(x)"
         let lexer = Lexer(input: expression)
         let tokens = lexer.tokenize()
@@ -41,22 +98,15 @@ class BenchmarkSuite {
         var variables: [String: MathValue] = ["x": .dimensionless(0)]
         var functions: [String: FunctionDefinitionNode] = [:]
         
-        let start = CFAbsoluteTimeGetCurrent()
-        
         for i in 0..<50_000 {
             variables["x"] = .dimensionless(Double(i) * 0.01)
-            // We simulate the overhead of passing variables inout
             _ = try? evaluator.evaluate(node: node, variables: &variables, functions: &functions, angleMode: .radians)
         }
-        
-        let duration = CFAbsoluteTimeGetCurrent() - start
-        print("    Time: \(String(format: "%.4f", duration))s")
     }
     
     static func benchmarkMatrixOperations() async {
-        print("\n[3] Matrix Multiplication (50x50) (10 iterations)")
-        // Creating two 50x50 matrices manually
-        let size = 50
+        // Increased to 100x100 to really stress the BLAS implementation
+        let size = 100
         let values = Array(repeating: 1.5, count: size * size)
         let matrixA = Matrix(values: values, rows: size, columns: size)
         let matrixB = Matrix(values: values, rows: size, columns: size)
@@ -67,42 +117,114 @@ class BenchmarkSuite {
         let evaluator = Evaluator()
         let opToken = Token(type: .op("*"), rawValue: "*")
         
-        let start = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<50 {
+            _ = try? evaluator.evaluateBinaryOperation(op: opToken, left: valA, right: valB)
+        }
+    }
+    
+    static func benchmarkLargeVectorOps() async {
+        // 1 Million elements. vDSP should crush this vs standard map.
+        let size = 1_000_000
+        let values = Array(repeating: 1.001, count: size)
+        let v1 = Vector(values: values)
+        let v2 = Vector(values: values)
+        
+        let valA = MathValue.vector(v1)
+        let valB = MathValue.vector(v2)
+        let evaluator = Evaluator()
+        let opToken = Token(type: .op("+"), rawValue: "+") // Vector Addition
+        let opToken2 = Token(type: .op("*"), rawValue: ".*") // Element-wise Mult
         
         for _ in 0..<10 {
             _ = try? evaluator.evaluateBinaryOperation(op: opToken, left: valA, right: valB)
+            _ = try? evaluator.evaluateBinaryOperation(op: opToken2, left: valA, right: valB)
         }
-        
-        let duration = CFAbsoluteTimeGetCurrent() - start
-        print("    Time: \(String(format: "%.4f", duration))s")
     }
     
-    static func benchmarkPlottingSimulation() async {
-        print("\n[4] Plotting Data Generation Overhead")
-        // This tests the specific overhead found in EvaluatorAdvancedMath.swift
-        // where variables are copied for every data point in concurrentPerform.
+    static func benchmarkMatrixInversion() async {
+        // 100x100 Inversion. Previously impossible/slow. Now fast via LAPACK.
+        let size = 100
+        var values = [Double]()
+        for i in 0..<size {
+            for j in 0..<size {
+                values.append(i == j ? Double(size) : Double.random(in: 0...1))
+            }
+        }
+        let m = Matrix(values: values, rows: size, columns: size)
         
-        let iterations = 100_000
-        let variables: [String: MathValue] = [
-            "a": .dimensionless(1), "b": .dimensionless(2),
-            "c": .dimensionless(3), "d": .dimensionless(4),
-            "x": .dimensionless(0)
-        ]
-        
-        let start = CFAbsoluteTimeGetCurrent()
-        
-        // Simulating the logic inside evaluatePlot's concurrentPerform
-        DispatchQueue.concurrentPerform(iterations: iterations) { i in
-            // The critical performance hit in your current code:
-            // Copying the dictionary for every single pixel/point
-            var localVars = variables
-            localVars["x"] = .dimensionless(Double(i))
-            
-            // Simulate a tiny lookup cost
-            _ = localVars["a"]
+        for _ in 0..<20 {
+            _ = try? m.inverse()
+        }
+    }
+
+    static func benchmarkLinearSolve() async {
+        let size = 100
+        var aValues = [Double]()
+        for i in 0..<size {
+            for j in 0..<size {
+                aValues.append(i == j ? Double.random(in: 50...100) : Double.random(in: 0...1))
+            }
         }
         
-        let duration = CFAbsoluteTimeGetCurrent() - start
-        print("    Time: \(String(format: "%.4f", duration))s (Simulating \(iterations) points)")
+        let matrixA = Matrix(values: aValues, rows: size, columns: size)
+        let vectorB = Vector(values: (0..<size).map { _ in Double.random(in: 0...10) })
+        
+        let evaluator = Evaluator()
+        var variables: [String: MathValue] = ["A": .matrix(matrixA), "b": .vector(vectorB)]
+        var functions: [String: FunctionDefinitionNode] = [:]
+        
+        let expression = "linsolve(A, b)"
+        let lexer = Lexer(input: expression)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens: tokens)
+        let node = try! parser.parse()
+
+        for _ in 0..<50 {
+            _ = try? evaluator.evaluate(node: node, variables: &variables, functions: &functions, angleMode: .radians)
+        }
+    }
+    
+    static func benchmarkEigenvalue() async {
+        let size = 50
+        var values = [Double]()
+        for _ in 0..<(size*size) { values.append(Double.random(in: -1...1)) }
+        let m = Matrix(values: values, rows: size, columns: size)
+        
+        let evaluator = Evaluator()
+        for _ in 0..<20 {
+            _ = try? evaluator.performEigenvalueDecomposition(matrix: m)
+        }
+    }
+    
+    static func benchmarkIntegration() async {
+        let expression = "integral(sin(x) * x^2, x, 0, 10)"
+        let lexer = Lexer(input: expression)
+        let tokens = lexer.tokenize()
+        let parser = Parser(tokens: tokens)
+        let node = try! parser.parse()
+        
+        let evaluator = Evaluator()
+        var variables: [String: MathValue] = [:]
+        var functions: [String: FunctionDefinitionNode] = [:]
+        
+        for _ in 0..<100 {
+             _ = try? evaluator.evaluate(node: node, variables: &variables, functions: &functions, angleMode: .radians)
+        }
+    }
+    
+    static func benchmarkFFT() async {
+        let size = 2048
+        let vector = Vector(values: (0..<size).map { _ in Double.random(in: -1...1) })
+        let evaluator = Evaluator()
+        var variables: [String: MathValue] = ["v": .vector(vector)]
+        var functions: [String: FunctionDefinitionNode] = [:]
+        let expression = "powerspectrum(v, 44100)"
+        let lexer = Lexer(input: expression)
+        let parser = Parser(tokens: lexer.tokenize())
+        let node = try! parser.parse()
+        
+        for _ in 0..<100 {
+            _ = try? evaluator.evaluate(node: node, variables: &variables, functions: &functions, angleMode: .radians)
+        }
     }
 }

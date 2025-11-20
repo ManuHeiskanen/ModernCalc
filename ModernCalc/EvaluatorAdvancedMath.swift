@@ -80,36 +80,44 @@ extension Evaluator {
         return (.vector(Vector(values: partialDerivatives)), overallUsedAngle)
     }
 
-    // --- MODIFIED: Function now accepts and returns UnitValues ---
-    func adaptiveSimpson(f: (UnitValue) throws -> UnitValue, a: UnitValue, b: UnitValue, tolerance: Double) throws -> UnitValue {
-        let c = try (a + b) / 2.0; let h = try b - a
+    // --- OPTIMIZATION: Adaptive Simpson using Scalar Doubles ---
+    // Operating on Double directly avoids overhead of UnitValue dictionary merges in recursion.
+    // ADDED: maxDepth to prevent stack overflow/SIGTERM
+    func adaptiveSimpsonScalar(f: (Double) throws -> Double, a: Double, b: Double, tolerance: Double, maxDepth: Int = 50) throws -> Double {
+        let c = (a + b) / 2.0
+        let h = b - a
         let fa = try f(a); let fb = try f(b); let fc = try f(c)
-        let s = (h / 6.0) * (try (try fa + (fc * 4.0)) + fb)
-        return try _adaptiveSimpsonRecursive(f: f, a: a, b: b, fa: fa, fb: fb, fc: fc, whole: s, tolerance: tolerance)
+        let s = (h / 6.0) * (fa + 4.0 * fc + fb)
+        return try _adaptiveSimpsonRecursiveScalar(f: f, a: a, b: b, fa: fa, fb: fb, fc: fc, whole: s, tolerance: tolerance, depth: maxDepth)
     }
 
-    // --- MODIFIED: Helper now accepts and returns UnitValues ---
-    private func _adaptiveSimpsonRecursive(f: (UnitValue) throws -> UnitValue, a: UnitValue, b: UnitValue, fa: UnitValue, fb: UnitValue, fc: UnitValue, whole: UnitValue, tolerance: Double) throws -> UnitValue {
-        let c = try (a + b) / 2.0;
-        let d = try (a + c) / 2.0;
-        let e = try (c + b) / 2.0
+    private func _adaptiveSimpsonRecursiveScalar(f: (Double) throws -> Double, a: Double, b: Double, fa: Double, fb: Double, fc: Double, whole: Double, tolerance: Double, depth: Int) throws -> Double {
+        let c = (a + b) / 2.0
+        let d = (a + c) / 2.0
+        let e = (c + b) / 2.0
         let fd = try f(d); let fe = try f(e)
         
-        let left_h = try c - a
-        let right_h = try b - c
+        let left_h = c - a
+        let right_h = b - c
         
-        let left = (left_h / 6.0) * (try (try fa + (fd * 4.0)) + fc)
-        let right = (right_h / 6.0) * (try (try fc + (fe * 4.0)) + fb)
+        let left = (left_h / 6.0) * (fa + 4.0 * fd + fc)
+        let right = (right_h / 6.0) * (fc + 4.0 * fe + fb)
 
-        let combined = try left + right
-        if abs((try combined - whole).value) <= 15.0 * tolerance {
-            return try combined + ((try combined - whole) / 15.0)
+        let combined = left + right
+        
+        // Check recursion limit first to prevent crash
+        if depth <= 0 {
+             return combined + (combined - whole) / 15.0
+        }
+
+        if abs(combined - whole) <= 15.0 * tolerance {
+            return combined + (combined - whole) / 15.0
         }
         
-        let leftHalf = try _adaptiveSimpsonRecursive(f: f, a: a, b: c, fa: fa, fb: fc, fc: fd, whole: left, tolerance: tolerance / 2.0)
-        let rightHalf = try _adaptiveSimpsonRecursive(f: f, a: c, b: b, fa: fc, fb: fb, fc: fe, whole: right, tolerance: tolerance / 2.0)
+        let leftHalf = try _adaptiveSimpsonRecursiveScalar(f: f, a: a, b: c, fa: fa, fb: fc, fc: fd, whole: left, tolerance: tolerance / 2.0, depth: depth - 1)
+        let rightHalf = try _adaptiveSimpsonRecursiveScalar(f: f, a: c, b: b, fa: fc, fb: fb, fc: fe, whole: right, tolerance: tolerance / 2.0, depth: depth - 1)
         
-        return try leftHalf + rightHalf
+        return leftHalf + rightHalf
     }
     
     // MARK: - Plotting Functions
@@ -624,7 +632,7 @@ extension Evaluator {
         
         if dataPoints.isEmpty { throw MathError.plotError(reason: "Could not generate any data points for the area plot.") }
         
-        // --- NEW: Calculate Area using Integral Function ---
+        // --- OPTIMIZED: Calculate Area using Scalar Integral Function ---
         let bodyForIntegration: ExpressionNode
         if let body2 = body2 {
             bodyForIntegration = BinaryOpNode(op: Token(type: .op("-"), rawValue: "-"), left: body1, right: body2)
@@ -632,26 +640,31 @@ extension Evaluator {
             bodyForIntegration = body1
         }
         
-        let f: (UnitValue) throws -> UnitValue = { x_unit in
-            let (value, _) = try self.evaluateWithTempVar(
-                node: bodyForIntegration,
-                varName: varName,
-                varValue: .unitValue(x_unit),
-                variables: &variables,
-                functions: &functions,
-                angleMode: .radians
-            )
-            
-            guard let resultUnit = value.asUnitValue() else {
-                throw MathError.typeMismatch(expected: "A numeric value from the function body", found: value.typeName)
-            }
-            return resultUnit
+        let capturedVariables = variables
+        let capturedFunctions = functions
+        
+        let f: (Double) throws -> Double = { x_si in
+             var localVars = capturedVariables
+             var localFuncs = capturedFunctions
+             localVars[varName] = .unitValue(UnitValue(value: x_si, dimensions: xAxisDimension))
+             
+             let (value, _) = try self._evaluateSingle(node: bodyForIntegration, variables: &localVars, functions: &localFuncs, angleMode: .radians)
+             
+             switch value {
+             case .dimensionless(let d): return d
+             case .unitValue(let u): return u.value
+             default: throw MathError.typeMismatch(expected: "Numeric value", found: value.typeName)
+             }
         }
 
         let tolerance = 1e-7
-        let calculatedArea = try adaptiveSimpson(f: f, a: xMin, b: xMax, tolerance: tolerance)
+        let calculatedAreaScalar = try adaptiveSimpsonScalar(f: f, a: xMin.value, b: xMax.value, tolerance: tolerance)
 
-        // --- NEW: Format area result for display ---
+        // Calculate result dimensions: X unit * Y unit
+        let areaDimension = xAxisDimension.merging(yAxisDimension, uniquingKeysWith: +).filter { $0.value != 0 }
+        let calculatedArea = UnitValue(value: calculatedAreaScalar, dimensions: areaDimension)
+
+        // --- Format area result for display ---
         let areaValueString = String(format: "%.6g", calculatedArea.value)
         let unitPart = formatDimensionsForAxis(calculatedArea.dimensions, defaultLabel: "")
         var unitString = ""
@@ -933,4 +946,3 @@ extension MathValue {
         }
     }
 }
-

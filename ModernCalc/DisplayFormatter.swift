@@ -382,10 +382,10 @@ struct DisplayFormatter {
                 let rootsString = formattedRoots.joined(separator: ", ")
                 return "{ \(rootsString) }"
             }
-        case .eigenDecomposition(let eigenvectors, let eigenvalues):
+        case .eigenDecomposition(_, _):
             // Show simplified output in history
             return "Eigenvalue Decomposition (V, D)"
-        case .odeSolution(let time, let states):
+        case .odeSolution(_, _):
              // Show simplified output in history
             return "ODE Solution (T, Y)"
         }

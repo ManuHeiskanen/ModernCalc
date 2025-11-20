@@ -362,51 +362,73 @@ struct Evaluator {
             let result = try calculateNthDerivative(bodyNode: bodyNode, varName: varName, at: pointUnitValue, order: order, variables: &variables, functions: &functions, angleMode: angleMode)
             return (.unitValue(result), pointUsedAngle || bodyUsedAngle)
 
+        // --- OPTIMIZATION: Scalar Adaptive Simpson Integration ---
         case let integralNode as IntegralNode:
             let (lowerValue, lowerUsedAngle) = try _evaluateSingle(node: integralNode.lowerBound, variables: &variables, functions: &functions, angleMode: angleMode)
             let (upperValue, upperUsedAngle) = try _evaluateSingle(node: integralNode.upperBound, variables: &variables, functions: &functions, angleMode: angleMode)
 
-            let a: UnitValue, b: UnitValue
+            let a: Double, b: Double
+            let domainDimensions: UnitDimension
+            
             switch lowerValue {
-            case .dimensionless(let d): a = .dimensionless(d)
-            case .unitValue(let u): a = u
+            case .dimensionless(let d): a = d; domainDimensions = [:]
+            case .unitValue(let u): a = u.value; domainDimensions = u.dimensions
             default: throw MathError.typeMismatch(expected: "Scalar values for integral bounds", found: lowerValue.typeName)
             }
+            
             switch upperValue {
-            case .dimensionless(let d): b = .dimensionless(d)
-            case .unitValue(let u): b = u
+            case .dimensionless(let d): b = d
+                guard domainDimensions.isEmpty else { throw MathError.dimensionMismatch(reason: "Integral bounds must have the same units") }
+            case .unitValue(let u): b = u.value
+                guard u.dimensions == domainDimensions else { throw MathError.dimensionMismatch(reason: "Integral bounds must have the same units") }
             default: throw MathError.typeMismatch(expected: "Scalar values for integral bounds", found: upperValue.typeName)
             }
-            
-            guard a.dimensions == b.dimensions else {
-                throw MathError.dimensionMismatch(reason: "Integral bounds must have the same units")
-            }
 
-            var bodyUsedAngle = false
-            let f: (UnitValue) throws -> UnitValue = { x_unit in
-                let (value, f_usedAngle) = try self.evaluateWithTempVar(
-                    node: integralNode.body,
-                    varName: integralNode.variable.name,
-                    varValue: .unitValue(x_unit),
-                    variables: &variables,
-                    functions: &functions,
-                    angleMode: angleMode
-                )
-                bodyUsedAngle = bodyUsedAngle || f_usedAngle
-                
-                let resultUnit: UnitValue
-                switch value {
-                case .dimensionless(let d): resultUnit = .dimensionless(d)
-                case .unitValue(let u): resultUnit = u
-                default: throw MathError.typeMismatch(expected: "A value with units from integral body", found: value.typeName)
-                }
-                return resultUnit
+            // Dry run to determine range dimensions (y-axis units)
+            var tempVars = variables
+            tempVars[integralNode.variable.name] = .unitValue(UnitValue(value: a, dimensions: domainDimensions))
+            let (dryRunResult, bodyUsedAngle) = try _evaluateSingle(node: integralNode.body, variables: &tempVars, functions: &functions, angleMode: angleMode)
+            
+            let rangeDimensions: UnitDimension
+            switch dryRunResult {
+            case .dimensionless: rangeDimensions = [:]
+            case .unitValue(let u): rangeDimensions = u.dimensions
+            default: throw MathError.typeMismatch(expected: "Numeric value from integral body", found: dryRunResult.typeName)
             }
+            
+            let capturedVariables = variables
+            let capturedFunctions = functions
+            
+            // Construct optimized scalar function closure
+            let f: (Double) throws -> Double = { x in
+                var localVars = capturedVariables
+                var localFuncs = capturedFunctions
+                // Inject the variable as a UnitValue (or dimensionless) based on bounds
+                if domainDimensions.isEmpty {
+                    localVars[integralNode.variable.name] = .dimensionless(x)
+                } else {
+                    localVars[integralNode.variable.name] = .unitValue(UnitValue(value: x, dimensions: domainDimensions))
+                }
                 
+                let (val, _) = try self._evaluateSingle(node: integralNode.body, variables: &localVars, functions: &localFuncs, angleMode: angleMode)
+                
+                // FIX: Allow both UnitValue and Dimensionless, returning the raw Double.
+                // We rely on the dry run (rangeDimensions) to handle unit logic.
+                switch val {
+                case .dimensionless(let d): return d
+                case .unitValue(let u): return u.value
+                default: throw MathError.typeMismatch(expected: "Numeric value", found: val.typeName)
+                }
+            }
+            
             let tolerance = 1e-7
-            let result = try adaptiveSimpson(f: f, a: a, b: b, tolerance: tolerance)
-                    
-            return (.unitValue(result), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
+            // Call the scalar optimized version
+            let scalarResult = try adaptiveSimpsonScalar(f: f, a: a, b: b, tolerance: tolerance)
+            
+            // Result unit = y-unit * x-unit
+            let resultDimensions = rangeDimensions.merging(domainDimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+            
+            return (.unitValue(UnitValue.create(value: scalarResult, dimensions: resultDimensions)), lowerUsedAngle || upperUsedAngle || bodyUsedAngle)
 
         case let primeNode as PrimeDerivativeNode:
             guard let userFunction = functions[primeNode.functionName] else {
