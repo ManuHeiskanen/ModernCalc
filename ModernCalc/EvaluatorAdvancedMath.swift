@@ -842,39 +842,49 @@ extension Evaluator {
 
 
 /// Solves a system of linear equations Ax = b using Gaussian elimination with partial pivoting.
+import Accelerate
+
+// Replace your existing solveLinearSystem function with this:
 func solveLinearSystem(A: Matrix, b: Vector) throws -> Vector {
-    guard A.rows == A.columns else { throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve") }
+    guard A.rows == A.columns else {
+        throw MathError.dimensionMismatch(reason: "Matrix A must be square for linsolve")
+    }
     let n = A.rows
-    guard b.dimension == n else { throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A") }
-
-    var augmentedMatrix: [[Double]] = (0..<n).map { i in (0..<n).map { A[i, $0] } + [b[i]] }
-
-    for i in 0..<n {
-        var maxRow = i
-        for k in (i + 1)..<n { if abs(augmentedMatrix[k][i]) > abs(augmentedMatrix[maxRow][i]) { maxRow = k } }
-        augmentedMatrix.swapAt(i, maxRow)
-
-        guard abs(augmentedMatrix[i][i]) > 1e-12 else {
-            throw MathError.unsupportedOperation(op: "linsolve", typeA: "Matrix is singular or nearly singular", typeB: nil)
-        }
-
-        for k in (i + 1)..<n {
-            let factor = augmentedMatrix[k][i] / augmentedMatrix[i][i]
-            augmentedMatrix[k][i] = 0
-            for j in (i + 1)...n { augmentedMatrix[k][j] -= factor * augmentedMatrix[i][j] }
-        }
+    guard b.dimension == n else {
+        throw MathError.dimensionMismatch(reason: "Dimension of vector b must match the rows of matrix A")
     }
 
-    var x = [Double](repeating: 0, count: n)
-    for i in (0..<n).reversed() {
-        let sum = (i + 1..<n).map { augmentedMatrix[i][$0] * x[$0] }.reduce(0, +)
-        x[i] = (augmentedMatrix[i][n] - sum) / augmentedMatrix[i][i]
-    }
+    // 1. Prepare memory.
+    // LAPACK expects Column-Major ordering.
+    // Your Matrix struct is likely Row-Major.
+    // Passing a Transposed Row-Major matrix is equivalent to passing a Column-Major matrix.
+    var aValues = A.transpose().values
+    var bValues = b.values
     
-    // Calculate result dimensions: units(x) = units(b) / units(A)
+    // 2. Prepare LAPACK variables
+    var N = Int(n)
+    var NRHS = Int(1) // Number of Right Hand Sides (1 because b is a vector)
+    var LDA = Int(n)  // Leading Dimension of A
+    var LDB = Int(n)  // Leading Dimension of B
+    var IPIV = [Int](repeating: 0, count: n) // Pivot indices
+    var INFO = Int(0)
+
+    // 3. Call dgesv_ (The underscore is required for the Swift interface to LAPACK)
+    // This solves Ax = b. The result 'x' overwrites 'bValues'.
+    dgesv_(&N, &NRHS, &aValues, &LDA, &IPIV, &bValues, &LDB, &INFO)
+
+    // 4. Error Handling
+    if INFO < 0 {
+        throw MathError.solverFailed(reason: "Illegal argument at index \(-INFO)")
+    } else if INFO > 0 {
+        throw MathError.unsupportedOperation(op: "linsolve", typeA: "Singular Matrix", typeB: nil)
+    }
+
+    // 5. Calculate units
+    // Result units = units(b) / units(A)
     let resultDimensions = b.dimensions.merging(A.dimensions.mapValues { -$0 }, uniquingKeysWith: +).filter { $0.value != 0 }
 
-    return Vector(values: x, dimensions: resultDimensions)
+    return Vector(values: bValues, dimensions: resultDimensions)
 }
 
 /// Performs a polynomial regression using the method of least squares.
