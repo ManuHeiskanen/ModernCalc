@@ -83,6 +83,10 @@ class CalculatorViewModel {
     private var lastCalculatedExpression: String?
     private var lastCalculatedAngleMode: AngleMode?
     
+    // FIX Issue 2: Store temporary state from live preview here, apply only on commit
+    private var candidateVariables: [String: MathValue]?
+    private var candidateFunctions: [String: FunctionDefinitionNode]?
+    
     let siPrefixes: Set<String>
     let operatorSymbols: [MathSymbol]
     let greekSymbols: [MathSymbol]
@@ -136,6 +140,8 @@ class CalculatorViewModel {
             self.lastCalculatedExpression = nil
             self.lastCalculatedAngleMode = nil
             self.livePreviewHeight = 60.0
+            self.candidateVariables = nil
+            self.candidateFunctions = nil
             return
         }
         
@@ -383,7 +389,8 @@ class CalculatorViewModel {
         
         let textBeforeParen = textBeforeCursor[..<parenIndex]
         
-        let pattern = "\\b([a-zA-Z_][a-zA-Z0-9_]*)$"
+        // FIX Issue 5: Removed \b from the regex to match functions preceded by numbers (e.g., 20sqrt)
+        let pattern = "([a-zA-Z_][a-zA-Z0-9_]*)$"
         if let range = textBeforeParen.range(of: pattern, options: .regularExpression),
            let function = builtinFunctions.first(where: { $0.name == textBeforeParen[range] }) {
             return "\(function.signature)\n\(function.description)"
@@ -413,8 +420,11 @@ class CalculatorViewModel {
             
             self.lastSuccessfulValue = value
             self.lastUsedAngleFlag = usedAngle
-            self.variables = tempVars
-            self.functions = tempFuncs
+            
+            // FIX Issue 2: Do NOT update permanent variables during live preview.
+            // Store them in candidate buffers instead.
+            self.candidateVariables = tempVars
+            self.candidateFunctions = tempFuncs
             
             let isSimpleVariableDefinition = expressionTree is AssignmentNode && ((expressionTree as! AssignmentNode).expression is NumberNode || (expressionTree as! AssignmentNode).expression is UnaryOpNode)
             
@@ -458,6 +468,8 @@ class CalculatorViewModel {
 
         } catch let error {
             self.lastSuccessfulValue = nil
+            self.candidateVariables = nil
+            self.candidateFunctions = nil
             
             let errorMessage = (error as? CustomStringConvertible)?.description ?? "An unknown error occurred."
             finalLiveHelpText = helpText ?? ""
@@ -541,6 +553,17 @@ class CalculatorViewModel {
                  }
                 return nil
             }
+            
+            // FIX Issue 2: Apply the candidate variables/functions now that the user has committed
+            if let newVars = self.candidateVariables {
+                self.variables = newVars
+            }
+            if let newFuncs = self.candidateFunctions {
+                self.functions = newFuncs
+            }
+            // Clear candidates
+            self.candidateVariables = nil
+            self.candidateFunctions = nil
             
             var plotDataToReturn: PlotData?
             let calcType: CalculationType
