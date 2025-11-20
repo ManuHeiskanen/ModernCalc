@@ -642,7 +642,10 @@ enum MathValue: Codable, Equatable {
     case triggerCSVImport
     case uncertain(UncertainValue)
     case roots([MathValue])
-    case eigenDecomposition(eigenvectors: Matrix, eigenvalues: Matrix)
+    
+    // FIX: Added 'indirect' to break recursion cycle
+    indirect case eigenDecomposition(eigenvectors: MathValue, eigenvalues: MathValue)
+    
     case odeSolution(time: Vector, states: Matrix)
 
     var typeName: String {
@@ -708,7 +711,7 @@ enum MathValue: Codable, Equatable {
         }
     }
     
-    // CODABLE IMPLEMENTATION (Boilerplate kept same as input to ensure compatibility)
+    // CODABLE IMPLEMENTATION
     enum CodingKeys: String, CodingKey { case type, value, slope, intercept, coefficients, plotData, eigenvectors, eigenvalues, time, states }
 
     func encode(to encoder: Encoder) throws {
@@ -767,7 +770,9 @@ enum MathValue: Codable, Equatable {
             if let doubleRoots = try? container.decode([Double].self, forKey: .value) { self = .roots(doubleRoots.map { .dimensionless($0) }) }
             else { self = .roots(try container.decode([MathValue].self, forKey: .value)) }
         case "eigenDecomposition":
-            let eigenvectors = try container.decode(Matrix.self, forKey: .eigenvectors); let eigenvalues = try container.decode(Matrix.self, forKey: .eigenvalues)
+            // FIX: Decode as MathValue.self, not Matrix.self
+            let eigenvectors = try container.decode(MathValue.self, forKey: .eigenvectors)
+            let eigenvalues = try container.decode(MathValue.self, forKey: .eigenvalues)
             self = .eigenDecomposition(eigenvectors: eigenvectors, eigenvalues: eigenvalues)
         case "odeSolution":
             let time = try container.decode(Vector.self, forKey: .time); let states = try container.decode(Matrix.self, forKey: .states)
@@ -784,7 +789,21 @@ enum MathValue: Codable, Equatable {
         case (.unitValue(let a), .unitValue(let b)): return a == b
         case (.vector(let a), .vector(let b)): return a == b
         case (.matrix(let a), .matrix(let b)): return a == b
-        // ... (rest of cases omitted for brevity, identical to input)
+        case (.tuple(let a), .tuple(let b)): return a == b
+        case (.functionDefinition(let a), .functionDefinition(let b)): return a == b
+        case (.complexVector(let a), .complexVector(let b)): return a == b
+        case (.complexMatrix(let a), .complexMatrix(let b)): return a == b
+        case (.complexUnitValue(let a), .complexUnitValue(let b)): return a == b
+        case (.polar(let a), .polar(let b)): return a == b
+        case (.regressionResult(let s1, let i1), .regressionResult(let s2, let i2)): return s1 == s2 && i1 == i2
+        case (.polynomialFit(let a), .polynomialFit(let b)): return a == b
+        case (.plot(let a), .plot(let b)): return a == b
+        case (.triggerCSVImport, .triggerCSVImport): return true
+        case (.constant(let a), .constant(let b)): return a == b
+        case (.uncertain(let a), .uncertain(let b)): return a == b
+        case (.roots(let a), .roots(let b)): return a == b
+        case (.eigenDecomposition(let v1, let d1), .eigenDecomposition(let v2, let d2)): return v1 == v2 && d1 == d2
+        case (.odeSolution(let t1, let s1), .odeSolution(let t2, let s2)): return t1 == t2 && s1 == s2
         default: return false
         }
     }

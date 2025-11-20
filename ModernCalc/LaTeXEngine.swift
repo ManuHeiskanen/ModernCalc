@@ -481,8 +481,9 @@ struct LaTeXEngine {
                 return "\(variableName) \\approx \(rootsString)"
             }
         case .eigenDecomposition(let eigenvectors, let eigenvalues):
-            let vMatrix = formatMathValue(.matrix(eigenvectors), angleMode: angleMode, settings: settings, expression: nil)
-            let dMatrix = formatMathValue(.matrix(eigenvalues), angleMode: angleMode, settings: settings, expression: nil)
+            // FIX: Remove .matrix() wrapper, pass generic MathValue directly
+            let vMatrix = formatMathValue(eigenvectors, angleMode: angleMode, settings: settings, expression: nil)
+            let dMatrix = formatMathValue(eigenvalues, angleMode: angleMode, settings: settings, expression: nil)
             // Use bold for matrices
             return "\\begin{cases} \\mathbf{V} = \(vMatrix) \\\\ \\mathbf{D} = \(dMatrix) \\end{cases}"
         case .odeSolution(let time, let states):

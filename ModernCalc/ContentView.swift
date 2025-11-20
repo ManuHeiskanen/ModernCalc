@@ -674,7 +674,8 @@ struct CalculationResultView: View {
                     Text("V =")
                         .foregroundColor(.secondary)
                         .font(.system(size: 24, weight: .light, design: .monospaced))
-                    Text(viewModel.formatForHistory(.matrix(eigenvectors)))
+                    // FIX: Remove .matrix() wrapper
+                    Text(viewModel.formatForHistory(eigenvectors))
                         .font(.system(size: 24, weight: .light, design: .monospaced))
                         .multilineTextAlignment(.trailing)
                         .padding(.horizontal, 2).padding(.vertical, 2)
@@ -683,13 +684,15 @@ struct CalculationResultView: View {
                             withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 0)) : nil }
                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
-                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.matrix(eigenvectors))) }
+                        // FIX: Remove .matrix() wrapper
+                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(eigenvectors)) }
                 }
                 HStack {
                     Text("D =")
                         .foregroundColor(.secondary)
                         .font(.system(size: 24, weight: .light, design: .monospaced))
-                    Text(viewModel.formatForHistory(.matrix(eigenvalues)))
+                    // FIX: Remove .matrix() wrapper
+                    Text(viewModel.formatForHistory(eigenvalues))
                         .font(.system(size: 24, weight: .light, design: .monospaced))
                         .multilineTextAlignment(.trailing)
                         .padding(.horizontal, 2).padding(.vertical, 2)
@@ -698,7 +701,8 @@ struct CalculationResultView: View {
                             withAnimation(.easeOut(duration: 0.15)) { hoveredItem = isHovering ? (id: calculation.id, part: .result(index: 1)) : nil }
                             if isHovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                         }
-                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(.matrix(eigenvalues))) }
+                        // FIX: Remove .matrix() wrapper
+                        .onTapGesture { viewModel.insertTextAtCursor(viewModel.formatForParsing(eigenvalues)) }
                 }
             }
         } else if case .odeSolution(let time, let states) = calculation.result {

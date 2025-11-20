@@ -97,7 +97,8 @@ struct NavigationManager {
                         return viewModel.formatForParsing(values[index])
                     }
                 } else if case .eigenDecomposition(let eigenvectors, let eigenvalues) = selectedItem.result {
-                    let valueToParse = (index == 0) ? MathValue.matrix(eigenvectors) : MathValue.matrix(eigenvalues)
+                    // FIX: Remove MathValue.matrix() wrapper, pass directly
+                    let valueToParse = (index == 0) ? eigenvectors : eigenvalues
                     return viewModel.formatForParsing(valueToParse)
                 } else if case .odeSolution(let time, let states) = selectedItem.result {
                     let valueToParse = (index == 0) ? MathValue.vector(time) : MathValue.matrix(states)
