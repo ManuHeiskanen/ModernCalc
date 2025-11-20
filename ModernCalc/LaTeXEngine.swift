@@ -546,6 +546,14 @@ struct LaTeXEngine {
         if dimensions == [.meter: 2.0] || dimensions == [.meter: 3.0] {
              return nil
         }
+        
+        if dimensions == [.meter: 1, .second: -1] {
+            return nil
+        }
+        
+        if dimensions == [.meter: 1, . second: -2] {
+            return nil
+        }
 
         // Avoid suggesting m^2 or m^3 directly if other units exist
         if dimensions == [.meter: 2.0] || dimensions == [.meter: 3.0] {

@@ -599,6 +599,14 @@ struct DisplayFormatter {
         if dimensions == [.meter: 2.0] || dimensions == [.meter: 3.0] {
              return nil
         }
+        
+        if dimensions == [.meter: 1, .second: -1] {
+            return nil
+        }
+        
+        if dimensions == [.meter: 1, . second: -2] {
+            return nil
+        }
 
 
         let preferredSymbols = ["m", "s", "kg", "A", "K", "mol", "cd", "N", "J", "W", "Pa", "Hz", "C", "V", "Ohm", "F", "H", "T", "L", "eV", "cal", "bar", "g"]
