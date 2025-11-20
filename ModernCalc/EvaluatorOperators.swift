@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Accelerate // REQUIRED for vDSP
 
 /// This extension contains the logic for handling unary, binary, and indexed assignment operators.
 extension Evaluator {
@@ -108,7 +109,7 @@ extension Evaluator {
         case (.unitValue(let u), .vector(let v)): return .vector(try performVectorUnitOp(op.rawValue, v, u, reversed: true))
         case (.vector(let l), .vector(let r)):
             if op.rawValue == "*" {
-                return .matrix(l * r)
+                return .matrix(try performVectorOuterProduct(l, r))
             }
             return .vector(try performVectorVectorOp(op.rawValue, l, r))
             
@@ -119,15 +120,13 @@ extension Evaluator {
         case (.unitValue(let u), .matrix(let m)): return .matrix(try performMatrixUnitOp(op.rawValue, m, u, reversed: true))
         case (.matrix(let l), .matrix(let r)): return .matrix(try performMatrixMatrixOp(op.rawValue, l, r))
         case (.matrix(let m), .vector(let v)):
-             if op.rawValue == "*" { return .vector(try m * v) }
+             if op.rawValue == "*" {
+                 return .vector(try performMatrixVectorMultiplication(m, v))
+             }
              else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
         case (.vector(let v), .matrix(let m)):
             if op.rawValue == "*" {
-                if m.rows == 1 {
-                    let rowVector = Vector(values: m.values, dimensions: m.dimensions)
-                    return .matrix(v * rowVector)
-                }
-                return .vector(try v * m)
+                return .matrix(try performVectorMatrixMultiplication(v, m))
             }
             else { throw MathError.unsupportedOperation(op: op.rawValue, typeA: left.typeName, typeB: right.typeName) }
 
@@ -136,6 +135,7 @@ extension Evaluator {
         case (.complex(let c), .complexVector(let cv)): return .complexVector(try performComplexVectorComplexOp(op.rawValue, cv, c, reversed: true))
         case (.complexVector(let l), .complexVector(let r)):
             if op.rawValue == "*" {
+                // Complex outer product logic would go here if needed, defaulting to element-wise for now unless expanded
                 return .complexMatrix(l * r)
             }
             return .complexVector(try performCVectorCVectorOp(op.rawValue, l, r))
@@ -439,8 +439,102 @@ extension Evaluator {
         }
     }
     private func performMatrixMatrixOp(_ op: String, _ l: Matrix, _ r: Matrix) throws -> Matrix {
-        switch op { case "+": return try l + r; case "-": return try l - r; case "*": return try l * r; case ".*": return try l.hadamard(with: r); case "./": return try l.hadamardDivision(with: r); default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Matrix") }
+        switch op {
+        case "+": return try l + r
+        case "-": return try l - r
+        case "*":
+            // --- NEW ACCELERATE OPTIMIZATION ---
+            // Use vDSP_mmulD for blazing fast matrix multiplication
+            guard l.columns == r.rows else {
+                throw MathError.dimensionMismatch(reason: "Matrix multiplication requires columns of A (\(l.columns)) to match rows of B (\(r.rows)).")
+            }
+            
+            let m = vDSP_Length(l.rows)
+            let n = vDSP_Length(r.columns)
+            let p = vDSP_Length(l.columns)
+            
+            var resultValues = [Double](repeating: 0.0, count: Int(m * n))
+            
+            // C = A * B
+            // Note: vDSP uses row-major storage which matches our standard array layout
+            vDSP_mmulD(l.values, 1, r.values, 1, &resultValues, 1, m, n, p)
+            
+            // Calculate unit dimensions
+            let newDims = l.dimensions.merging(r.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+            
+            return Matrix(values: resultValues, rows: Int(m), columns: Int(n), dimensions: newDims)
+            
+        case ".*": return try l.hadamard(with: r)
+        case "./": return try l.hadamardDivision(with: r)
+        default: throw MathError.unsupportedOperation(op: op, typeA: "Matrix", typeB: "Matrix")
+        }
     }
+    
+    // Helper for Vector * Matrix (Row Vector * Matrix) using Accelerate
+    private func performVectorMatrixMultiplication(_ v: Vector, _ m: Matrix) throws -> Matrix {
+        guard v.dimension == m.rows else {
+            throw MathError.dimensionMismatch(reason: "Vector dimension (\(v.dimension)) must match Matrix rows (\(m.rows))")
+        }
+        
+        // Treat v as 1xP, m as PxN. Result is 1xN
+        let rows_v = vDSP_Length(1)
+        let cols_m = vDSP_Length(m.columns)
+        let common = vDSP_Length(v.dimension)
+        
+        var resultValues = [Double](repeating: 0.0, count: Int(cols_m))
+        
+        vDSP_mmulD(v.values, 1, m.values, 1, &resultValues, 1, rows_v, cols_m, common)
+        
+        let newDims = v.dimensions.merging(m.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+        
+        // Result is a row vector (1xN matrix)
+        return Matrix(values: resultValues, rows: 1, columns: Int(cols_m), dimensions: newDims)
+    }
+
+    // Helper for Matrix * Vector (Matrix * Column Vector) using Accelerate
+    private func performMatrixVectorMultiplication(_ m: Matrix, _ v: Vector) throws -> Vector {
+        guard m.columns == v.dimension else {
+            throw MathError.dimensionMismatch(reason: "Matrix columns (\(m.columns)) must match Vector dimension (\(v.dimension))")
+        }
+        
+        // Treat m as MxP, v as Px1. Result is Mx1
+        let rows_m = vDSP_Length(m.rows)
+        let cols_v = vDSP_Length(1)
+        let common = vDSP_Length(m.columns)
+        
+        var resultValues = [Double](repeating: 0.0, count: Int(rows_m))
+        
+        vDSP_mmulD(m.values, 1, v.values, 1, &resultValues, 1, rows_m, cols_v, common)
+        
+        let newDims = m.dimensions.merging(v.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+        
+        return Vector(values: resultValues, dimensions: newDims)
+    }
+    
+    // Helper for Vector * Vector (Outer Product) using Accelerate
+    private func performVectorOuterProduct(_ l: Vector, _ r: Vector) throws -> Matrix {
+        // l is Mx1, r is 1xN (implicitly transposed for outer product logic if user intends l * r)
+        // However, in typical math l*r for vectors is dot product if dimensions match.
+        // BUT, the `evaluateBinaryOperation` case for `vector * vector` already delegates `*` to this function
+        // expecting an OUTER product if user didn't call dot().
+        // Wait, standard `*` for vectors usually implies dot product or element-wise in many langs.
+        // In this calc, `.*` is hadamard. `*` usually implies matrix multiplication.
+        // If we treat L as Col Vector (Mx1) and R as Row Vector (1xN), we get MxN matrix.
+        
+        let m = vDSP_Length(l.dimension)
+        let n = vDSP_Length(r.dimension)
+        let common = vDSP_Length(1) // 1 col in L, 1 row in R
+        
+        var resultValues = [Double](repeating: 0.0, count: Int(m * n))
+        
+        // We are effectively doing (Mx1) * (1xN)
+        vDSP_mmulD(l.values, 1, r.values, 1, &resultValues, 1, m, n, common)
+        
+        let newDims = l.dimensions.merging(r.dimensions, uniquingKeysWith: +).filter { $0.value != 0 }
+        
+        return Matrix(values: resultValues, rows: Int(m), columns: Int(n), dimensions: newDims)
+    }
+
     private func performComplexVectorComplexOp(_ op: String, _ v: ComplexVector, _ c: Complex, reversed: Bool = false) throws -> ComplexVector {
          if reversed {
             switch op { case "+": return ComplexVector(values: v.values.map { c + $0 }, dimensions: v.dimensions); case "*": return ComplexVector(values: v.values.map { c * $0 }, dimensions: v.dimensions); case "-": return ComplexVector(values: v.values.map { c - $0 }, dimensions: v.dimensions); default: throw MathError.unsupportedOperation(op: op, typeA: "ComplexVector", typeB: "Complex") }
@@ -487,4 +581,3 @@ extension Evaluator {
         }
     }
 }
-
