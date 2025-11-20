@@ -51,20 +51,23 @@ struct CursorAwareTextField: NSViewRepresentable {
         func updateView(text: String, selectedRange: NSRange) {
             guard let textField = self.textField else { return }
 
-            // Set a flag to prevent delegate methods from firing during this update.
+            // 1. Lock the delegate: We are changing things manually, so ignore the Delegate noise.
             isUpdatingFromSwiftUI = true
 
+            // 2. Update Text: Only if it actually changed (prevents cursor jumping)
             if textField.stringValue != text {
                 textField.stringValue = text
             }
+
+            // 3. Update Cursor: Only if it actually changed
             if let editor = textField.currentEditor(), editor.selectedRange != selectedRange {
                 editor.selectedRange = selectedRange
             }
             
-            // The update is complete. Asynchronously reset the flag after the current run loop cycle.
-            DispatchQueue.main.async {
-                self.isUpdatingFromSwiftUI = false
-            }
+            // 4. Unlock the delegate IMMEDIATELY.
+            // Do NOT use DispatchQueue.main.async here. It creates a race condition
+            // where fast typing is ignored because the flag is still true.
+            self.isUpdatingFromSwiftUI = false
         }
         
         deinit {
@@ -75,7 +78,6 @@ struct CursorAwareTextField: NSViewRepresentable {
             // If the view is being updated by SwiftUI, ignore this delegate callback.
             guard !isUpdatingFromSwiftUI,
                   let textField = obj.object as? NSTextField,
-                  // FIX: Cast the current editor to NSTextView to access hasMarkedText.
                   let editor = textField.currentEditor() as? NSTextView
             else { return }
 
@@ -85,7 +87,13 @@ struct CursorAwareTextField: NSViewRepresentable {
                 return
             }
             
+            // UPDATE 1: Update the text binding
             parent.text = textField.stringValue
+            
+            // UPDATE 2: Update the range binding IMMEDIATELY.
+            // This prevents the "De-sync" where SwiftUI has the new text
+            // but the old cursor position.
+            parent.selectedRange = editor.selectedRange
         }
         
         func controlTextDidBeginEditing(_ obj: Notification) {
