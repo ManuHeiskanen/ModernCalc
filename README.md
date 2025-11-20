@@ -97,7 +97,7 @@ A rich library of functions including `mean`, `stddev`, `corr`, `polyfit`, and m
 
 ### Interactive CSV Importer
 
-- Use the `.csv` button or `importcsv()` to launch the importer.  
+- Use the `file` button or `importcsv()` to launch the importer.  
 
 - Visually select columns and rows to import as a matrix.  
 
