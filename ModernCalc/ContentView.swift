@@ -122,7 +122,7 @@ struct ModernToolbarView: ToolbarContent {
     
     @State private var isHoveringOnMenuButton = false
     @State private var isHoveringOnCSVButton = false
-    @State private var isHoveringOnBenchButton = false // State for new button hover
+    //@State private var isHoveringOnBenchButton = false // State for new button hover
     
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
@@ -156,24 +156,24 @@ struct ModernToolbarView: ToolbarContent {
                 }
                 
                 // --- BENCHMARK BUTTON ---
-                Button(action: {
-                    Task {
-                        await BenchmarkSuite.runAll()
-                    }
-                }) {
-                    Image(systemName: "speedometer")
-                        .font(.system(size: 20))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-                .padding(4)
-                .background(isHoveringOnBenchButton ? Color.primary.opacity(0.1) : Color.clear, in: Circle())
-                .help("Run Performance Benchmarks (Check Console)")
-                .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isHoveringOnBenchButton = hovering
-                    }
-                }
+                //Button(action: {
+                //    Task {
+                //        await BenchmarkSuite.runAll()
+                //    }
+                //}) {
+                //    Image(systemName: "speedometer")
+                //        .font(.system(size: 20))
+                //        .foregroundColor(.secondary)
+                //}
+                //.buttonStyle(.plain)
+                //.padding(4)
+                //.background(isHoveringOnBenchButton ? Color.primary.opacity(0.1) : Color.clear, in: Circle())
+                //.help("Run Performance Benchmarks (Check Console)")
+                //.onHover { hovering in
+                //    withAnimation(.easeInOut(duration: 0.15)) {
+                //        isHoveringOnBenchButton = hovering
+                //    }
+                //}
                 // ------------------------
 
                 HStack(spacing: 4) {
